@@ -1,67 +1,57 @@
 name: Validate UI JSON
 
 on:
-  push:
-    branches: [ "main", "alpha/**" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch: {}
+push:
+branches: [ "main", "alpha/**" ]
+pull_request:
+branches: [ "main" ]
+workflow_dispatch: {}
 
 jobs:
-  validate-ui:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+validate-ui:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v4
+  - name: Setup Node
+    uses: actions/setup-node@v4
+    with:
+      node-version: '20'
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+  - name: Install ajv-cli
+    run: npm i -g ajv-cli@5
 
-      - name: Install ajv-cli
-        run: npm i -g ajv-cli@5
+  - name: Validate schema (AJV)
+    run: |
+      ajv validate -s configs/ui/schema/ui_schema_v1.json -d "configs/ui/*.json" --strict=false
 
-      - name: Validate schema (AJV)
-        run: |
-          ajv validate -s configs/ui/schema/ui_schema_v1.json -d "configs/ui/*.json" --strict=false
-
-      - name: Check actionId and bind keys
-        run: |
-          node - <<'NODE'
-          const fs = require('fs'), path=require('path');
-          const actionsTxt = fs.readFileSync('docs/ACTIONS.md','utf8');
-          const bindsTxt   = fs.readFileSync('docs/BIND_KEYS.md','utf8');
-
-          const actions = new Set(
-            [...actionsTxt.matchAll(/-\s+([a-z0-9_]+)\s+→/g)].map(m=>m[1])
-          );
-          const binds = new Set(
-            [...bindsTxt.matchAll(/`([a-zA-Z0-9_.]+)`/g)].map(m=>m[1])
-          );
-
-          const dir='configs/ui';
-          const files = fs.readdirSync(dir).filter(f=>f.endsWith('.json') && !f.startsWith('layout_manifest'));
-          let ok=true;
-          for (const f of files) {
-            const j = JSON.parse(fs.readFileSync(path.join(dir,f),'utf8'));
-            const check = (node) => {
-              if (Array.isArray(node)) return node.forEach(check);
-              if (node && typeof node === 'object') {
-                if (node.actionId && !actions.has(node.actionId)) {
-                  console.error(`${f}: unknown actionId "${node.actionId}"`);
-                  ok=false;
-                }
-                if (node.bind) {
-                  const match = [...binds].some(b => node.bind===b || node.bind.startsWith(b+'.'));
-                  if (!match) {
-                    console.error(`${f}: unknown bind "${node.bind}"`);
-                    ok=false;
-                  }
-                }
-                Object.values(node).forEach(check);
-              }
-            };
-            check(j);
+  - name: Check actionId and bind keys
+    run: |
+      node - <<'NODE'
+      const fs = require('fs'), path=require('path');
+      const actionsTxt = fs.readFileSync('docs/ACTIONS.md','utf8');
+      const bindsTxt   = fs.readFileSync('docs/BIND_KEYS.md','utf8');
+      const actions = new Set([...actionsTxt.matchAll(/-\s+([a-z0-9_]+)\s+→/g)].map(m=>m[1]));
+      const binds = new Set([...bindsTxt.matchAll(/`([a-zA-Z0-9_.]+)`/g)].map(m=>m[1]));
+      const dir='configs/ui';
+      const files = fs.readdirSync(dir).filter(f=>f.endsWith('.json') && !f.startsWith('layout_manifest'));
+      let ok=true;
+      for (const f of files) {
+        const j = JSON.parse(fs.readFileSync(path.join(dir,f),'utf8'));
+        const walk = (n) => {
+          if (Array.isArray(n)) return n.forEach(walk);
+          if (n && typeof n === 'object') {
+            if (n.actionId && !actions.has(n.actionId)) {
+              console.error(`${f}: unknown actionId "${n.actionId}"`);
+              ok=false;
+            }
+            if (n.bind) {
+              const match = [...binds].some(b => n.bind===b || n.bind.startsWith(b+'.'));
+              if (!match) { console.error(`${f}: unknown bind "${n.bind}"`); ok=false; }
+            }
+            Object.values(n).forEach(walk);
           }
-          if (!ok) process.exit(1);
-          NODE
+        };
+        walk(j);
+      }
+      if (!ok) process.exit(1);
+      NODE

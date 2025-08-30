@@ -1,25 +1,25 @@
 {
-  "ui_schema_version": "1.0.0",
-  "screen": "music",
-  "density": "default",
-  "blocks": [
-    { "type": "AppBar", "title": "Musica" },
-    { "type": "ChipRow", "chips": [
-      { "label": "Spotify",  "bind": "music.provider", "value": "spotify" },
-      { "label": "Libreria", "bind": "music.provider", "value": "openaudio" }
-    ]},
-    { "type": "List", "items": [
-      { "icon": "queue_music", "title": "Playlist", "subtitle": "Seleziona", "actionId": "select_playlist" }
-    ]},
-    { "type": "ChipRow", "chips": [
-      { "label": "Metron. Off", "bind": "music.metronome", "value": "off" },
-      { "label": "Quando serve", "bind": "music.metronome", "value": "out_of_range" },
-      { "label": "Sempre", "bind": "music.metronome", "value": "always" }
-    ]},
-    { "type": "Spacer", "height": 8 },
-    { "type": "ButtonRow", "align": "center", "buttons": [
-      { "label": "Energia +", "style": "tonal", "icon": "trending_up",   "size": "md", "actionId": "nudge_energy_up" },
-      { "label": "Energia −", "style": "outlined", "icon": "trending_down", "size": "md", "actionId": "nudge_energy_down" }
-    ]}
-  ]
+"ui_schema_version": "1.0.0",
+"screen": "music",
+"density": "default",
+"blocks": [
+{ "type": "AppBar", "title": "Musica" },
+{ "type": "ChipRow", "chips": [
+{ "label": "Spotify", "bind": "music.provider", "value": "spotify" },
+{ "label": "Libreria", "bind": "music.provider", "value": "openaudio" }
+]},
+{ "type": "List", "items": [
+{ "icon": "queue_music", "title": "Playlist", "subtitle": "Seleziona", "actionId": "select_playlist" }
+]},
+{ "type": "ChipRow", "chips": [
+{ "label": "Metron. Off", "bind": "music.metronome", "value": "off" },
+{ "label": "Quando serve", "bind": "music.metronome", "value": "out_of_range" },
+{ "label": "Sempre", "bind": "music.metronome", "value": "always" }
+]},
+{ "type": "Spacer", "height": 8 },
+{ "type": "ButtonRow", "align": "center", "buttons": [
+{ "label": "Energia +", "style": "tonal", "icon": "trending_up", "size": "md", "actionId": "nudge_energy_up" },
+{ "label": "Energia −", "style": "outlined", "icon": "trending_down", "size": "md", "actionId": "nudge_energy_down" }
+]}
+]
 }

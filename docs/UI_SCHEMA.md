@@ -8,3 +8,70 @@
   "density": "default",          // compact | default | airy
   "blocks": [ ... ]
 }
+
+
+
+
+cat > docs/ACTIONS.md <<'EOF'
+cat > docs/BIND_KEYS.md <<'EOF'
+cat > docs/ICONS_CATALOG.md <<'EOF'
+cat > configs/ui/run.json <<'EOF'
+{
+"ui_schema_version": "1.0.0",
+"screen": "run",
+"density": "default",
+"blocks": [
+{ "type": "AppBar", "title": "Corsa", "actions": [ { "icon": "settings", "actionId": "open_settings" } ] },
+{ "type": "Tabs", "tabs": [
+{ "key": "goal", "label": "Obiettivo", "blocks": [
+{ "type": "SectionHeader", "title": "Obiettivo" },
+{ "type": "Slider", "label": "Distanza", "min": 3, "max": 15, "step": 1, "unit": "km", "bind": "session.goal.distanceKm" },
+{ "type": "ChipRow", "chips": [
+{ "label": "KM", "bind": "session.goal.mode", "value": "distance" },
+{ "label": "Tempo", "bind": "session.goal.mode", "value": "time" }
+] }
+]},
+{ "key": "coach", "label": "Coach", "blocks": [
+{ "type": "Toggle", "label": "Coach", "bind": "coach.enabled" },
+{ "type": "ChipRow", "chips": [
+{ "label": "Basso", "bind": "coach.preset", "value": "low" },
+{ "label": "Standard", "bind": "coach.preset", "value": "standard" },
+{ "label": "Alto", "bind": "coach.preset", "value": "high" }
+] },
+{ "type": "ChipRow", "chips": [
+{ "label": "HR", "bind": "coach.alerts.hr" },
+{ "label": "Passo", "bind": "coach.alerts.pace" },
+{ "label": "Split", "bind": "coach.alerts.split" },
+{ "label": "400m", "bind": "coach.alerts.last400m" }
+] }
+]},
+{ "key": "music", "label": "Musica", "blocks": [
+{ "type": "ChipRow", "chips": [
+{ "label": "Spotify", "bind": "music.provider", "value": "spotify" },
+{ "label": "Libreria", "bind": "music.provider", "value": "openaudio" }
+] },
+{ "type": "List", "items": [
+{ "icon": "queue_music", "title": "Playlist", "subtitle": "Seleziona", "actionId": "select_playlist" }
+] },
+{ "type": "ChipRow", "chips": [
+{ "label": "Metronomo Off", "bind": "music.metronome", "value": "off" },
+{ "label": "Quando serve", "bind": "music.metronome", "value": "out_of_range" },
+{ "label": "Sempre", "bind": "music.metronome", "value": "always" }
+] }
+]}
+]},
+{ "type": "SectionHeader", "title": "Metriche" },
+{ "type": "MetricsGrid", "columns": 2, "tiles": [
+{ "metric": "pace", "label": "Passo", "span": 6 },
+{ "metric": "hr", "label": "FC", "span": 6 },
+{ "metric": "distanceLeft", "label": "Rimanente", "span": 6 },
+{ "metric": "time", "label": "Tempo", "span": 6 }
+]},
+{ "type": "Spacer", "height": 8 },
+{ "type": "ButtonRow", "align": "center", "buttons": [
+{ "label": "Start", "style": "primary", "icon": "play_arrow", "size": "md", "actionId": "start_run" },
+{ "label": "Pausa", "style": "tonal", "icon": "pause", "size": "md", "actionId": "pause_run" },
+{ "label": "Stop", "style": "outlined", "icon": "stop", "size": "md", "confirm": true, "actionId": "stop_run" }
+]}
+]
+}
