@@ -1,1 +1,1 @@
-# (vuoto: manteniamo le regole di default)
+# default
