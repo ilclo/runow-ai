@@ -12,9 +12,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 @Composable
-fun LayoutLabScreen(onPublished: () -> Unit = {}) {
+fun LayoutLabScreen(
+    initialScreen: String? = null,
+    onPublished: () -> Unit = {}
+) {
     val ctx = LocalContext.current
-    var screen by remember { mutableStateOf("run") }
+    var screen by remember { mutableStateOf(initialScreen ?: "run") }
     var message by remember { mutableStateOf<String?>(null) }
     var json by remember(screen) {
         mutableStateOf(
@@ -32,9 +35,9 @@ fun LayoutLabScreen(onPublished: () -> Unit = {}) {
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
-        Text("Layout Lab (MVP)", style = MaterialTheme.typography.headlineSmall)
+        Text("Layout Lab", style = MaterialTheme.typography.headlineSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("run","settings","music").forEach {
+            listOf("home","run","settings","music").forEach {
                 FilterChip(selected = it==screen, onClick = { screen = it; refresh() }, label = { Text(it) })
             }
         }
@@ -75,7 +78,7 @@ fun LayoutLabScreen(onPublished: () -> Unit = {}) {
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = {
-                // Aggiunge una ButtonRow con Start/Pausa/Stop se non c'è
+                // Aggiungi ButtonRow standard se non presente
                 val hasRow = (0 until blocks.length()).any { blocks.optJSONObject(it)?.optString("type")=="ButtonRow" }
                 if (!hasRow) {
                     blocks.put(JSONObject("""{

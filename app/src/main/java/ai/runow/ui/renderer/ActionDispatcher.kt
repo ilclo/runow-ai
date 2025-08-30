@@ -5,6 +5,14 @@ class ActionDispatcher(
     private val showSnack: (String) -> Unit
 ) {
     fun dispatch(actionId: String) {
+        // Navigazione dinamica: nav:<page>
+        if (actionId.startsWith("nav:")) {
+            val target = actionId.removePrefix("nav:").trim()
+            if (target.isNotEmpty()) {
+                navigateTo(target)
+                return
+            }
+        }
         when (actionId) {
             // Core corsa (stub per ora)
             "start_run" -> showSnack("Start (stub)")
@@ -13,10 +21,11 @@ class ActionDispatcher(
             "stop_run" -> showSnack("Stop (stub)")
             "lap_mark" -> showSnack("Lap (stub)")
 
-            // Navigazione
+            // Navigazione esplicita
             "open_settings" -> navigateTo("settings")
             "open_theme_lab" -> navigateTo("theme_lab")
             "open_gallery" -> navigateTo("gallery")
+            "open_layout_lab" -> navigateTo("layout_lab")
 
             // Musica (stub)
             "select_playlist" -> showSnack("Selettore playlist (stub)")

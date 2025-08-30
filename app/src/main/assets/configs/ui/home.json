@@ -1,0 +1,18 @@
+{
+  "ui_schema_version": "1.0.0",
+  "screen": "home",
+  "density": "default",
+  "blocks": [
+    { "type": "AppBar", "title": "runow AI", "actions": [
+      { "icon": "palette", "actionId": "open_theme_lab" },
+      { "icon": "widgets", "actionId": "open_gallery" }
+    ]},
+    { "type": "SectionHeader", "title": "Sezioni" },
+    { "type": "List", "items": [
+      { "icon": "directions_run", "title": "Corsa",        "subtitle": "Schermata JSON", "actionId": "nav:run" },
+      { "icon": "settings",       "title": "Impostazioni", "subtitle": "Schermata JSON", "actionId": "nav:settings" },
+      { "icon": "queue_music",    "title": "Musica",       "subtitle": "Schermata JSON", "actionId": "nav:music" },
+      { "icon": "tune",           "title": "Layout Lab",   "subtitle": "Editor layout",  "actionId": "nav:layout_lab" }
+    ]}
+  ]
+}

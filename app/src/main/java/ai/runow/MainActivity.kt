@@ -3,8 +3,12 @@ package ai.runow
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -19,17 +23,27 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
-    enum class Route { Home, ThemeLab, Gallery, RunUI, SettingsUI, MusicUI, LayoutLab }
+    enum class Route { Home, HomeUI, ThemeLab, Gallery, RunUI, SettingsUI, MusicUI, LayoutLab }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             var theme by remember { mutableStateOf(ThemeState()) }
-            var route by remember { mutableStateOf(Route.Home) }
             val snackHost = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
 
-            // stato UI semplice per i bind (MVP)
+            // semplice nav stack
+            val navStack = remember { mutableStateListOf(Route.Home) }
+            var labTarget by remember { mutableStateOf<String?>(null) }
+            fun current() = navStack.last()
+            fun push(r: Route) { navStack.add(r) }
+            fun pop() { if (navStack.size > 1) navStack.removeAt(navStack.lastIndex) }
+
+            // back hardware
+            val canGoBack = navStack.size > 1
+            BackHandler(enabled = canGoBack) { pop() }
+
+            // stato UI per bind (MVP)
             val uiState = remember {
                 mutableStateMapOf<String, Any>(
                     "coach.enabled" to false,
@@ -51,15 +65,17 @@ class MainActivity : ComponentActivity() {
                 ActionDispatcher(
                     navigateTo = { dest ->
                         when (dest) {
-                            "settings"   -> route = Route.SettingsUI
-                            "theme_lab"  -> route = Route.ThemeLab
-                            "gallery"    -> route = Route.Gallery
-                            else         -> {}
+                            "settings"   -> push(Route.SettingsUI)
+                            "theme_lab"  -> push(Route.ThemeLab)
+                            "gallery"    -> push(Route.Gallery)
+                            "layout_lab" -> { labTarget = "run"; push(Route.LayoutLab) }
+                            "run"        -> push(Route.RunUI)
+                            "music"      -> push(Route.MusicUI)
+                            "home_json"  -> push(Route.HomeUI)
+                            "home"       -> push(Route.HomeUI)
                         }
                     },
-                    showSnack = { msg ->
-                        scope.launch { snackHost.showSnackbar(message = msg) }
-                    }
+                    showSnack = { msg -> scope.launch { snackHost.showSnackbar(message = msg) } }
                 )
             }
 
@@ -67,10 +83,14 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     topBar = {
                         TopAppBar(
+                            navigationIcon = if (canGoBack) {
+                                { IconButton(onClick = { pop() }) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") } }
+                            } else null,
                             title = {
                                 Text(
-                                    when(route){
+                                    when(current()){
                                         Route.Home -> "runow AI"
+                                        Route.HomeUI -> "Home (JSON)"
                                         Route.ThemeLab -> "Theme Lab"
                                         Route.Gallery -> "Component Gallery"
                                         Route.RunUI -> "Corsa (JSON)"
@@ -79,30 +99,49 @@ class MainActivity : ComponentActivity() {
                                         Route.LayoutLab -> "Layout Lab"
                                     }
                                 )
+                            },
+                            actions = {
+                                when (current()) {
+                                    Route.RunUI, Route.SettingsUI, Route.MusicUI, Route.HomeUI -> {
+                                        IconButton(onClick = {
+                                            labTarget = when (current()) {
+                                                Route.RunUI -> "run"
+                                                Route.SettingsUI -> "settings"
+                                                Route.MusicUI -> "music"
+                                                Route.HomeUI -> "home"
+                                                else -> "run"
+                                            }
+                                            push(Route.LayoutLab)
+                                        }) { Icon(Icons.Filled.Tune, contentDescription = "Edit layout") }
+                                    }
+                                    else -> {}
+                                }
                             }
                         )
                     },
                     snackbarHost = { SnackbarHost(snackHost) }
                 ) { _ ->
-                    when (route) {
+                    when (current()) {
                         Route.Home -> HomeScreen(
-                            onOpenThemeLab = { route = Route.ThemeLab },
-                            onOpenGallery  = { route = Route.Gallery },
-                            onOpenRun      = { route = Route.RunUI },
-                            onOpenSettings = { route = Route.SettingsUI },
-                            onOpenMusic    = { route = Route.MusicUI },
-                            onOpenLayoutLab= { route = Route.LayoutLab }
+                            onOpenThemeLab = { push(Route.ThemeLab) },
+                            onOpenGallery  = { push(Route.Gallery) },
+                            onOpenRun      = { push(Route.RunUI) },
+                            onOpenSettings = { push(Route.SettingsUI) },
+                            onOpenMusic    = { push(Route.MusicUI) },
+                            onOpenLayoutLab= { labTarget = "run"; push(Route.LayoutLab) },
+                            onOpenHomeJson = { push(Route.HomeUI) }
                         )
                         Route.ThemeLab -> ThemeLabScreen(
                             state = theme,
                             onStateChange = { theme = it },
-                            onOpenGallery = { route = Route.Gallery }
+                            onOpenGallery = { push(Route.Gallery) }
                         )
-                        Route.Gallery -> ComponentGalleryScreen()
-                        Route.RunUI -> UiScreen("run", dispatcher, uiState)
-                        Route.SettingsUI -> UiScreen("settings", dispatcher, uiState)
-                        Route.MusicUI -> UiScreen("music", dispatcher, uiState)
-                        Route.LayoutLab -> LayoutLabScreen(onPublished = { /* no-op */ })
+                        Route.Gallery   -> ComponentGalleryScreen()
+                        Route.HomeUI    -> UiScreen("home", dispatcher, uiState)
+                        Route.RunUI     -> UiScreen("run", dispatcher, uiState)
+                        Route.SettingsUI-> UiScreen("settings", dispatcher, uiState)
+                        Route.MusicUI   -> UiScreen("music", dispatcher, uiState)
+                        Route.LayoutLab -> LayoutLabScreen(initialScreen = labTarget ?: "run")
                     }
                 }
             }
@@ -117,7 +156,8 @@ private fun HomeScreen(
     onOpenRun: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenMusic: () -> Unit,
-    onOpenLayoutLab: () -> Unit
+    onOpenLayoutLab: () -> Unit,
+    onOpenHomeJson: () -> Unit
 ) {
     Surface {
         Column {
@@ -131,6 +171,12 @@ private fun HomeScreen(
                 headlineContent = { Text("Component Gallery") },
                 supportingContent = { Text("Anteprima bottoni, chip, card, slider, text field") },
                 modifier = Modifier.clickable { onOpenGallery() }
+            )
+            Divider()
+            ListItem(
+                headlineContent = { Text("Home (JSON)") },
+                supportingContent = { Text("Homepage renderizzata da layout JSON") },
+                modifier = Modifier.clickable { onOpenHomeJson() }
             )
             Divider()
             ListItem(
