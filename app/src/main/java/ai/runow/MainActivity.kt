@@ -83,9 +83,14 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     topBar = {
                         TopAppBar(
-                            navigationIcon = if (canGoBack) {
-                                { IconButton(onClick = { pop() }) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") } }
-                            } else null,
+                            navigationIcon = {
+                                if (canGoBack) {
+                                    IconButton(onClick = { pop() }) {
+                                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                                    }
+                                }
+                                // Nota: non passiamo mai null; se non si può tornare indietro, non disegniamo nulla
+                            },
                             title = {
                                 Text(
                                     when(current()){
