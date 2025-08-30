@@ -1,6 +1,7 @@
 package ai.runow.ui.renderer
 
 import android.content.Context
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -51,7 +52,6 @@ private fun RenderBlock(
 ) {
     when (block.optString("type")) {
         "AppBar" -> {
-            // App ha già un top bar; mostriamo un semplice header per coerenza
             Text(
                 text = block.optString("title", ""),
                 style = MaterialTheme.typography.titleLarge
@@ -117,7 +117,7 @@ private fun RenderBlock(
                     val content: @Composable ()->Unit = { Text(label) }
                     Spacer(Modifier.width(6.dp))
                     when(style){
-                        "outlined" -> OutlinedButton(onClick = { if (confirm) { /* show confirm later */ } ; dispatcher.dispatch(action) }) { content() }
+                        "outlined" -> OutlinedButton(onClick = { if (confirm) { /* TODO: conferma */ } ; dispatcher.dispatch(action) }) { content() }
                         "tonal"    -> FilledTonalButton(onClick = { dispatcher.dispatch(action) }) { content() }
                         "text"     -> TextButton(onClick = { dispatcher.dispatch(action) }) { content() }
                         else       -> Button(onClick = { dispatcher.dispatch(action) }) { content() }
@@ -127,7 +127,6 @@ private fun RenderBlock(
         }
         "ChipRow" -> {
             val chips = block.optJSONArray("chips") ?: JSONArray()
-            // se i chip hanno "value", gestiamo single-select su bind string; altrimenti bool per ogni chip
             val isSingle = (0 until chips.length()).any { chips.optJSONObject(it)?.has("value") == true }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (i in 0 until chips.length()) {
@@ -190,21 +189,20 @@ private fun RenderBlock(
                     ListItem(
                         headlineContent = { Text(it.optString("title","")) },
                         supportingContent = { Text(it.optString("subtitle","")) },
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).let { m ->
-                            androidx.compose.ui.Modifier.then(m).clickable { dispatcher.dispatch(it.optString("actionId","")) }
-                        }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable { dispatcher.dispatch(it.optString("actionId","")) }
                     )
                     Divider()
                 }
             }
         }
         "Carousel" -> {
-            // Placeholder semplice
-            val images = block.optJSONArray("images") ?: JSONArray()
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Carousel (${images.length()} immagini)", style = MaterialTheme.typography.titleSmall)
-                    Text("Placeholder: immagini non caricate in questa MVP.")
+                    Text("Carousel (placeholder)", style = MaterialTheme.typography.titleSmall)
+                    Text("Le immagini saranno gestite in una fase successiva.")
                 }
             }
         }
@@ -222,7 +220,7 @@ private fun RenderBlock(
 
 @Composable
 private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String, Any>) {
-    // MVP: griglia semplice a righe, ignoriamo "span"
+    // MVP: griglia semplice per righe; span ignorato per ora
     val rows = mutableListOf<List<JSONObject>>()
     var current = mutableListOf<JSONObject>()
     for (i in 0 until tiles.length()) {
@@ -246,7 +244,3 @@ private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String,
         }
     }
 }
-
-// Helper per clickable senza import extra
-private fun Modifier.clickable(onClick: ()->Unit): Modifier =
-    androidx.compose.foundation.clickable(onClick = onClick)

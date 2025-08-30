@@ -26,7 +26,7 @@ android {
         }
     }
 
-    // ✅ Abilita Compose
+    // Compose abilitato
     buildFeatures { compose = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
@@ -38,28 +38,31 @@ android {
 }
 
 dependencies {
-    // Compose BOM (allinea versioni)
+    // Compose BOM
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
 
-    // UI Compose + Material 3
+    // Compose UI + Material3 + tooling
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // ✅ Fondamentali mancanti: Foundation (Column, clickable, layout)
+    // Foundation (Column, clickable, layout…)
     implementation("androidx.compose.foundation:foundation")
 
-    // ✅ Icone Material (Icons.Default.Check/Palette)
+    // Icone Material (Icons.Default.*)
     implementation("androidx.compose.material:material-icons-extended")
 
-    // Activity-Compose (setContent)
+    // Activity-Compose
     implementation("androidx.activity:activity-compose:1.9.2")
 
-    // Baseline
+    // Baseline AndroidX
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
+
+    // ✅ Coroutines (per scope.launch, Snackbar, ecc.)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

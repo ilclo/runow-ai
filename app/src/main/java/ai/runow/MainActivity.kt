@@ -3,16 +3,19 @@ package ai.runow
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import ai.runow.ui.RunowTheme
 import ai.runow.ui.ThemeState
+import ai.runow.ui.ThemeLabScreen
+import ai.runow.ui.ComponentGalleryScreen
 import ai.runow.ui.renderer.ActionDispatcher
 import ai.runow.ui.renderer.LayoutLabScreen
 import ai.runow.ui.renderer.UiScreen
-import ai.runow.ui.ThemeLabScreen
-import ai.runow.ui.ComponentGalleryScreen
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -24,8 +27,9 @@ class MainActivity : ComponentActivity() {
             var theme by remember { mutableStateOf(ThemeState()) }
             var route by remember { mutableStateOf(Route.Home) }
             val snackHost = remember { SnackbarHostState() }
+            val scope = rememberCoroutineScope()
 
-            // semplice stato UI per bind (MVP)
+            // stato UI semplice per i bind (MVP)
             val uiState = remember {
                 mutableStateMapOf<String, Any>(
                     "coach.enabled" to false,
@@ -53,12 +57,8 @@ class MainActivity : ComponentActivity() {
                             else         -> {}
                         }
                     },
-                    showSnack = { msg ->  // snackbar
-                        @Suppress("EXPERIMENTAL_API_USAGE")
-                        // ignore result
-                        kotlinx.coroutines.GlobalScope.launch {
-                            snackHost.showSnackbar(msg)
-                        }
+                    showSnack = { msg ->
+                        scope.launch { snackHost.showSnackbar(message = msg) }
                     }
                 )
             }
@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
                         )
                     },
                     snackbarHost = { SnackbarHost(snackHost) }
-                ) { padding ->
+                ) { _ ->
                     when (route) {
                         Route.Home -> HomeScreen(
                             onOpenThemeLab = { route = Route.ThemeLab },
@@ -102,9 +102,7 @@ class MainActivity : ComponentActivity() {
                         Route.RunUI -> UiScreen("run", dispatcher, uiState)
                         Route.SettingsUI -> UiScreen("settings", dispatcher, uiState)
                         Route.MusicUI -> UiScreen("music", dispatcher, uiState)
-                        Route.LayoutLab -> LayoutLabScreen(onPublished = {
-                            // dopo publish puoi aprire la schermata per vedere l'effetto
-                        })
+                        Route.LayoutLab -> LayoutLabScreen(onPublished = { /* no-op */ })
                     }
                 }
             }
@@ -122,7 +120,7 @@ private fun HomeScreen(
     onOpenLayoutLab: () -> Unit
 ) {
     Surface {
-        androidx.compose.foundation.layout.Column {
+        Column {
             ListItem(
                 headlineContent = { Text("Theme Lab") },
                 supportingContent = { Text("Colori e forme (Design Tokens)") },
@@ -161,7 +159,3 @@ private fun HomeScreen(
         }
     }
 }
-
-// helper clickable
-private fun Modifier.clickable(onClick: ()->Unit): Modifier =
-    androidx.compose.foundation.clickable(onClick = onClick)
