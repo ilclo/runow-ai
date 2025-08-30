@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "runow layout manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "config_version", "files"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "config_version": { "type": "string", "minLength": 1 },
+    "created_at":     { "type": "string" },
+    "created_by":     { "type": "string" },
+    "notes":          { "type": "string" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path"],
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    },
+    "checksum": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "type": "string" },
+        "values":    { "type": "object" }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type":  { "type": "string" },
+        "value": { "type": "string" }
+      }
+    }
+  }
+}

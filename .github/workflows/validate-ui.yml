@@ -25,9 +25,29 @@ jobs:
       - name: Install ajv-cli
         run: npm i -g ajv-cli@5
 
-      - name: Validate schema (AJV)
+      - name: Validate UI layouts (AJV, exclude manifest)
+        shell: bash
         run: |
-          ajv validate -s configs/ui/schema/ui_schema_v1.json -d "configs/ui/*.json" --strict=false
+          shopt -s nullglob
+          fails=0
+          for f in configs/ui/*.json; do
+            base="$(basename "$f")"
+            if [[ "$base" == "layout_manifest.json" ]]; then
+              continue
+            fi
+            echo "Validating UI layout: $f"
+            ajv validate -s configs/ui/schema/ui_schema_v1.json -d "$f" --strict=false || fails=1
+          done
+          if [[ $fails -ne 0 ]]; then
+            echo "❌ UI layout validation failed"
+            exit 1
+          fi
+          echo "✅ UI layouts valid"
+
+      - name: Validate layout manifest (AJV)
+        run: |
+          ajv validate -s configs/ui/schema/layout_manifest_v1.json -d configs/ui/layout_manifest.json --strict=false
+          echo "✅ Layout manifest valid"
 
       - name: Check actionId and bind keys
         shell: bash
@@ -36,10 +56,14 @@ jobs:
           const fs = require('fs'), path=require('path');
           const actionsTxt = fs.readFileSync('docs/ACTIONS.md','utf8');
           const bindsTxt   = fs.readFileSync('docs/BIND_KEYS.md','utf8');
+
           const actions = new Set([...actionsTxt.matchAll(/-\s+([a-z0-9_]+)\s+→/g)].map(m=>m[1]));
           const binds = new Set([...bindsTxt.matchAll(/`([a-zA-Z0-9_.]+)`/g)].map(m=>m[1]));
+
           const dir='configs/ui';
-          const files = fs.readdirSync(dir).filter(f=>f.endsWith('.json') && !f.startsWith('layout_manifest'));
+          const files = fs.readdirSync(dir)
+            .filter(f => f.endsWith('.json') && !f.startsWith('layout_manifest'));
+
           let ok=true;
           for (const f of files) {
             const j = JSON.parse(fs.readFileSync(path.join(dir,f),'utf8'));
@@ -52,7 +76,10 @@ jobs:
                 }
                 if (n.bind) {
                   const match = [...binds].some(b => n.bind===b || n.bind.startsWith(b+'.'));
-                  if (!match) { console.error(`${f}: unknown bind "${n.bind}"`); ok=false; }
+                  if (!match) {
+                    console.error(`${f}: unknown bind "${n.bind}"`);
+                    ok=false;
+                  }
                 }
                 Object.values(n).forEach(walk);
               }
