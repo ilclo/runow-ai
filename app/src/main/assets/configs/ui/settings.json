@@ -1,0 +1,41 @@
+{
+  "ui_schema_version": "1.0.0",
+  "screen": "settings",
+  "density": "default",
+  "blocks": [
+    { "type": "AppBar", "title": "Impostazioni" },
+    { "type": "SectionHeader", "title": "Coach" },
+    { "type": "Toggle", "label": "Coach", "bind": "coach.enabled" },
+    { "type": "ChipRow", "chips": [
+      { "label": "Verb. Bassa", "bind": "coach.verbosity", "value": "low" },
+      { "label": "Standard",    "bind": "coach.verbosity", "value": "standard" },
+      { "label": "Alta",        "bind": "coach.verbosity", "value": "high" }
+    ]},
+    { "type": "ChipRow", "chips": [
+      { "label": "HR",     "bind": "coach.alerts.hr" },
+      { "label": "Passo",  "bind": "coach.alerts.pace" },
+      { "label": "Split",  "bind": "coach.alerts.split" },
+      { "label": "400m",   "bind": "coach.alerts.last400m" }
+    ]},
+    { "type": "SectionHeader", "title": "Musica" },
+    { "type": "ChipRow", "chips": [
+      { "label": "Spotify",  "bind": "music.provider", "value": "spotify" },
+      { "label": "Libreria", "bind": "music.provider", "value": "openaudio" }
+    ]},
+    { "type": "List", "items": [
+      { "icon": "queue_music", "title": "Playlist", "subtitle": "Seleziona", "actionId": "select_playlist" }
+    ]},
+    { "type": "ChipRow", "chips": [
+      { "label": "Metron. Off", "bind": "music.metronome", "value": "off" },
+      { "label": "Quando serve", "bind": "music.metronome", "value": "out_of_range" },
+      { "label": "Sempre", "bind": "music.metronome", "value": "always" }
+    ]},
+    { "type": "SectionHeader", "title": "Tema" },
+    { "type": "List", "items": [
+      { "icon": "palette", "title": "Theme Lab", "subtitle": "Colori e forme", "actionId": "open_theme_lab" },
+      { "icon": "widgets", "title": "Component Gallery", "subtitle": "Anteprima componenti", "actionId": "open_gallery" }
+    ]},
+    { "type": "SectionHeader", "title": "Distanza default" },
+    { "type": "Slider", "label": "Distanza corsa", "min": 3, "max": 15, "step": 1, "unit": "km", "bind": "profile.defaultDistanceKm" }
+  ]
+}
