@@ -3,12 +3,14 @@ package ai.runow
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import ai.runow.ui.*
 
-enum class Screen { Home, ThemeLab, Gallery }
-
+@OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -18,10 +20,8 @@ class MainActivity : ComponentActivity() {
 
             RunowTheme(state) {
                 Scaffold(
-                    topBar = {
-                        TopAppBar(title = { Text("runow AI") })
-                    }
-                ) { padding ->
+                    topBar = { TopAppBar(title = { Text("runow AI") }) }
+                ) { paddingValues ->
                     when (screen) {
                         Screen.Home -> HomeScreen(
                             onOpenThemeLab = { screen = Screen.ThemeLab },
@@ -40,6 +40,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+enum class Screen { Home, ThemeLab, Gallery }
+
 @Composable
 private fun HomeScreen(onOpenThemeLab: () -> Unit, onOpenGallery: () -> Unit) {
     Surface {
@@ -47,13 +49,13 @@ private fun HomeScreen(onOpenThemeLab: () -> Unit, onOpenGallery: () -> Unit) {
             ListItem(
                 headlineContent = { Text("Theme Lab") },
                 supportingContent = { Text("Modifica preset, colori dinamici e forma componenti") },
-                modifier = androidx.compose.ui.Modifier.clickable { onOpenThemeLab() }
+                modifier = Modifier.clickable { onOpenThemeLab() }
             )
             Divider()
             ListItem(
                 headlineContent = { Text("Component Gallery") },
                 supportingContent = { Text("Anteprima bottoni, chip, card, slider, text field") },
-                modifier = androidx.compose.ui.Modifier.clickable { onOpenGallery() }
+                modifier = Modifier.clickable { onOpenGallery() }
             )
         }
     }

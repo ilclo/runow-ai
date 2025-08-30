@@ -28,7 +28,7 @@ android {
 
     // ✅ Abilita Compose
     buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" } // compatibile con Kotlin 1.9.24
+    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -38,7 +38,7 @@ android {
 }
 
 dependencies {
-    // Compose BOM (gestisce le versioni delle lib Compose)
+    // Compose BOM (allinea versioni)
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
 
     // UI Compose + Material 3
@@ -47,10 +47,16 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // Activity-Compose (setContent in Activity)
+    // ✅ Fondamentali mancanti: Foundation (Column, clickable, layout)
+    implementation("androidx.compose.foundation:foundation")
+
+    // ✅ Icone Material (Icons.Default.Check/Palette)
+    implementation("androidx.compose.material:material-icons-extended")
+
+    // Activity-Compose (setContent)
     implementation("androidx.activity:activity-compose:1.9.2")
 
-    // (resto delle dipendenze di base già presenti)
+    // Baseline
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")

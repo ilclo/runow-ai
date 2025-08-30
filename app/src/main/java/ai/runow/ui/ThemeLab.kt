@@ -4,10 +4,10 @@ import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
-import androidx.compose.material3.icons.Icons
-import androidx.compose.material3.icons.filled.Check
-import androidx.compose.material3.icons.filled.Palette
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,7 +95,7 @@ fun ThemeLabScreen(
 
         Spacer(Modifier.height(24.dp))
         FilledTonalButton(onClick = onOpenGallery) {
-            Icon(Icons.Default.Palette, contentDescription = null)
+            Icon(Icons.Filled.Palette, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Apri Component Gallery")
         }
@@ -108,9 +108,7 @@ private fun FlowRowMain(content: @Composable RowScope.() -> Unit) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        content()
-    }
+    ) { content() }
 }
 
 @Composable
@@ -119,8 +117,6 @@ private fun PresetChip(label: String, selected: Boolean, onClick: () -> Unit) {
         selected = selected,
         onClick = onClick,
         label = { Text(label) },
-        leadingIcon = if (selected) {
-            { Icon(Icons.Default.Check, contentDescription = null) }
-        } else null
+        leadingIcon = if (selected) { { Icon(Icons.Filled.Check, contentDescription = null) } } else null
     )
 }
