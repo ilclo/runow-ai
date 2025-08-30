@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "config_version": "v0.1.0",
+  "created_at": "2025-08-30T00:00:00Z",
+  "created_by": "owner:ilclo",
+  "notes": "Prima bozza UI trattabile (Run/Settings/Music) allineata con Theme Lab.",
+  "files": [
+    { "name": "run.json",      "path": "configs/ui/run.json" },
+    { "name": "settings.json", "path": "configs/ui/settings.json" },
+    { "name": "music.json",    "path": "configs/ui/music.json" }
+  ],
+  "checksum": {
+    "algorithm": "sha256",
+    "values": {
+      "run.json":      "<sha256-run.json>",
+      "settings.json": "<sha256-settings.json>",
+      "music.json":    "<sha256-music.json>"
+    }
+  },
+  "signature": {
+    "type": "none",
+    "value": ""
+  }
+}
