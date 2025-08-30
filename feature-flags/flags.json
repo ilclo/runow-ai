@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "enable_theme_lab": true,
+  "enable_component_gallery": true,
+  "show_debug_hud": false,
+
+  "enable_spotify": true,
+  "enable_breath_feature": false,
+  "enable_hills_meteo": false,
+  "enable_challenges": false,
+  "enable_community": false
+}

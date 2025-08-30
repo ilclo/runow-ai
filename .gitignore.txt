@@ -1,0 +1,18 @@
+# Gradle & build
+.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+# Android Studio
+.idea/
+*.iml
+# Local
+local.properties
+*.keystore
+*.jks
+# Logs
+*.log
+# NDK/CMake
+.cxx/
+# Misc
+.DS_Store
+Thumbs.db

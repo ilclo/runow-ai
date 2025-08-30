@@ -1,0 +1,88 @@
+{
+  "version": "1.0.0",
+  "selected_preset": "sport_dark",         // sport_light | sport_dark | high_contrast | minimal
+  "use_dynamic_color": true,               // usa Material You se disponibile
+  "scheme": "system",                      // light | dark | system
+
+  "presets": {
+    "sport_light": {
+      "colors": {
+        "primary": "#0BA36B",
+        "on_primary": "#FFFFFF",
+        "secondary": "#2B2E3A",
+        "on_secondary": "#FFFFFF",
+        "background": "#FFFFFF",
+        "on_background": "#101114",
+        "surface": "#F5F7FA",
+        "on_surface": "#1B1F24",
+        "success": "#23C779",
+        "warning": "#FFB020",
+        "error":   "#E5484D"
+      },
+      "shapes": { "button_shape": "pill", "radius_sm": 8, "radius_md": 12, "radius_lg": 20 },
+      "typography": { "font_family": "System", "scale": 1.00 },
+      "spacing": { "scale": 1.00 },
+      "elevation": { "level1": 1.0, "level2": 2.0, "level3": 3.0 }
+    },
+
+    "sport_dark": {
+      "colors": {
+        "primary": "#00B894",
+        "on_primary": "#00110D",
+        "secondary": "#2B2E3A",
+        "on_secondary": "#FFFFFF",
+        "background": "#0E1116",
+        "on_background": "#E8EAED",
+        "surface": "#141820",
+        "on_surface": "#DDE1E6",
+        "success": "#23C779",
+        "warning": "#FFB020",
+        "error":   "#FF5A5F"
+      },
+      "shapes": { "button_shape": "pill", "radius_sm": 10, "radius_md": 14, "radius_lg": 22 },
+      "typography": { "font_family": "System", "scale": 1.00 },
+      "spacing": { "scale": 1.00 },
+      "elevation": { "level1": 2.0, "level2": 3.0, "level3": 4.0 }
+    },
+
+    "high_contrast": {
+      "colors": {
+        "primary": "#FFD400",
+        "on_primary": "#000000",
+        "secondary": "#000000",
+        "on_secondary": "#FFFFFF",
+        "background": "#000000",
+        "on_background": "#FFFFFF",
+        "surface": "#111111",
+        "on_surface": "#FFFFFF",
+        "success": "#00FF88",
+        "warning": "#FFD400",
+        "error":   "#FF3355"
+      },
+      "shapes": { "button_shape": "rounded", "radius_sm": 4, "radius_md": 8, "radius_lg": 12 },
+      "typography": { "font_family": "System", "scale": 1.05 },
+      "spacing": { "scale": 1.05 },
+      "elevation": { "level1": 0.0, "level2": 0.5, "level3": 1.0 }
+    },
+
+    "minimal": {
+      "colors": {
+        "primary": "#4C6EF5",
+        "on_primary": "#FFFFFF",
+        "secondary": "#94A3B8",
+        "on_secondary": "#0B1220",
+        "background": "#F9FAFB",
+        "on_background": "#0B1220",
+        "surface": "#FFFFFF",
+        "on_surface": "#1F2937",
+        "success": "#16A34A",
+        "warning": "#F59E0B",
+        "error":   "#DC2626"
+      },
+      "shapes": { "button_shape": "rounded", "radius_sm": 6, "radius_md": 10, "radius_lg": 16 },
+      "typography": { "font_family": "System", "scale": 0.98 },
+      "spacing": { "scale": 0.98 },
+      "elevation": { "level1": 1.0, "level2": 1.5, "level3": 2.0 }
+    }
+  }
+}

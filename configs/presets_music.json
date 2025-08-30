@@ -1,0 +1,33 @@
+{
+  "version": "1.0.0",
+  "providers": ["spotify", "openaudio"],
+  "recipes": [
+    { "key": "easy",      "metronome": "OFF",            "energy": 0,  "cue_density": "LOW" },
+    { "key": "tempo",     "metronome": "OUT_OF_RANGE",   "energy": 1,  "cue_density": "MED" },
+    { "key": "intervals", "metronome": "OUT_OF_RANGE",   "energy": 1,  "cue_density": "HIGH" },
+    { "key": "long",      "metronome": "OFF",            "energy": 0,  "cue_density": "LOW" }
+  ],
+  "spotify_suggested": [
+    { "name": "Running Mix (user pick)", "uri": "spotify:playlist:TO_FILL_BY_SHARE" }
+  ],
+  "openaudio_playlists": [
+    {
+      "id": "oa_easy_calm_01",
+      "name": "Easy Calm",
+      "tags": ["easy","calm","focus"],
+      "tempo_bpm": [70, 95],             // non è SPM; serve solo come mood tag
+      "tracks": ["oa://easy/track01.mp3","oa://easy/track02.mp3"],
+      "license": "CC0/PD",
+      "attribution": []
+    },
+    {
+      "id": "oa_intervals_push_01",
+      "name": "Intervals Push",
+      "tags": ["intervals","energetic"],
+      "tempo_bpm": [110, 130],
+      "tracks": ["oa://int/track01.mp3","oa://int/track02.mp3"],
+      "license": "CC0/PD",
+      "attribution": []
+    }
+  ]
+}

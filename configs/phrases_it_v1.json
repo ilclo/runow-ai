@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "tones": ["neutral","energetic","empathetic"],
+  "events": {
+    "SPLIT": {
+      "neutral": [
+        "Km chiuso in {split_time}. Andatura stabile.",
+        "{split_time}. Sei {delta_s} dal target: continua."
+      ],
+      "energetic": [
+        "{split_time}! Ottimo, tieni il ritmo."
+      ],
+      "empathetic": [
+        "{split_time}. Va bene così."
+      ]
+    },
+    "HR_HIGH": {
+      "neutral": [
+        "+{delta_bpm} bpm sopra zona. Rallenta per {dur_sec}s."
+      ]
+    }
+  },
+  "reinforcements": {
+    "neutral": ["Sei in target."],
+    "energetic": ["Perfetto così!"],
+    "empathetic": ["Ottimo, continua sereno."]
+  }
+}

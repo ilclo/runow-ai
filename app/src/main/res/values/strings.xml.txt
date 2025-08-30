@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">runow AI</string>
+    <string name="hello">runow AI — primo APK</string>
+    <string name="btn_start">Start</string>
+</resources>

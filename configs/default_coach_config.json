@@ -1,0 +1,42 @@
+{
+  "coach_version": "1.0.0",
+  "profile": "intermedio",
+  "verbosity": "standard",
+  "session_defaults": {
+    "distance_km": 5.0,
+    "goal_mode": "distance"            // distance | time
+  },
+  "toggles": {
+    "hr": true,
+    "pace": true,
+    "cadence": true,
+    "split": true,
+    "last400m": true
+  },
+  "metronome": "OUT_OF_RANGE",         // OFF | OUT_OF_RANGE | ALWAYS
+  "caps": {
+    "messages_per_10min": 7,
+    "metronome_per_10min": 2
+  },
+  "weights": {
+    "priority": {
+      "BATTERY": 1.00, "GPS": 0.95,
+      "HR_HIGH": 0.90, "HR_LOW": 0.85,
+      "PACE_SLOW": 0.80, "PACE_FAST": 0.78,
+      "CADENCE_OUT": 0.75,
+      "LAST_KM": 0.70, "LAST_400M": 0.68,
+      "SPLIT": 0.55, "MOTIVATIONAL": 0.35
+    },
+    "multipliers": { "PACE": 1.0, "HR": 1.0, "CADENCE": 1.0 }
+  },
+  "thresholds": {
+    "hr": { "enter_over": 6, "enter_secs": 20, "exit_over": 3, "exit_secs": 15,
+            "enter_under": 6, "exit_under": 3 },
+    "pace": { "enter_delta_s": 10, "exit_delta_s": 6,
+              "window_enter_sec": 90, "window_exit_sec": 45 },
+    "cadence": { "enter_offset_spm": 4, "exit_offset_spm": 2,
+                 "enter_secs": 20, "exit_secs": 15 }
+  },
+  "finish": { "last_km": 1.0, "last_400m": 0.4 },
+  "style": { "tone": "neutral", "voice_id": "it_default", "speech_rate": 1.0 }
+}
