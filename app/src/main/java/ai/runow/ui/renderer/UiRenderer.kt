@@ -3,6 +3,7 @@ package ai.runow.ui.renderer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -115,7 +117,6 @@ private fun RenderBlock(
     onSelect: (String) -> Unit
 ) {
     val borderSelected = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-    val pad = Modifier.padding(0.dp)
     val wrap: @Composable (content: @Composable ()->Unit) -> Unit = { content ->
         if (designerMode) {
             OutlinedCard(
@@ -157,7 +158,7 @@ private fun RenderBlock(
             val labels = (0 until count).map { tabs.optJSONObject(it)?.optString("label", "Tab ${it+1}") ?: "Tab ${it+1}" }
             TabRow(selectedTabIndex = idx) {
                 labels.forEachIndexed { i, label ->
-                    Tab(selected = i==idx, onClick = { onSelect("$path"); idx = i }, text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) })
+                    Tab(selected = i==idx, onClick = { onSelect(path); idx = i }, text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) })
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -330,7 +331,7 @@ private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String,
 /* ===== Overlay Designer (Palette + azioni + Inspector) ===== */
 
 @Composable
-private fun DesignerOverlay(
+private fun BoxScope.DesignerOverlay(
     screenName: String,
     layout: JSONObject,
     selectedPath: String?,
@@ -490,6 +491,7 @@ private fun ButtonRowInspector(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ExposedDropdown(
     value: String,
