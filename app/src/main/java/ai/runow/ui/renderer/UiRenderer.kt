@@ -30,17 +30,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.toDp
 import org.json.JSONArray
 import org.json.JSONObject
 
 @Composable
 fun UiScreen(
     screenName: String,
-    dispatcher: ActionDispatcher,
+    dispatch: (String) -> Unit,                     // <<< lambda al posto di ActionDispatcher
     uiState: MutableMap<String, Any>,
     designerMode: Boolean = false,
-    scaffoldPadding: PaddingValues = PaddingValues(0.dp) // padding dalla TopAppBar dello Scaffold
+    scaffoldPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val ctx = LocalContext.current
     var layout by remember(screenName) { mutableStateOf(UiLoader.loadLayout(ctx, screenName)) }
@@ -56,18 +55,16 @@ fun UiScreen(
     val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
     var overlayHeightPx by remember { mutableStateOf(0) }
-    val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() } // px -> dp
+    val overlayHeightDp = with(LocalDensity.current) { (overlayHeightPx / density).dp } // px -> dp robusto
 
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(scaffoldPadding) // evita che i blocchi stiano sotto la top bar
+                .padding(scaffoldPadding) // evita contenuti sotto la top bar
                 .verticalScroll(rememberScrollState())
                 .padding(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 16.dp,
+                    start = 16.dp, end = 16.dp, top = 16.dp,
                     bottom = if (designerMode) overlayHeightDp + 32.dp else 16.dp
                 ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -78,7 +75,7 @@ fun UiScreen(
                 val path = "/blocks/$i"
                 RenderBlock(
                     block = block,
-                    dispatcher = dispatcher,
+                    dispatch = dispatch,
                     uiState = uiState,
                     designerMode = designerMode,
                     path = path,
@@ -116,7 +113,7 @@ fun UiScreen(
 @Composable
 private fun RenderBlock(
     block: JSONObject,
-    dispatcher: ActionDispatcher,
+    dispatch: (String) -> Unit,
     uiState: MutableMap<String, Any>,
     designerMode: Boolean,
     path: String,
@@ -154,7 +151,7 @@ private fun RenderBlock(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (i in 0 until actions.length()) {
                         val a = actions.optJSONObject(i) ?: continue
-                        FilledTonalButton(onClick = { dispatcher.dispatch(a.optString("actionId")) }) {
+                        FilledTonalButton(onClick = { dispatch(a.optString("actionId")) }) {
                             Text(a.optString("icon", "action"))
                         }
                     }
@@ -172,7 +169,7 @@ private fun RenderBlock(
                     if (openMenuId.isNotBlank() || actionId.startsWith("open_menu:")) {
                         expanded = true
                     } else if (actionId.isNotBlank()) {
-                        dispatcher.dispatch(actionId)
+                        dispatch(actionId)
                     }
                 }) { NamedIcon(iconName, null) }
 
@@ -184,7 +181,7 @@ private fun RenderBlock(
                             val it = items.optJSONObject(i) ?: continue
                             DropdownMenuItem(
                                 text = { Text(it.optString("label","")) },
-                                onClick = { expanded = false; dispatcher.dispatch(it.optString("actionId","")) },
+                                onClick = { expanded = false; dispatch(it.optString("actionId","")) },
                                 leadingIcon = {
                                     val ic = it.optString("icon","")
                                     if (ic.isNotBlank()) NamedIcon(ic, null)
@@ -205,13 +202,13 @@ private fun RenderBlock(
                     for (i in 0 until innerBlocks.length()) {
                         val b = innerBlocks.optJSONObject(i) ?: continue
                         val p2 = "$path/blocks/$i"
-                        RenderBlock(b, dispatcher, uiState, designerMode, p2, menus, onSelect)
+                        RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
                     }
                 }
             }
             val mod = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = clickAction.isNotBlank()) { dispatcher.dispatch(clickAction) }
+                .clickable(enabled = clickAction.isNotBlank()) { dispatch(clickAction) }
             when (variant) {
                 "outlined" -> OutlinedCard(mod) { Column(Modifier.padding(12.dp)) { inner() } }
                 "filled"   -> Card(mod)        { Column(Modifier.padding(12.dp)) { inner() } }
@@ -243,7 +240,7 @@ private fun RenderBlock(
                 for (k in 0 until blocks2.length()) {
                     val b = blocks2.optJSONObject(k) ?: continue
                     val p2 = "$path/tabs/$idx/blocks/$k"
-                    RenderBlock(b, dispatcher, uiState, designerMode, p2, menus, onSelect)
+                    RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
                 }
             }
         }
@@ -262,7 +259,7 @@ private fun RenderBlock(
                 Modifier
                     .fillMaxWidth()
                     .padding(start = padStart, end = padEnd)
-                    .then(if (clickAction.isNotBlank()) Modifier.clickable { dispatcher.dispatch(clickAction) } else Modifier)
+                    .then(if (clickAction.isNotBlank()) Modifier.clickable { dispatch(clickAction) } else Modifier)
             ) {
                 Text(
                     text = block.optString("title", ""),
@@ -333,7 +330,7 @@ private fun RenderBlock(
                     }
                     when(styleKey){
                         "outlined" -> OutlinedButton(
-                            onClick = { if (!confirm) dispatcher.dispatch(action) else dispatcher.dispatch(action) },
+                            onClick = { if (!confirm) dispatch(action) else dispatch(action) },
                             shape = shape,
                             border = BorderStroke(border, content),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = content),
@@ -341,21 +338,21 @@ private fun RenderBlock(
                             modifier = baseMod
                         ) { contentSlot() }
                         "tonal"    -> FilledTonalButton(
-                            onClick = { dispatcher.dispatch(action) },
+                            onClick = { dispatch(action) },
                             shape = shape,
                             colors = ButtonDefaults.filledTonalButtonColors(containerColor = container, contentColor = content),
                             interactionSource = interaction,
                             modifier = baseMod
                         ) { contentSlot() }
                         "text"     -> TextButton(
-                            onClick = { dispatcher.dispatch(action) },
+                            onClick = { dispatch(action) },
                             shape = shape,
                             colors = ButtonDefaults.textButtonColors(contentColor = content),
                             interactionSource = interaction,
                             modifier = baseMod
                         ) { contentSlot() }
                         else       -> Button(
-                            onClick = { dispatcher.dispatch(action) },
+                            onClick = { dispatch(action) },
                             shape = shape,
                             colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = content),
                             interactionSource = interaction,
@@ -436,7 +433,7 @@ private fun RenderBlock(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
-                            .clickable { dispatcher.dispatch(it.optString("actionId","")) }
+                            .clickable { dispatch(it.optString("actionId","")) }
                     )
                     Divider()
                 }
@@ -461,14 +458,14 @@ private fun RenderBlock(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 when (variant) {
                     "extended" -> ExtendedFloatingActionButton(
-                        onClick = { dispatcher.dispatch(action) },
+                        onClick = { dispatch(action) },
                         icon = { NamedIcon(icon, null) },
                         text = { Text(label.ifBlank { "Azione" }) }
                     )
                     else -> when (size) {
-                        "small" -> SmallFloatingActionButton(onClick = { dispatcher.dispatch(action) }) { NamedIcon(icon, null) }
-                        "large" -> LargeFloatingActionButton(onClick = { dispatcher.dispatch(action) }) { NamedIcon(icon, null) }
-                        else -> FloatingActionButton(onClick = { dispatcher.dispatch(action) }) { NamedIcon(icon, null) }
+                        "small" -> SmallFloatingActionButton(onClick = { dispatch(action) }) { NamedIcon(icon, null) }
+                        "large" -> LargeFloatingActionButton(onClick = { dispatch(action) }) { NamedIcon(icon, null) }
+                        else -> FloatingActionButton(onClick = { dispatch(action) }) { NamedIcon(icon, null) }
                     }
                 }
             }
@@ -931,7 +928,6 @@ private fun IconText(label: String, icon: String) {
     }
 }
 
-/** Ritorna Triple(containerColor, contentColor, borderThickness) */
 @Composable
 private fun mapButtonColors(style: String, tint: String): Triple<Color, Color, Dp> {
     val cs = MaterialTheme.colorScheme
@@ -959,7 +955,6 @@ private fun mapButtonColors(style: String, tint: String): Triple<Color, Color, D
     }
 }
 
-/** Sposta il blocco e restituisce il nuovo path selezionabile */
 private fun moveAndReturnNewPath(root: JSONObject, path: String, delta: Int): String {
     val p = getParentAndIndex(root, path) ?: return path
     val (arr, idx) = p
@@ -1004,8 +999,6 @@ private fun ExposedDropdown(value: String, label: String, options: List<String>,
         }
     }
 }
-
-/* ===== JSON helpers ===== */
 
 @Composable
 private fun NamedIcon(name: String?, contentDescription: String?) {
@@ -1094,8 +1087,6 @@ private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, I
     return if (parentArr != null && index >= 0) parentArr!! to index else null
 }
 
-/* ===== Template blocchi palette ===== */
-
 private fun newSectionHeader() = JSONObject(
     """{ "type":"SectionHeader", "title":"Nuova sezione" }""".trimIndent()
 )
@@ -1141,7 +1132,6 @@ private fun newMenu(menuId: String = "more_menu") = JSONObject(
 }""".trimIndent()
 )
 
-/** Inserisce un blocco accanto alla selezione e restituisce il path del nuovo elemento */
 private fun insertBlockAndReturnPath(
     root: JSONObject,
     selectedPath: String?,
@@ -1185,7 +1175,6 @@ private fun insertBlockAndReturnPath(
     return "$parentPath/$insertIndex"
 }
 
-/** Inserisce IconButton e relativo Menu, ritorna il path dell'IconButton */
 private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
     val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
     val iconPath = insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
