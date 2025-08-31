@@ -53,15 +53,22 @@ fun UiScreen(
 
     val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
+
+    // spazio inferiore dinamico per non far coprire i contenuti dall'overlay
     var overlayHeightPx by remember { mutableStateOf(0) }
-    val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.dp }
+    val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
 
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = if (designerMode) overlayHeightDp + 32.dp else 16.dp),
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 16.dp,
+                    bottom = if (designerMode) overlayHeightDp + 32.dp else 16.dp
+                ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             val blocks = layout!!.optJSONArray("blocks") ?: JSONArray()
@@ -88,6 +95,7 @@ fun UiScreen(
                 setSelectedPath = { selectedPath = it },
                 onLayoutChange = {
                     UiLoader.saveDraft(ctx, screenName, layout!!)
+                    // forza recomposition
                     layout = JSONObject(layout.toString())
                     tick++
                 },
@@ -507,7 +515,7 @@ private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String,
                     ElevatedCard(Modifier.weight(1f)) {
                         Column(Modifier.padding(12.dp)) {
                             Text(t.optString("label",""), style = MaterialTheme.typography.labelMedium)
-                            Text("—", style = MaterialTheme.typography.headlineSmall)
+                            Text("—", style = MaterialTheme.typTypography.headlineSmall)
                         }
                     }
                 }
@@ -553,35 +561,43 @@ private fun BoxScope.DesignerOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Palette:", style = MaterialTheme.typography.labelLarge)
+
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
+
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
+
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
+
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type","Divider"), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
+
                 FilledTonalButton(onClick = {
                     val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
                     setSelectedPath(iconPath)
                     onLayoutChange()
                 }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
+
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
+
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
+
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
                     setSelectedPath(path); onLayoutChange()
@@ -589,7 +605,7 @@ private fun BoxScope.DesignerOverlay(
             }
         }
 
-        // Selezione
+        // Selezione + Azioni
         Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
             Column(
                 Modifier
@@ -614,11 +630,11 @@ private fun BoxScope.DesignerOverlay(
                         setSelectedPath(newPath); onLayoutChange()
                     }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giu") }
                     OutlinedButton(enabled = selectedPath != null, onClick = {
-                        duplicate(layout, selectedPath!!); onLayoutChange()
+                        duplicateAtPath(layout, selectedPath!!); onLayoutChange()
                     }) { Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica") }
                     TextButton(
                         enabled = selectedPath != null,
-                        onClick = { remove(layout, selectedPath!!); setSelectedPath(null); onLayoutChange() },
+                        onClick = { removeAtPath(layout, selectedPath!!); setSelectedPath(null); onLayoutChange() },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
                     Button(
@@ -627,7 +643,6 @@ private fun BoxScope.DesignerOverlay(
                     ) { Text("Proprieta...") }
                 }
 
-                // Azioni salvataggio
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -780,6 +795,7 @@ private fun SectionHeaderInspector(block: JSONObject, onClose: () -> Unit) {
 
 /* ===== Helpers: mapping e util ===== */
 
+@Composable
 private fun mapTextStyle(key: String): TextStyle = when (key) {
     "displaySmall" -> MaterialTheme.typography.displaySmall
     "headlineSmall" -> MaterialTheme.typography.headlineSmall
@@ -799,7 +815,7 @@ private fun mapTextAlign(key: String): TextAlign = when (key) {
 private fun sizeModifier(size: String): Modifier = when (size) {
     "sm" -> Modifier.height(36.dp)
     "lg" -> Modifier.height(52.dp)
-    else -> Modifier.height(40.dp) // md default
+    else -> Modifier.height(40.dp)
 }
 
 @Composable
@@ -971,6 +987,79 @@ private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, I
         }
     }
     return if (parentArr != null && index >= 0) parentArr!! to index else null
+}
+
+/** Inserisce un blocco e restituisce il path del nuovo elemento */
+private fun insertBlockAndReturnPath(
+    root: JSONObject,
+    selectedPath: String?,
+    block: JSONObject,
+    position: String
+): String {
+    val parentArr: JSONArray
+    val idx: Int
+    val parentPath: String
+
+    if (selectedPath != null) {
+        val pair = getParentAndIndex(root, selectedPath)
+        if (pair != null) {
+            parentArr = pair.first
+            idx = pair.second
+            parentPath = selectedPath.substringBeforeLast("/")
+        } else {
+            parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
+            idx = parentArr.length() - 1
+            parentPath = "/blocks"
+        }
+    } else {
+        parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
+        idx = parentArr.length() - 1
+        parentPath = "/blocks"
+    }
+
+    val insertIndex = when (position) { "before" -> idx; else -> idx + 1 }
+        .coerceIn(0, parentArr.length())
+
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until parentArr.length()) {
+        if (i == insertIndex) tmp.add(block)
+        tmp.add(parentArr.get(i))
+    }
+    if (insertIndex == parentArr.length()) tmp.add(block)
+
+    while (parentArr.length() > 0) parentArr.remove(parentArr.length() - 1)
+    tmp.forEach { parentArr.put(it) }
+
+    return "$parentPath/$insertIndex"
+}
+
+/** Inserisce IconButton e relativo Menu, ritorna il path dell'IconButton */
+private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
+    val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
+    val iconPath = insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
+    insertBlockAndReturnPath(root, iconPath, newMenu(id), "after")
+    return iconPath
+}
+
+/** Duplica il blocco al path */
+private fun duplicateAtPath(root: JSONObject, path: String) {
+    val p = getParentAndIndex(root, path) ?: return
+    val (arr, idx) = p
+    val clone = JSONObject(arr.getJSONObject(idx).toString())
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) { tmp.add(arr.get(i)); if (i == idx) tmp.add(clone) }
+    while (arr.length() > 0) arr.remove(arr.length()-1)
+    tmp.forEach { arr.put(it) }
+}
+
+/** Rimuove il blocco al path */
+private fun removeAtPath(root: JSONObject, path: String) {
+    val p = getParentAndIndex(root, path) ?: return
+    val (arr, idx) = p
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) if (i != idx) tmp.add(arr.get(i))
+    while (arr.length() > 0) arr.remove(arr.length()-1)
+    tmp.forEach { arr.put(it) }
 }
 
 /* ===== Template blocchi palette ===== */
