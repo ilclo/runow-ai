@@ -1003,24 +1003,29 @@ private fun ExposedDropdown(value: String, label: String, options: List<String>,
 
 @Composable
 private fun NamedIcon(name: String?, contentDescription: String?) {
-    when (name) {
-        "settings"       -> Icon(Icons.Filled.Settings, contentDescription)
-        "more_vert"      -> Icon(Icons.Filled.MoreVert, contentDescription)
-        "tune"           -> Icon(Icons.Filled.Tune, contentDescription)
-        "play_arrow"     -> Icon(Icons.Filled.PlayArrow, contentDescription)
-        "pause"          -> Icon(Icons.Filled.Pause, contentDescription)
-        "stop"           -> Icon(Icons.Filled.Stop, contentDescription)
-        "add"            -> Icon(Icons.Filled.Add, contentDescription)
-        "flag"           -> Icon(Icons.Filled.Flag, contentDescription)
-        "queue_music"    -> Icon(Icons.Filled.QueueMusic, contentDescription)
-        "widgets"        -> Icon(Icons.Filled.Widgets, contentDescription)
-        "palette"        -> Icon(Icons.Filled.Palette, contentDescription)
-        "directions_run" -> Icon(Icons.Filled.DirectionsRun, contentDescription)
-        "home"           -> Icon(Icons.Filled.Home, contentDescription)
-        "menu"           -> Icon(Icons.Filled.Menu, contentDescription)
-        "close"          -> Icon(Icons.Filled.Close, contentDescription)
-        "more_horiz"     -> Icon(Icons.Filled.MoreHoriz, contentDescription)
-        else             -> Text(".")
+    val image = when (name) {
+        "settings"       -> Icons.Filled.Settings
+        "more_vert"      -> Icons.Filled.MoreVert
+        "tune"           -> Icons.Filled.Tune
+        "play_arrow"     -> Icons.Filled.PlayArrow
+        "pause"          -> Icons.Filled.Pause
+        "stop"           -> Icons.Filled.Stop
+        "add"            -> Icons.Filled.Add
+        "flag"           -> Icons.Filled.Flag
+        "queue_music"    -> Icons.Filled.QueueMusic
+        "widgets"        -> Icons.Filled.Widgets
+        "palette"        -> Icons.Filled.Palette
+        "directions_run" -> Icons.Filled.DirectionsRun
+        "home"           -> Icons.Filled.Home
+        "menu"           -> Icons.Filled.Menu
+        "close"          -> Icons.Filled.Close
+        "more_horiz"     -> Icons.Filled.MoreHoriz
+        else             -> null
+    }
+    if (image != null) {
+        Icon(image, contentDescription)
+    } else {
+        Text(".")
     }
 }
 
