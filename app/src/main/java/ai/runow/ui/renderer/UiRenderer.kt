@@ -1691,7 +1691,7 @@ private fun removeAt(arr: JSONArray, index: Int) {
 }
 
 @Composable
-private fun NamedIconEx(name: String?, contentDescription: String?) {
+private fun NamedIconEx_dup(name: String?, contentDescription: String?) {
     val image = when (name) {
         // base
         "settings" -> Icons.Filled.Settings
