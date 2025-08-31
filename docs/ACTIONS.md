@@ -21,5 +21,6 @@
 - nudge_energy_up       → MusicController.nudge(+1)
 - nudge_energy_down     → MusicController.nudge(-1)
 
-## Pattern dinamico di navigazione
-- `nav:<page>`         → apre la schermata JSON `<page>` (es. `nav:run`, `nav:settings`, `nav:music`, `nav:home`)
+## Pattern dinamici
+- `nav:<page>`          → apre la schermata JSON `<page>` (es. `nav:run`, `nav:settings`, `nav:music`, `nav:home`)
+- `open_menu:<id>`      → apre il `Menu` con id `<id>` se definito nel layout

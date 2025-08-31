@@ -4,6 +4,13 @@
   "density": "default",
   "blocks": [
     { "type": "AppBar", "title": "Impostazioni" },
+
+    { "type": "IconButton", "icon": "more_vert", "openMenuId": "settings_menu" },
+    { "type": "Menu", "id": "settings_menu", "items": [
+      { "icon":"tune", "label":"Layout Lab", "actionId":"open_layout_lab" },
+      { "icon":"palette", "label":"Theme Lab", "actionId":"open_theme_lab" }
+    ]},
+
     { "type": "SectionHeader", "title": "Coach" },
     { "type": "Toggle", "label": "Coach", "bind": "coach.enabled" },
     { "type": "ChipRow", "chips": [
@@ -17,6 +24,7 @@
       { "label": "Split",  "bind": "coach.alerts.split" },
       { "label": "400m",   "bind": "coach.alerts.last400m" }
     ]},
+
     { "type": "SectionHeader", "title": "Musica" },
     { "type": "ChipRow", "chips": [
       { "label": "Spotify",  "bind": "music.provider", "value": "spotify" },
@@ -30,6 +38,7 @@
       { "label": "Quando serve", "bind": "music.metronome", "value": "out_of_range" },
       { "label": "Sempre", "bind": "music.metronome", "value": "always" }
     ]},
+
     { "type": "SectionHeader", "title": "Tema" },
     { "type": "List", "items": [
       { "icon": "palette", "title": "Theme Lab", "subtitle": "Colori e forme", "actionId": "open_theme_lab" },

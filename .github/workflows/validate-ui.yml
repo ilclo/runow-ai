@@ -61,8 +61,7 @@ jobs:
           const binds = new Set([...bindsTxt.matchAll(/`([a-zA-Z0-9_.]+)`/g)].map(m=>m[1]));
 
           const dir='configs/ui';
-          const files = fs.readdirSync(dir)
-            .filter(f => f.endsWith('.json') && f !== 'layout_manifest.json');
+          const files = fs.readdirSync(dir).filter(f => f.endsWith('.json') && f !== 'layout_manifest.json');
 
           let ok=true;
           for (const f of files) {
@@ -70,11 +69,12 @@ jobs:
             const walk = (n) => {
               if (Array.isArray(n)) return n.forEach(walk);
               if (n && typeof n === 'object') {
-                if (n.actionId) {
-                  const a = n.actionId;
-                  const isNav = a.startsWith('nav:');
+                const a = n.actionId || n.clickActionId;
+                if (a) {
+                  const isNav  = a.startsWith('nav:');
+                  const isMenu = a.startsWith('open_menu:') || a.startsWith('open_dialog:') || a.startsWith('open_sheet:');
                   const isEdit = a === 'open_layout_lab' || a === 'open_theme_lab' || a === 'open_gallery' || a === 'open_settings';
-                  if (!isNav && !isEdit && !actions.has(a)) {
+                  if (!isNav && !isMenu && !isEdit && !actions.has(a)) {
                     console.error(`${f}: unknown actionId "${a}"`);
                     ok=false;
                   }

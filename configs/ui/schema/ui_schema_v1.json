@@ -12,7 +12,7 @@
   },
   "$defs": {
     "Icon": { "type": "string", "pattern": "^[a-z0-9_]+$" },
-    "ActionId": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "ActionId": { "type": "string" },
     "Bind": { "type": "string", "pattern": "^[A-Za-z0-9_.]+$" },
     "Span": { "type": "integer", "minimum": 1, "maximum": 12 },
     "Size": { "type": "string", "enum": ["sm","md","lg"] },
@@ -31,7 +31,13 @@
         { "$ref": "#/$defs/List" },
         { "$ref": "#/$defs/Carousel" },
         { "$ref": "#/$defs/Spacer" },
-        { "$ref": "#/$defs/Divider" }
+        { "$ref": "#/$defs/Divider" },
+
+        { "$ref": "#/$defs/IconButton" },
+        { "$ref": "#/$defs/Card" },
+        { "$ref": "#/$defs/DividerV" },
+        { "$ref": "#/$defs/Fab" },
+        { "$ref": "#/$defs/Menu" }
       ]
     },
 
@@ -249,8 +255,85 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["type"],
+      "properties": { "type": { "const": "Divider" } }
+    },
+
+    /* ===== new: IconButton ===== */
+    "IconButton": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type","icon"],
       "properties": {
-        "type": { "const": "Divider" }
+        "type": { "const": "IconButton" },
+        "icon": { "$ref": "#/$defs/Icon" },
+        "actionId": { "$ref": "#/$defs/ActionId" },
+        "openMenuId": { "type": "string" },
+        "span": { "$ref": "#/$defs/Span" }
+      }
+    },
+
+    /* ===== new: Card ===== */
+    "Card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type","blocks"],
+      "properties": {
+        "type": { "const": "Card" },
+        "variant": { "type": "string", "enum": ["elevated","outlined","filled"], "default": "elevated" },
+        "clickActionId": { "$ref": "#/$defs/ActionId" },
+        "span": { "$ref": "#/$defs/Span" },
+        "blocks": { "type": "array", "items": { "$ref": "#/$defs/Block" } }
+      }
+    },
+
+    /* ===== new: DividerV ===== */
+    "DividerV": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "DividerV" },
+        "thickness": { "type": "number", "default": 1 },
+        "height": { "type": "number", "default": 24 }
+      }
+    },
+
+    /* ===== new: Fab ===== */
+    "Fab": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type","icon","actionId"],
+      "properties": {
+        "type": { "const": "Fab" },
+        "icon": { "$ref": "#/$defs/Icon" },
+        "label": { "type": "string" },
+        "size": { "type": "string", "enum": ["small","regular","large"], "default": "regular" },
+        "variant": { "type": "string", "enum": ["regular","extended"], "default": "regular" },
+        "actionId": { "$ref": "#/$defs/ActionId" }
+      }
+    },
+
+    /* ===== new: Menu ===== */
+    "Menu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type","id","items"],
+      "properties": {
+        "type": { "const": "Menu" },
+        "id": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label","actionId"],
+            "properties": {
+              "icon": { "$ref": "#/$defs/Icon" },
+              "label": { "type": "string" },
+              "actionId": { "$ref": "#/$defs/ActionId" }
+            }
+          }
+        }
       }
     }
   }

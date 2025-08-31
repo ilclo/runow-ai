@@ -4,6 +4,7 @@
   "density": "default",
   "blocks": [
     { "type": "AppBar", "title": "Corsa", "actions": [ { "icon": "settings", "actionId": "open_settings" } ] },
+
     { "type": "Tabs", "tabs": [
       { "key": "goal", "label": "Obiettivo", "blocks": [
         { "type": "SectionHeader", "title": "Obiettivo" },
@@ -42,6 +43,7 @@
         ] }
       ]}
     ]},
+
     { "type": "SectionHeader", "title": "Metriche" },
     { "type": "MetricsGrid", "columns": 2, "tiles": [
       { "metric": "pace", "label": "Passo", "span": 6 },
@@ -54,6 +56,8 @@
       { "label": "Start", "style": "primary",  "icon": "play_arrow", "size": "md", "actionId": "start_run" },
       { "label": "Pausa", "style": "tonal",    "icon": "pause",      "size": "md", "actionId": "pause_run" },
       { "label": "Stop",  "style": "outlined", "icon": "stop",       "size": "md", "confirm": true, "actionId": "stop_run" }
-    ]}
+    ]},
+
+    { "type": "Fab", "icon": "play_arrow", "label": "Start", "variant": "extended", "actionId": "start_run" }
   ]
 }
