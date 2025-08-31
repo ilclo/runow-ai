@@ -899,8 +899,8 @@ private fun FabInspector(block: JSONObject, onClose: () -> Unit) {
 
 /* ===== Helpers: mapping e util ===== */
 
+@Composable
 private fun mapTextStyle(key: String): TextStyle = when (key) {
-    "displaySmall" -> MaterialTheme.typography.displaySmall
     "headlineSmall" -> MaterialTheme.typography.headlineSmall
     "titleLarge" -> MaterialTheme.typography.titleLarge
     "titleSmall" -> MaterialTheme.typography.titleSmall
