@@ -165,10 +165,7 @@ private fun RenderBlock(
                 Box(
                     Modifier
                         .matchParentSize()
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) { onSelect(path) }
+                        .clickable(onClick = { onSelect(path) })
                 )
             }
         } else {
@@ -677,8 +674,7 @@ private fun BoxScope.DesignerOverlay(
                         onClick = { remove(layout, selectedPath!!); setSelectedPath(null); onLayoutChange() },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
-                    Button(selectedBlock.optString("type") in listOf("ButtonRow","SectionHeader","Spacer","Divider","DividerV","Card","Fab","IconButton"),
-                        onClick = { showInspector = true }
+                    Button(onClick = { showInspector = true }
                     ) { Text("Proprietà...") }
                 }
 
