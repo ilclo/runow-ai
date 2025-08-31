@@ -241,7 +241,7 @@ private fun RenderBlock(
             }
             val mod = Modifier
                 .fillMaxWidth()
-                .clickable(enabled = clickAction.isNotBlank() && !designerMode) { dispatch(clickAction) }
+                .clickable() && !designerMode) { dispatch(clickAction) }
             when (variant) {
                 "outlined" -> OutlinedCard(mod) { Column(Modifier.padding(12.dp)) { inner() } }
                 "filled"   -> Card(mod)        { Column(Modifier.padding(12.dp)) { inner() } }
@@ -376,32 +376,28 @@ private fun RenderBlock(
                             border = BorderStroke(border, content),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = content),
                             interactionSource = interaction,
-                            modifier = baseMod,
-                            enabled = !designerMode
+                            modifier = baseMod
                         ) { contentSlot() }
                         "tonal"    -> FilledTonalButton(
                             onClick = { dispatch(action) },
                             shape = shape,
                             colors = ButtonDefaults.filledTonalButtonColors(containerColor = container, contentColor = content),
                             interactionSource = interaction,
-                            modifier = baseMod,
-                            enabled = !designerMode
+                            modifier = baseMod
                         ) { contentSlot() }
                         "text"     -> TextButton(
                             onClick = { dispatch(action) },
                             shape = shape,
                             colors = ButtonDefaults.textButtonColors(contentColor = content),
                             interactionSource = interaction,
-                            modifier = baseMod,
-                            enabled = !designerMode
+                            modifier = baseMod
                         ) { contentSlot() }
                         else       -> Button(
                             onClick = { dispatch(action) },
                             shape = shape,
                             colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = content),
                             interactionSource = interaction,
-                            modifier = baseMod,
-                            enabled = !designerMode
+                            modifier = baseMod
                         ) { contentSlot() }
                     }
                 }
@@ -423,8 +419,7 @@ private fun RenderBlock(
                             selected = current == v,
                             onClick = { uiState[bind] = v },
                             label = { Text(label) },
-                            leadingIcon = if (current == v) { { Icon(Icons.Filled.Check, null) } } else null,
-                            enabled = !designerMode
+                            leadingIcon = if (current == v) { { Icon(Icons.Filled.Check, null) } } else null
                         )
                     } else {
                         val current = (uiState[bind] as? Boolean) ?: false
@@ -432,8 +427,7 @@ private fun RenderBlock(
                             selected = current,
                             onClick = { uiState[bind] = !current },
                             label = { Text(label) },
-                            leadingIcon = if (current) { { Icon(Icons.Filled.Check, null) } } else null,
-                            enabled = !designerMode
+                            leadingIcon = if (current) { { Icon(Icons.Filled.Check, null) } } else null
                         )
                     }
                 }
@@ -465,8 +459,7 @@ private fun RenderBlock(
                     value = it
                     uiState[bind] = if (step >= 1f) round(it/step)*step else it
                 },
-                valueRange = min..max,
-                enabled = !designerMode
+                valueRange = min..max
             )
         }
 
@@ -481,7 +474,7 @@ private fun RenderBlock(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
-                            .clickable(enabled = !designerMode) { dispatch(it.optString("actionId","")) }
+                            .clickable() { dispatch(it.optString("actionId","")) }
                     )
                     HorizontalDivider()
                 }
@@ -508,8 +501,7 @@ private fun RenderBlock(
                     "extended" -> ExtendedFloatingActionButton(
                         onClick = { dispatch(action) },
                         icon = { NamedIcon(icon, null) },
-                        text = { Text(label.ifBlank { "Azione" }) },
-                        enabled = !designerMode
+                        text = { Text(label.ifBlank { "Azione" }) }
                     )
                     else -> when (size) {
                         "small" -> SmallFloatingActionButton(onClick = { dispatch(action) }) { NamedIcon(icon, null) }
@@ -670,25 +662,22 @@ private fun BoxScope.DesignerOverlay(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Selezione:", style = MaterialTheme.typography.labelLarge)
-                    OutlinedButton(enabled = canMove, onClick = {
+                    OutlinedButton( onClick = {
                         val newPath = moveAndReturnNewPath(layout, selectedPath!!, -1)
                         setSelectedPath(newPath); onLayoutChange()
                     }) { Icon(Icons.Filled.KeyboardArrowUp, null); Spacer(Modifier.width(4.dp)); Text("Su") }
-                    OutlinedButton(enabled = canMove, onClick = {
+                    OutlinedButton( onClick = {
                         val newPath = moveAndReturnNewPath(layout, selectedPath!!, +1)
                         setSelectedPath(newPath); onLayoutChange()
                     }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giu") }
-                    OutlinedButton(enabled = selectedPath != null, onClick = {
+                    OutlinedButton( onClick = {
                         duplicate(layout, selectedPath!!); onLayoutChange()
                     }) { Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica") }
                     TextButton(
-                        enabled = selectedPath != null,
                         onClick = { remove(layout, selectedPath!!); setSelectedPath(null); onLayoutChange() },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
-                    Button(
-                        enabled = selectedBlock != null && selectedPath != null &&
-                                selectedBlock.optString("type") in listOf("ButtonRow","SectionHeader","Spacer","Divider","DividerV","Card","Fab","IconButton"),
+                    Button(selectedBlock.optString("type") in listOf("ButtonRow","SectionHeader","Spacer","Divider","DividerV","Card","Fab","IconButton"),
                         onClick = { showInspector = true }
                     ) { Text("Proprietà...") }
                 }
