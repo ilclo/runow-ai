@@ -238,7 +238,7 @@ private fun RenderBlock(
             }
             val mod = Modifier
                 .fillMaxWidth()
-                .clickable() && !designerMode) { dispatch(clickAction) }
+                .then(if (clickAction.isNotBlank() && !designerMode) Modifier.clickable(onClick = { dispatch(clickAction) }) else Modifier)
             when (variant) {
                 "outlined" -> OutlinedCard(mod) { Column(Modifier.padding(12.dp)) { inner() } }
                 "filled"   -> Card(mod)        { Column(Modifier.padding(12.dp)) { inner() } }
@@ -471,7 +471,7 @@ private fun RenderBlock(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
-                            .clickable() { dispatch(it.optString("actionId","")) }
+                            .clickable(onClick = {  dispatch(it.optString("actionId","")) }
                     )
                     HorizontalDivider()
                 }
