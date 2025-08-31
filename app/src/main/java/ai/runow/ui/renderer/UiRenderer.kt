@@ -515,7 +515,7 @@ private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String,
                     ElevatedCard(Modifier.weight(1f)) {
                         Column(Modifier.padding(12.dp)) {
                             Text(t.optString("label",""), style = MaterialTheme.typography.labelMedium)
-                            Text("—", style = MaterialTheme.typTypography.headlineSmall)
+                            Text("—", style = MaterialTheme.typography.headlineSmall)
                         }
                     }
                 }
