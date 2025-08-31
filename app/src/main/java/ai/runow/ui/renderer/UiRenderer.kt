@@ -445,7 +445,7 @@ private fun RenderBlock(
             val bind = block.optString("bind","")
             val v = (uiState[bind] as? Boolean) ?: false
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Switch(checked = v, onCheckedChange = { uiState[bind] = it }, enabled = !designerMode)
+                Switch(checked = v, onCheckedChange = { uiState[bind] = it })
                 Spacer(Modifier.width(8.dp))
                 Text(label)
             }
@@ -512,9 +512,9 @@ private fun RenderBlock(
                         enabled = !designerMode
                     )
                     else -> when (size) {
-                        "small" -> SmallFloatingActionButton(onClick = { dispatch(action) }, enabled = !designerMode) { NamedIcon(icon, null) }
-                        "large" -> LargeFloatingActionButton(onClick = { dispatch(action) }, enabled = !designerMode) { NamedIcon(icon, null) }
-                        else -> FloatingActionButton(onClick = { dispatch(action) }, enabled = !designerMode) { NamedIcon(icon, null) }
+                        "small" -> SmallFloatingActionButton(onClick = { dispatch(action) }) { NamedIcon(icon, null) }
+                        "large" -> LargeFloatingActionButton(onClick = { dispatch(action) }) { NamedIcon(icon, null) }
+                        else -> FloatingActionButton(onClick = { dispatch(action) }) { NamedIcon(icon, null) }
                     }
                 }
             }
@@ -1593,3 +1593,50 @@ private fun newMenu(menuId: String = "more_menu") = JSONObject(
   ]
 }""".trimIndent()
 )
+@Composable
+private fun ExposedDropdown(
+    value: String,
+    label: String,
+    options: List<String>,
+    onSelect: (String)->Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { opt ->
+                DropdownMenuItem(
+                    text = { Text(opt) },
+                    onClick = { onSelect(opt); expanded = false }
+                )
+            }
+        }
+    }
+}
+private fun duplicate(root: JSONObject, path: String) {
+    val p = getParentAndIndex(root, path) ?: return
+    val (arr, idx) = p
+    val clone = JSONObject(arr.getJSONObject(idx).toString())
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) {
+        tmp.add(arr.get(i))
+        if (i == idx) tmp.add(clone)
+    }
+    while (arr.length() > 0) arr.remove(arr.length()-1)
+    tmp.forEach { arr.put(it) }
+}
+private fun remove(root: JSONObject, path: String) {
+    val p = getParentAndIndex(root, path) ?: return
+    val (arr, idx) = p
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) if (i != idx) tmp.add(arr.get(i))
+    while (arr.length() > 0) arr.remove(arr.length()-1)
+    tmp.forEach { arr.put(it) }
+}
