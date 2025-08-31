@@ -357,9 +357,16 @@ private fun RenderBlock(
                         "cut" -> CutCornerShape(corner)
                         else -> RoundedCornerShape(corner)
                     }
-                    val (container, content, border) = mapButtonColors(styleKey, tintKey)
-
-                    val baseMod = Modifier
+                    var (container, content, border) = mapButtonColors(styleKey, tintKey)
+                    run {
+                        val __hex = btn.optString("customColor","")
+                        val __col = parseColorOrRole(__hex)
+                        if (__col != null) {
+                            container = __col
+                            content = bestOnColor(__col)
+                        }
+                    }
+                                                            val baseMod = Modifier
                         .graphicsLayer(scaleX = scale, scaleY = scale)
                         .then(sizeModifier(sizeKey))
 
@@ -420,7 +427,7 @@ private fun RenderBlock(
                         FilterChip(
                             selected = current == v,
                             onClick = { uiState[bind] = v },
-                            label = { Text(label) },
+                            label = { Text(label, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
                             leadingIcon = if (current == v) { { Icon(Icons.Filled.Check, null) } } else null
                         )
                     } else {
@@ -428,7 +435,7 @@ private fun RenderBlock(
                         FilterChip(
                             selected = current,
                             onClick = { uiState[bind] = !current },
-                            label = { Text(label) },
+                            label = { Text(label, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
                             leadingIcon = if (current) { { Icon(Icons.Filled.Check, null) } } else null
                         )
                     }
@@ -471,10 +478,10 @@ private fun RenderBlock(
                 for (i in 0 until items.length()) {
                     val item = items.optJSONObject(i) ?: continue
                     ListItem(
-                        headlineContent = { Text(item.optString("title","")) },
+                        headlineContent = { Text(item.optString("title",""), style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyLarge), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
                         supportingContent = {
                             val sub = item.optString("subtitle","")
-                            if (sub.isNotBlank()) Text(sub)
+                            if (sub.isNotBlank()) Text(sub, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current)
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -717,6 +724,8 @@ private fun BoxScope.DesignerOverlay(
             "Card"          -> CardInspector(layout, selectedPath, onApply, onCancel, onLiveChange)
             "Fab"           -> FabInspector(layout, selectedPath, onApply, onCancel, onLiveChange)
             "IconButton"    -> IconButtonInspector(layout, selectedPath, onApply, onCancel, onLiveChange)
+            "List"         -> ListInspector(layout, selectedPath, onApply, onCancel, onLiveChange)
+            "ChipRow"      -> ChipRowInspector(layout, selectedPath, onApply, onCancel, onLiveChange)
         }
     }
 }
@@ -779,7 +788,6 @@ private fun ButtonRowInspector(
                             Row {
                                 IconButton(onClick = { moveInArray(buttons, i, -1); onLive() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
                                 IconButton(onClick = { moveInArray(buttons, i, +1); onLive() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
-                                IconButton(onClick = { removeAt(buttons, i); onLive() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
                             }
                         }
                         val label = remember { mutableStateOf(btn.optString("label","")) }
@@ -818,9 +826,15 @@ private fun ButtonRowInspector(
                         ColorRolePicker(value = tint, label = "tint (ruolo)", options = listOf("default","success","warning","error")) {
                             tint = it; btn.put("tint", it); onLive()
                         }
-                        OutlinedTextField(value = customColor.value, onValueChange = {
-                            customColor.value = it; btn.put("customColor", it); onLive()
-                        }, label = { Text("customColor (#RRGGBB opz.)") })
+                        NamedColorPicker(
+                            currentHexOrEmpty = customColor.value,
+                            label = "customColor",
+                            onPickHex = { hex ->
+                                customColor.value = hex;
+                                if (hex.isBlank()) btn.remove("customColor") else btn.put("customColor", hex)
+                                onLive()
+                            }
+                        )
 
                         ExposedDropdown(value = press, label = "pressEffect", options = listOf("none","scale")) {
                             press = it; btn.put("pressEffect", it); onLive()
@@ -1302,7 +1316,7 @@ private fun IconPickerField(
             value = value.value,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label) },
+            label = { Text(label, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             leadingIcon = { if (value.value.isNotBlank()) NamedIconEx(value.value, null) },
             modifier = Modifier.menuAnchor()
@@ -1337,7 +1351,7 @@ private fun ColorRolePicker(
             value = display,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label) },
+            label = { Text(label, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor()
         )
@@ -1647,7 +1661,7 @@ private fun ExposedDropdown(
             value = value,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label) },
+            label = { Text(label, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor()
         )
@@ -1790,7 +1804,7 @@ private fun NamedColorPicker(
             value = display,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label) },
+            label = { Text(label, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.menuAnchor()
         )
@@ -1807,6 +1821,164 @@ private fun NamedColorPicker(
                 )
             }
             DropdownMenuItem(text = { Text("(default)") }, onClick = { onPickHex(""); expanded = false })
+        }
+    }
+}
+
+/* ---- Readability helper ---- */
+private fun bestOnColor(bg: Color): Color {
+    val l = 0.2126f * bg.red + 0.7152f * bg.green + 0.0722f * bg.blue
+    return if (l < 0.5f) Color.White else Color.Black
+}
+
+@Composable
+private fun ListInspector(
+    layout: JSONObject,
+    path: String,
+    onApply: () -> Unit,
+    onCancel: () -> Unit,
+    onLive: () -> Unit
+) {
+    var open by remember { mutableStateOf(true) }
+    val block = (jsonAtPath(layout, path) as JSONObject)
+    val backup = remember { JSONObject(block.toString()) }
+    fun closeApply() { open = false; onApply() }
+    fun closeCancel() { replaceAtPath(layout, path, backup); open = false; onCancel() }
+
+    ModalBottomSheet(
+        onDismissRequest = { closeCancel() },
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
+    ) {
+        val textSize = remember { mutableStateOf(
+            block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
+        ) }
+        var fontFamily by remember { mutableStateOf(block.optString("fontFamily","")) }
+        var fontWeight by remember { mutableStateOf(block.optString("fontWeight","")) }
+        var textColor  by remember { mutableStateOf(block.optString("textColor","")) }
+
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+            Text("List - Proprietà testo", style = MaterialTheme.typography.titleMedium)
+
+            StepperField("textSize (sp)", textSize, 1.0) { v ->
+                if (v <= 0.0) block.remove("textSizeSp") else block.put("textSizeSp", v); onLive()
+            }
+
+            ExposedDropdown(
+                value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+                label = "fontFamily",
+                options = listOf("(default)","serif","monospace","cursive")
+            ) { sel ->
+                val v = if (sel == "(default)") "" else sel
+                fontFamily = v
+                if (v.isBlank()) block.remove("fontFamily") else block.put("fontFamily", v)
+                onLive()
+            }
+
+            ExposedDropdown(
+                value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+                label = "fontWeight",
+                options = listOf("(default)","w300","w400","w500","w600","w700")
+            ) { sel ->
+                val v = if (sel == "(default)") "" else sel
+                fontWeight = v
+                if (v.isBlank()) block.remove("fontWeight") else block.put("fontWeight", v)
+                onLive()
+            }
+
+            NamedColorPicker(
+                currentHexOrEmpty = textColor,
+                label = "textColor",
+                onPickHex = { hex ->
+                    textColor = hex
+                    if (hex.isBlank()) block.remove("textColor") else block.put("textColor", hex)
+                    onLive()
+                }
+            )
+
+            Row {
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { closeCancel() }) { Text("Annulla") }
+                Button(onClick = { closeApply() }) { Text("OK") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChipRowInspector(
+    layout: JSONObject,
+    path: String,
+    onApply: () -> Unit,
+    onCancel: () -> Unit,
+    onLive: () -> Unit
+) {
+    var open by remember { mutableStateOf(true) }
+    val block = (jsonAtPath(layout, path) as JSONObject)
+    val backup = remember { JSONObject(block.toString()) }
+    fun closeApply() { open = false; onApply() }
+    fun closeCancel() { replaceAtPath(layout, path, backup); open = false; onCancel() }
+
+    ModalBottomSheet(
+        onDismissRequest = { closeCancel() },
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
+    ) {
+        val textSize = remember { mutableStateOf(
+            block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
+        ) }
+        var fontFamily by remember { mutableStateOf(block.optString("fontFamily","")) }
+        var fontWeight by remember { mutableStateOf(block.optString("fontWeight","")) }
+        var textColor  by remember { mutableStateOf(block.optString("textColor","")) }
+
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+            Text("ChipRow - Proprietà testo", style = MaterialTheme.typography.titleMedium)
+
+            StepperField("textSize (sp)", textSize, 1.0) { v ->
+                if (v <= 0.0) block.remove("textSizeSp") else block.put("textSizeSp", v); onLive()
+            }
+
+            ExposedDropdown(
+                value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+                label = "fontFamily",
+                options = listOf("(default)","serif","monospace","cursive")
+            ) { sel ->
+                val v = if (sel == "(default)") "" else sel
+                fontFamily = v
+                if (v.isBlank()) block.remove("fontFamily") else block.put("fontFamily", v)
+                onLive()
+            }
+
+            ExposedDropdown(
+                value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+                label = "fontWeight",
+                options = listOf("(default)","w300","w400","w500","w600","w700")
+            ) { sel ->
+                val v = if (sel == "(default)") "" else sel
+                fontWeight = v
+                if (v.isBlank()) block.remove("fontWeight") else block.put("fontWeight", v)
+                onLive()
+            }
+
+            NamedColorPicker(
+                currentHexOrEmpty = textColor,
+                label = "textColor",
+                onPickHex = { hex ->
+                    textColor = hex
+                    if (hex.isBlank()) block.remove("textColor") else block.put("textColor", hex)
+                    onLive()
+                }
+            )
+
+            Row {
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { closeCancel() }) { Text("Annulla") }
+                Button(onClick = { closeApply() }) { Text("OK") }
+            }
         }
     }
 }
