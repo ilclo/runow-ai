@@ -474,7 +474,7 @@ private fun RenderBlock(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
-                            .clickable(onClick = { dispatch(item.optString(\"actionId\", \"\\")) })
+                            .clickable(onClick = { dispatch(item.optString("actionId", "")) })
                     )
                     Divider()
                 }
