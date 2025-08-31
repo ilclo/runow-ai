@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toDp
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -39,7 +40,7 @@ fun UiScreen(
     dispatcher: ActionDispatcher,
     uiState: MutableMap<String, Any>,
     designerMode: Boolean = false,
-    scaffoldPadding: PaddingValues = PaddingValues(0.dp) // NEW: padding dal tuo Scaffold
+    scaffoldPadding: PaddingValues = PaddingValues(0.dp) // padding dalla TopAppBar dello Scaffold
 ) {
     val ctx = LocalContext.current
     var layout by remember(screenName) { mutableStateOf(UiLoader.loadLayout(ctx, screenName)) }
@@ -55,13 +56,13 @@ fun UiScreen(
     val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
     var overlayHeightPx by remember { mutableStateOf(0) }
-    val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.dp }
+    val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() } // px -> dp
 
     Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(scaffoldPadding) // evita sovrapposizione con la top bar dello Scaffold
+                .padding(scaffoldPadding) // evita che i blocchi stiano sotto la top bar
                 .verticalScroll(rememberScrollState())
                 .padding(
                     start = 16.dp,
@@ -1190,6 +1191,16 @@ private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?
     val iconPath = insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
     insertBlockAndReturnPath(root, iconPath, newMenu(id), "after")
     return iconPath
+}
+
+private fun duplicate(root: JSONObject, path: String) {
+    val p = getParentAndIndex(root, path) ?: return
+    val (arr, idx) = p
+    val clone = JSONObject(arr.getJSONObject(idx).toString())
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) { tmp.add(arr.get(i)); if (i == idx) tmp.add(clone) }
+    while (arr.length() > 0) arr.remove(arr.length()-1)
+    tmp.forEach { arr.put(it) }
 }
 
 private fun remove(root: JSONObject, path: String) {
