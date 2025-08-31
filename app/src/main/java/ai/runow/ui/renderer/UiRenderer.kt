@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
 package ai.runow.ui.renderer
 
 import androidx.compose.foundation.BorderStroke

@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
 package ai.runow.ui
 
 import androidx.compose.foundation.layout.*
@@ -8,10 +9,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComponentGalleryScreen() {
     var toggle by remember { mutableStateOf(true) }
@@ -44,16 +48,16 @@ fun ComponentGalleryScreen() {
         Divider()
 
         Text("Selection controls", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(checked = toggle, onCheckedChange = { toggle = it })
                 Spacer(Modifier.width(6.dp)); Text(if (toggle) "ON" else "OFF")
             }
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = checked, onCheckedChange = { checked = it })
                 Spacer(Modifier.width(6.dp)); Text(if (checked) "Selezionato" else "Deselezionato")
             }
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = radio=="a", onClick = { radio = "a" }); Text("A")
                 Spacer(Modifier.width(8.dp))
                 RadioButton(selected = radio=="b", onClick = { radio = "b" }); Text("B")
