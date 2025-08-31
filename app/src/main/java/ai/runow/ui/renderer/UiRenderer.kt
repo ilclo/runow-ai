@@ -473,7 +473,7 @@ private fun RenderBlock(
                             .padding(vertical = 4.dp)
                             .clickable(onClick = {  dispatch(it.optString("actionId","")) }
                     )
-                    HorizontalDivider()
+                    Divider()
                 }
             }
         }
@@ -513,7 +513,7 @@ private fun RenderBlock(
             val thick = block.optDouble("thickness", 1.0).toFloat().dp
             val padStart = block.optDouble("padStart", 0.0).toFloat().dp
             val padEnd = block.optDouble("padEnd", 0.0).toFloat().dp
-            HorizontalDivider(modifier = Modifier.padding(start = padStart, end = padEnd), thickness = thick)
+            Divider(modifier = Modifier.padding(start = padStart, end = padEnd), thickness = thick)
         }
 
         "DividerV" -> {
@@ -755,7 +755,7 @@ private fun ButtonRowInspector(
                 align = it; block.put("align", it); onLive()
             }
 
-            HorizontalDivider()
+            Divider()
 
             Text("Bottoni", style = MaterialTheme.typography.titleMedium)
             for (i in 0 until buttons.length()) {
@@ -903,7 +903,7 @@ private fun SectionHeaderInspector(
                 onLive()
             }
 
-            HorizontalDivider()
+            Divider()
             Text("Azione al tap", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(value = clickAction.value, onValueChange = {
                 clickAction.value = it; block.put("clickActionId", it); onLive()
