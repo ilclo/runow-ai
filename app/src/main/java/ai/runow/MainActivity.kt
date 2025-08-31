@@ -54,7 +54,7 @@ class MainActivity : ComponentActivity() {
                         TopAppBar(
                             title = { Text(pretty) },
                             actions = {
-                                // Toggle Designer Mode (Layout Lab)
+                                // Toggle Designer Modee (Layout Lab)
                                 IconButton(onClick = { designerMode = !designerMode }) {
                                     Icon(
                                         if (designerMode) Icons.Filled.Close else Icons.Filled.Tune,
