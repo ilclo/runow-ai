@@ -449,6 +449,7 @@ private fun BoxScope.DesignerOverlay(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Palette
         Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
             Row(
                 Modifier
@@ -458,43 +459,35 @@ private fun BoxScope.DesignerOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Palette:", style = MaterialTheme.typography.labelLarge)
-
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
-
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
-
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
-
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type","Divider"), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
-
                 FilledTonalButton(onClick = {
                     val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
                     setSelectedPath(iconPath)
                     onLayoutChange()
                 }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
-
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
-
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
-
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
                     setSelectedPath(path); onLayoutChange()
@@ -502,20 +495,20 @@ private fun BoxScope.DesignerOverlay(
             }
         }
 
+        // Selezione (riga a parte, scrollabile)
         Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
-            Row(
+            Column(
                 Modifier
                     .padding(10.dp)
                     .fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(rememberScrollState())
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Selezione:", style = MaterialTheme.typography.labelLarge)
                     OutlinedButton(enabled = canMove, onClick = {
@@ -532,16 +525,21 @@ private fun BoxScope.DesignerOverlay(
                         onClick = { remove(layout, selectedPath!!); setSelectedPath(null); onLayoutChange() },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
-
                     Button(
                         enabled = selectedBlock != null && selectedBlock.optString("type") in listOf("ButtonRow","SectionHeader"),
                         onClick = { showInspector = true }
                     ) { Text("Proprieta...") }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     OutlinedButton(onClick = onSaveDraft) { Text("Salva bozza") }
+                    Spacer(Modifier.width(8.dp))
                     Button(onClick = onPublish) { Text("Pubblica") }
+                    Spacer(Modifier.width(8.dp))
                     TextButton(onClick = onReset) { Text("Reset") }
                 }
             }
@@ -633,7 +631,7 @@ private fun ExposedDropdown(value: String, label: String, options: List<String>,
     }
 }
 
-/* ===== Utils: icon mapping, menu collection, JSON helpers ===== */
+/* ===== Utils ===== */
 
 @Composable
 private fun NamedIcon(name: String?, contentDescription: String?) {
