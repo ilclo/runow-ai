@@ -1,4 +1,5 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package ai.runow.ui.renderer
 
 import androidx.compose.foundation.BorderStroke
@@ -12,7 +13,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,10 +41,7 @@ fun UiScreen(
         return
     }
 
-    // Menù raccolti (id -> items)
     val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
-
-    // Path dell’elemento selezionato (es. /blocks/2 o /blocks/1/tabs/0/blocks/3)
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
 
     Box(Modifier.fillMaxSize()) {
@@ -80,7 +77,6 @@ fun UiScreen(
                 setSelectedPath = { selectedPath = it },
                 onLayoutChange = {
                     UiLoader.saveDraft(ctx, screenName, layout!!)
-                    // forza recomposition
                     layout = JSONObject(layout.toString())
                     tick++
                 },
@@ -453,7 +449,6 @@ private fun BoxScope.DesignerOverlay(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Palette scrollabile
         Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
             Row(
                 Modifier
@@ -484,7 +479,6 @@ private fun BoxScope.DesignerOverlay(
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
 
-                // IconButton + Menu, con selezione dell'icona inserita
                 FilledTonalButton(onClick = {
                     val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
                     setSelectedPath(iconPath)
@@ -508,7 +502,6 @@ private fun BoxScope.DesignerOverlay(
             }
         }
 
-        // Barra azioni selezione
         Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
             Row(
                 Modifier
@@ -517,14 +510,20 @@ private fun BoxScope.DesignerOverlay(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState())
+                ) {
                     Text("Selezione:", style = MaterialTheme.typography.labelLarge)
                     OutlinedButton(enabled = canMove, onClick = {
                         move(layout, selectedPath!!, -1); onLayoutChange()
                     }) { Icon(Icons.Filled.KeyboardArrowUp, null); Spacer(Modifier.width(4.dp)); Text("Su") }
                     OutlinedButton(enabled = canMove, onClick = {
                         move(layout, selectedPath!!, +1); onLayoutChange()
-                    }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giù") }
+                    }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giu") }
                     OutlinedButton(enabled = selectedPath != null, onClick = {
                         duplicate(layout, selectedPath!!); onLayoutChange()
                     }) { Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica") }
@@ -537,7 +536,7 @@ private fun BoxScope.DesignerOverlay(
                     Button(
                         enabled = selectedBlock != null && selectedBlock.optString("type") in listOf("ButtonRow","SectionHeader"),
                         onClick = { showInspector = true }
-                    ) { Text("Proprietà…") }
+                    ) { Text("Proprieta...") }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -549,7 +548,6 @@ private fun BoxScope.DesignerOverlay(
         }
     }
 
-    // Inspector
     if (showInspector && selectedBlock != null) {
         when (selectedBlock.optString("type")) {
             "ButtonRow"     -> ButtonRowInspector(selectedBlock, onClose = { showInspector = false; onLayoutChange() })
@@ -559,7 +557,6 @@ private fun BoxScope.DesignerOverlay(
 }
 
 /* ===== Inspector: ButtonRow ===== */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ButtonRowInspector(block: JSONObject, onClose: () -> Unit) {
     var open by remember { mutableStateOf(true) }
@@ -567,7 +564,7 @@ private fun ButtonRowInspector(block: JSONObject, onClose: () -> Unit) {
     if (!open) return
     ModalBottomSheet(onDismissRequest = { open = false; onClose() }) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("ButtonRow – Proprietà", style = MaterialTheme.typography.titleMedium)
+            Text("ButtonRow - Proprieta", style = MaterialTheme.typography.titleMedium)
             for (i in 0 until buttons.length()) {
                 val btn = buttons.getJSONObject(i)
                 ElevatedCard {
@@ -590,7 +587,7 @@ private fun ButtonRowInspector(block: JSONObject, onClose: () -> Unit) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { buttons.put(JSONObject("""{"label":"Nuovo","style":"text","icon":"add","actionId":""}""")) }) { Text("+ Aggiungi bottone") }
+                Button(onClick = { buttons.put(JSONObject("{\"label\":\"Nuovo\",\"style\":\"text\",\"icon\":\"add\",\"actionId\":\"\"}")) }) { Text("+ Aggiungi bottone") }
                 OutlinedButton(onClick = { open = false; onClose() }) { Text("Chiudi") }
             }
             Spacer(Modifier.height(24.dp))
@@ -599,7 +596,6 @@ private fun ButtonRowInspector(block: JSONObject, onClose: () -> Unit) {
 }
 
 /* ===== Inspector: SectionHeader ===== */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SectionHeaderInspector(block: JSONObject, onClose: () -> Unit) {
     var open by remember { mutableStateOf(true) }
@@ -608,7 +604,7 @@ private fun SectionHeaderInspector(block: JSONObject, onClose: () -> Unit) {
     val subtitle = remember { mutableStateOf(block.optString("subtitle","")) }
     ModalBottomSheet(onDismissRequest = { open = false; onClose() }) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("SectionHeader – Proprietà", style = MaterialTheme.typography.titleMedium)
+            Text("SectionHeader - Proprieta", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(value = title.value, onValueChange = { title.value = it; block.put("title", it) }, label = { Text("Titolo") })
             OutlinedTextField(value = subtitle.value, onValueChange = { subtitle.value = it; block.put("subtitle", it) }, label = { Text("Sottotitolo (opz.)") })
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -619,7 +615,6 @@ private fun SectionHeaderInspector(block: JSONObject, onClose: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ExposedDropdown(value: String, label: String, options: List<String>, onSelect: (String)->Unit) {
     var expanded by remember { mutableStateOf(false) }
@@ -659,7 +654,7 @@ private fun NamedIcon(name: String?, contentDescription: String?) {
         "menu"           -> Icon(Icons.Filled.Menu, contentDescription)
         "close"          -> Icon(Icons.Filled.Close, contentDescription)
         "more_horiz"     -> Icon(Icons.Filled.MoreHoriz, contentDescription)
-        else             -> Text("•")
+        else             -> Text(".")
     }
 }
 
@@ -727,7 +722,7 @@ private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, I
     return if (parentArr != null && index >= 0) parentArr!! to index else null
 }
 
-/** Inserisce un blocco vicino alla selezione e restituisce il path del nuovo blocco */
+/** Inserisce un blocco e restituisce il path del nuovo elemento */
 private fun insertBlockAndReturnPath(
     root: JSONObject,
     selectedPath: String?,
@@ -771,11 +766,10 @@ private fun insertBlockAndReturnPath(
     return "$parentPath/$insertIndex"
 }
 
-/** Inserisce IconButton e relativo Menu, ritorna il path dell'IconButton appena creato */
+/** Inserisce IconButton e relativo Menu, ritorna il path dell'IconButton */
 private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
     val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
     val iconPath = insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
-    // posizioniamo il Menu subito dopo l'icona
     insertBlockAndReturnPath(root, iconPath, newMenu(id), "after")
     return iconPath
 }
@@ -812,7 +806,7 @@ private fun remove(root: JSONObject, path: String) {
     tmp.forEach { arr.put(it) }
 }
 
-/* ===== Template blocchi per Palette ===== */
+/* ===== Template blocchi ===== */
 
 private fun newSectionHeader() = JSONObject(
     """{ "type":"SectionHeader", "title":"Nuova sezione" }""".trimIndent()
