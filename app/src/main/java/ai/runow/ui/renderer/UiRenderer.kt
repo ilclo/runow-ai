@@ -2,10 +2,10 @@ package ai.runow.ui.renderer
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -32,6 +32,7 @@ fun UiScreen(
     val ctx = LocalContext.current
     var layout by remember(screenName) { mutableStateOf(UiLoader.loadLayout(ctx, screenName)) }
     var tick by remember { mutableStateOf(0) }
+
     if (layout == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Layout '$screenName' non trovato", style = MaterialTheme.typography.bodyLarge)
@@ -39,7 +40,10 @@ fun UiScreen(
         return
     }
 
+    // Menù raccolti (id -> items)
     val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
+
+    // Path dell’elemento selezionato (es. /blocks/2 o /blocks/1/tabs/0/blocks/3)
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
 
     Box(Modifier.fillMaxSize()) {
@@ -75,12 +79,18 @@ fun UiScreen(
                 setSelectedPath = { selectedPath = it },
                 onLayoutChange = {
                     UiLoader.saveDraft(ctx, screenName, layout!!)
+                    // forza recomposition
                     layout = JSONObject(layout.toString())
                     tick++
                 },
                 onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
                 onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
-                onReset = { UiLoader.resetPublished(ctx, screenName); layout = UiLoader.loadLayout(ctx, screenName); selectedPath = null; tick++ }
+                onReset = {
+                    UiLoader.resetPublished(ctx, screenName)
+                    layout = UiLoader.loadLayout(ctx, screenName)
+                    selectedPath = null
+                    tick++
+                }
             )
         }
     }
@@ -105,7 +115,11 @@ private fun RenderBlock(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(Modifier.padding(12.dp)) {
-                    Text(block.optString("type",""), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        block.optString("type",""),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                     Spacer(Modifier.height(6.dp))
                     Box(Modifier.clickable { onSelect(path) }) { content() }
                 }
@@ -140,10 +154,11 @@ private fun RenderBlock(
                 IconButton(onClick = {
                     if (openMenuId.isNotBlank() || actionId.startsWith("open_menu:")) {
                         expanded = true
-                    } else {
+                    } else if (actionId.isNotBlank()) {
                         dispatcher.dispatch(actionId)
                     }
                 }) { NamedIcon(iconName, null) }
+
                 val menuId = if (openMenuId.isNotBlank()) openMenuId else actionId.removePrefix("open_menu:")
                 val items = menus[menuId]
                 if (items != null) {
@@ -177,7 +192,9 @@ private fun RenderBlock(
                     }
                 }
             }
-            val mod = Modifier.fillMaxWidth().clickable(enabled = clickAction.isNotBlank()) { dispatcher.dispatch(clickAction) }
+            val mod = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = clickAction.isNotBlank()) { dispatcher.dispatch(clickAction) }
             when (variant) {
                 "outlined" -> OutlinedCard(mod) { Column(Modifier.padding(12.dp)) { inner() } }
                 "filled"   -> Card(mod)        { Column(Modifier.padding(12.dp)) { inner() } }
@@ -190,10 +207,16 @@ private fun RenderBlock(
             var idx by remember { mutableStateOf(0) }
             val count = tabs.length().coerceAtLeast(1)
             if (idx >= count) idx = 0
-            val labels = (0 until count).map { tabs.optJSONObject(it)?.optString("label", "Tab ${it+1}") ?: "Tab ${it+1}" }
+            val labels = (0 until count).map {
+                tabs.optJSONObject(it)?.optString("label", "Tab ${it+1}") ?: "Tab ${it+1}"
+            }
             TabRow(selectedTabIndex = idx) {
                 labels.forEachIndexed { i, label ->
-                    Tab(selected = i==idx, onClick = { onSelect(path); idx = i }, text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) })
+                    Tab(
+                        selected = i == idx,
+                        onClick = { onSelect(path); idx = i },
+                        text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    )
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -238,7 +261,7 @@ private fun RenderBlock(
                     val content: @Composable ()->Unit = { Text(label) }
                     Spacer(Modifier.width(6.dp))
                     when(style){
-                        "outlined" -> OutlinedButton(onClick = { if (confirm) { /* TODO: confirm */ } ; dispatcher.dispatch(action) }) { content() }
+                        "outlined" -> OutlinedButton(onClick = { if (confirm) { /* TODO: conferma */ } ; dispatcher.dispatch(action) }) { content() }
                         "tonal"    -> FilledTonalButton(onClick = { dispatcher.dispatch(action) }) { content() }
                         "text"     -> TextButton(onClick = { dispatcher.dispatch(action) }) { content() }
                         else       -> Button(onClick = { dispatcher.dispatch(action) }) { content() }
@@ -365,9 +388,17 @@ private fun RenderBlock(
 
         "Spacer" -> { Spacer(Modifier.height((block.optDouble("height", 8.0)).toFloat().dp)) }
 
-        "Menu" -> { if (designerMode) ElevatedCard { Text("Menu: ${block.optString("id")}  (${block.optJSONArray("items")?.length() ?: 0} voci)", Modifier.padding(8.dp)) } }
+        "Menu" -> {
+            if (designerMode) {
+                ElevatedCard { Text("Menu: ${block.optString("id")}  (${block.optJSONArray("items")?.length() ?: 0} voci)", Modifier.padding(8.dp)) }
+            }
+        }
 
-        else -> { if (designerMode) Surface(tonalElevation = 1.dp) { Text("Blocco non supportato: ${block.optString("type")}", color = Color.Red) } }
+        else -> {
+            if (designerMode) {
+                Surface(tonalElevation = 1.dp) { Text("Blocco non supportato: ${block.optString("type")}", color = Color.Red) }
+            }
+        }
     }
 }
 
@@ -421,11 +452,12 @@ private fun BoxScope.DesignerOverlay(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Palette scrollabile
         Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
             Row(
                 Modifier
                     .padding(10.dp)
-                    .horizontalScroll(rememberScrollState()),  /* 👈 ora scrolla orizzontalmente */
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -451,10 +483,10 @@ private fun BoxScope.DesignerOverlay(
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
 
+                // IconButton + Menu, con selezione dell'icona inserita
                 FilledTonalButton(onClick = {
-                    insertIconMenu(layout, selectedPath)
-                    // l’inserimento crea IconButton + Menu; selezioniamo l’IconButton
-                    setSelectedPath(nextSiblingPath(selectedPath))
+                    val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
+                    setSelectedPath(iconPath)
                     onLayoutChange()
                 }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
 
@@ -475,9 +507,12 @@ private fun BoxScope.DesignerOverlay(
             }
         }
 
+        // Barra azioni selezione
         Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
             Row(
-                Modifier.padding(10.dp).fillMaxWidth(),
+                Modifier
+                    .padding(10.dp)
+                    .fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -513,6 +548,7 @@ private fun BoxScope.DesignerOverlay(
         }
     }
 
+    // Inspector
     if (showInspector && selectedBlock != null) {
         when (selectedBlock.optString("type")) {
             "ButtonRow"     -> ButtonRowInspector(selectedBlock, onClose = { showInspector = false; onLayoutChange() })
@@ -521,7 +557,7 @@ private fun BoxScope.DesignerOverlay(
     }
 }
 
-/* ===== Inspector: ButtonRow (già esistente) ===== */
+/* ===== Inspector: ButtonRow ===== */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ButtonRowInspector(block: JSONObject, onClose: () -> Unit) {
@@ -587,14 +623,21 @@ private fun SectionHeaderInspector(block: JSONObject, onClose: () -> Unit) {
 private fun ExposedDropdown(value: String, label: String, options: List<String>, onSelect: (String)->Unit) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(value = value, onValueChange = {}, readOnly = true, label = { Text(label) }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }, modifier = Modifier.menuAnchor())
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { DropdownMenuItem(text = { Text(it) }, onClick = { onSelect(it); expanded = false }) }
         }
     }
 }
 
-/* ===== Utils: icon mapping, menu collection, JSON manip ===== */
+/* ===== Utils: icon mapping, menu collection, JSON helpers ===== */
 
 @Composable
 private fun NamedIcon(name: String?, contentDescription: String?) {
@@ -638,60 +681,102 @@ private fun collectMenus(root: JSONObject): Map<String, JSONArray> {
     return map
 }
 
-// JSON path helpers
 private fun jsonAtPath(root: JSONObject, path: String): Any? {
     if (!path.startsWith("/")) return null
     val segs = path.trim('/').split('/')
-    var node: Any = root; var i = 0
+    var node: Any = root
+    var i = 0
     while (i < segs.size) {
         when (node) {
             is JSONObject -> { node = (node as JSONObject).opt(segs[i]) ?: return null; i++ }
-            is JSONArray  -> { val idx = segs[i].toIntOrNull() ?: return null; node = (node as JSONArray).opt(idx) ?: return null; i++ }
+            is JSONArray  -> {
+                val idx = segs[i].toIntOrNull() ?: return null
+                node = (node as JSONArray).opt(idx) ?: return null
+                i++
+            }
             else -> return null
         }
     }
     return node
 }
+
 private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, Int>? {
     if (!path.startsWith("/")) return null
     val segs = path.trim('/').split('/')
-    var node: Any = root; var parentArr: JSONArray? = null; var index = -1; var i = 0
+    var node: Any = root
+    var parentArr: JSONArray? = null
+    var index = -1
+    var i = 0
     while (i < segs.size) {
         val s = segs[i]
         when (node) {
-            is JSONObject -> { node = (node as JSONObject).opt(s) ?: return null; i++ }
-            is JSONArray  -> { val idx = s.toIntOrNull() ?: return null; parentArr = node as JSONArray; index = idx; node = parentArr.opt(idx) ?: return null; i++ }
+            is JSONObject -> {
+                node = (node as JSONObject).opt(s) ?: return null
+                i++
+            }
+            is JSONArray -> {
+                val idx = s.toIntOrNull() ?: return null
+                parentArr = node as JSONArray
+                index = idx
+                node = parentArr.opt(idx) ?: return null
+                i++
+            }
         }
     }
     return if (parentArr != null && index >= 0) parentArr!! to index else null
 }
 
-/* inserisci + restituisci il path del nuovo blocco (auto-select) */
-private fun insertBlockAndReturnPath(root: JSONObject, selectedPath: String?, block: JSONObject, position: String): String {
-    val (arr, idx, parentPath) = if (selectedPath != null) {
-        val p = getParentAndIndex(root, selectedPath) ?: run {
-            val a = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
-            Triple(a, a.length()-1, "/blocks")
+/** Inserisce un blocco vicino alla selezione e restituisce il path del nuovo blocco */
+private fun insertBlockAndReturnPath(
+    root: JSONObject,
+    selectedPath: String?,
+    block: JSONObject,
+    position: String
+): String {
+    val parentArr: JSONArray
+    val idx: Int
+    val parentPath: String
+
+    if (selectedPath != null) {
+        val pair = getParentAndIndex(root, selectedPath)
+        if (pair != null) {
+            parentArr = pair.first
+            idx = pair.second
+            parentPath = selectedPath.substringBeforeLast("/")
+        } else {
+            parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
+            idx = parentArr.length() - 1
+            parentPath = "/blocks"
         }
-        val pp = selectedPath.substringBeforeLast("/")
-        Triple(p.first, p.second, pp)
     } else {
-        val a = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
-        Triple(a, a.length()-1, "/blocks")
+        parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
+        idx = parentArr.length() - 1
+        parentPath = "/blocks"
     }
-    val insertIndex = when (position) { "before" -> idx; else -> idx + 1 }.coerceIn(0, arr.length())
+
+    val insertIndex = when (position) { "before" -> idx; else -> idx + 1 }
+        .coerceIn(0, parentArr.length())
+
     val tmp = mutableListOf<Any?>()
-    for (i in 0 until arr.length()) { if (i == insertIndex) tmp.add(block); tmp.add(arr.get(i)) }
-    if (insertIndex == arr.length()) tmp.add(block)
-    while (arr.length() > 0) arr.remove(arr.length()-1)
-    tmp.forEach { arr.put(it) }
+    for (i in 0 until parentArr.length()) {
+        if (i == insertIndex) tmp.add(block)
+        tmp.add(parentArr.get(i))
+    }
+    if (insertIndex == parentArr.length()) tmp.add(block)
+
+    while (parentArr.length() > 0) parentArr.remove(parentArr.length() - 1)
+    tmp.forEach { parentArr.put(it) }
+
     return "$parentPath/$insertIndex"
 }
-private fun nextSiblingPath(selectedPath: String?): String? {
-    if (selectedPath == null) return "/blocks/0"
-    val pp = selectedPath.substringBeforeLast("/")
-    val idx = selectedPath.substringAfterLast("/").toIntOrNull() ?: return null
-    return "$pp/${idx+1}"
+
+/** Inserisce IconButton e relativo Menu, ritorna il path dell'IconButton appena creato */
+private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
+    val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
+    val iconPath = insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
+    // posizioniamo il Menu subito dopo l'icona
+    insertBlockAndReturnPath(root, iconPath, newMenu(id), "after")
+    return iconPath
 }
 
 private fun move(root: JSONObject, path: String, delta: Int) {
@@ -706,6 +791,7 @@ private fun move(root: JSONObject, path: String, delta: Int) {
     while (arr.length() > 0) arr.remove(arr.length()-1)
     tmp.forEach { arr.put(it) }
 }
+
 private fun duplicate(root: JSONObject, path: String) {
     val p = getParentAndIndex(root, path) ?: return
     val (arr, idx) = p
@@ -715,6 +801,7 @@ private fun duplicate(root: JSONObject, path: String) {
     while (arr.length() > 0) arr.remove(arr.length()-1)
     tmp.forEach { arr.put(it) }
 }
+
 private fun remove(root: JSONObject, path: String) {
     val p = getParentAndIndex(root, path) ?: return
     val (arr, idx) = p
@@ -724,34 +811,49 @@ private fun remove(root: JSONObject, path: String) {
     tmp.forEach { arr.put(it) }
 }
 
-/* Template blocchi */
-private fun newSectionHeader() = JSONObject("""{ "type":"SectionHeader", "title":"Nuova sezione" }""".trimIndent())
-private fun newButtonRow() = JSONObject("""{
+/* ===== Template blocchi per Palette ===== */
+
+private fun newSectionHeader() = JSONObject(
+    """{ "type":"SectionHeader", "title":"Nuova sezione" }""".trimIndent()
+)
+
+private fun newButtonRow() = JSONObject(
+    """{
   "type":"ButtonRow","align":"center",
   "buttons":[
     {"label":"Start","style":"primary","icon":"play_arrow","size":"md","actionId":"start_run"},
     {"label":"Pausa","style":"tonal","icon":"pause","size":"md","actionId":"pause_run"},
     {"label":"Stop","style":"outlined","icon":"stop","size":"md","actionId":"stop_run","confirm":true}
   ]
-}""".trimIndent())
+}""".trimIndent()
+)
+
 private fun newSpacer() = JSONObject("""{ "type":"Spacer", "height": 8 }""".trimIndent())
+
 private fun newDividerV() = JSONObject("""{ "type":"DividerV", "thickness": 1, "height": 24 }""".trimIndent())
-private fun newCard() = JSONObject("""{
+
+private fun newCard() = JSONObject(
+    """{
   "type":"Card","variant":"elevated","clickActionId":"nav:run",
   "blocks":[ { "type":"SectionHeader", "title": "Card esempio" }, { "type":"Divider" } ]
-}""".trimIndent())
-private fun newFab() = JSONObject("""{ "type":"Fab", "icon":"play_arrow", "label":"Start", "variant":"extended", "actionId":"start_run" }""".trimIndent())
-private fun newIconButton(menuId: String = "more_menu") = JSONObject("""{ "type":"IconButton", "icon":"more_vert", "openMenuId":"$menuId" }""".trimIndent())
-private fun newMenu(menuId: String = "more_menu") = JSONObject("""{
+}""".trimIndent()
+)
+
+private fun newFab() = JSONObject(
+    """{ "type":"Fab", "icon":"play_arrow", "label":"Start", "variant":"extended", "actionId":"start_run" }""".trimIndent()
+)
+
+private fun newIconButton(menuId: String = "more_menu") = JSONObject(
+    """{ "type":"IconButton", "icon":"more_vert", "openMenuId":"$menuId" }""".trimIndent()
+)
+
+private fun newMenu(menuId: String = "more_menu") = JSONObject(
+    """{
   "type":"Menu","id":"$menuId",
   "items":[
     {"icon":"tune","label":"Layout Lab","actionId":"open_layout_lab"},
     {"icon":"palette","label":"Theme Lab","actionId":"open_theme_lab"},
     {"icon":"settings","label":"Impostazioni","actionId":"nav:settings"}
   ]
-}""".trimIndent())
-private fun insertIconMenu(root: JSONObject, selectedPath: String?) {
-    val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
-    insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
-    insertBlockAndReturnPath(root, selectedPath, newMenu(id), "after")
-}
+}""".trimIndent()
+)
