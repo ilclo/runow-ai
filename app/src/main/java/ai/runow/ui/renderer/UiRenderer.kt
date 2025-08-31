@@ -29,6 +29,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.background
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.json.JSONArray
@@ -201,7 +206,7 @@ private fun RenderBlock(
                     } else if (actionId.isNotBlank()) {
                         dispatch(actionId)
                     }
-                }) { NamedIcon(iconName, null) }
+                }) { NamedIconEx(iconName, null) }
 
                 val menuId = if (openMenuId.isNotBlank()) openMenuId else actionId.removePrefix("open_menu:")
                 val items = menus[menuId]
@@ -214,7 +219,7 @@ private fun RenderBlock(
                                 onClick = { expanded = false; dispatch(it.optString("actionId","")) },
                                 leadingIcon = {
                                     val ic = it.optString("icon","")
-                                    if (ic.isNotBlank()) NamedIcon(ic, null)
+                                    if (ic.isNotBlank()) NamedIconEx(ic, null)
                                 }
                             )
                         }
@@ -294,7 +299,7 @@ private fun RenderBlock(
             ) {
                 Text(
                     text = block.optString("title", ""),
-                    style = style,
+                    style = applyTextStyleOverrides(block, style),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = align,
                     color = textColor ?: LocalContentColor.current
@@ -303,7 +308,7 @@ private fun RenderBlock(
                 if (sub.isNotBlank()) {
                     Text(
                         sub,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium),
                         textAlign = align,
                         modifier = Modifier.fillMaxWidth(),
                         color = textColor ?: LocalContentColor.current
@@ -329,7 +334,7 @@ private fun RenderBlock(
                 else -> Arrangement.Center
             }
             val buttons = block.optJSONArray("buttons") ?: JSONArray()
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = align) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = align) {
                 for (i in 0 until buttons.length()) {
                     val btn = buttons.optJSONObject(i) ?: continue
                     val label = btn.optString("label", "Button")
@@ -500,13 +505,13 @@ private fun RenderBlock(
                 when (variant) {
                     "extended" -> ExtendedFloatingActionButton(
                         onClick = { dispatch(action) },
-                        icon = { NamedIcon(icon, null) },
+                        icon = { NamedIconEx(icon, null) },
                         text = { Text(label.ifBlank { "Azione" }) }
                     )
                     else -> when (size) {
-                        "small" -> SmallFloatingActionButton(onClick = { dispatch(action) }) { NamedIcon(icon, null) }
-                        "large" -> LargeFloatingActionButton(onClick = { dispatch(action) }) { NamedIcon(icon, null) }
-                        else -> FloatingActionButton(onClick = { dispatch(action) }) { NamedIcon(icon, null) }
+                        "small" -> SmallFloatingActionButton(onClick = { dispatch(action) }) { NamedIconEx(icon, null) }
+                        "large" -> LargeFloatingActionButton(onClick = { dispatch(action) }) { NamedIconEx(icon, null) }
+                        else -> FloatingActionButton(onClick = { dispatch(action) }) { NamedIconEx(icon, null) }
                     }
                 }
             }
@@ -741,7 +746,7 @@ private fun ButtonRowInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val buttons = block.optJSONArray("buttons") ?: JSONArray().also { block.put("buttons", it) }
@@ -763,7 +768,7 @@ private fun ButtonRowInspector(
             Text("Bottoni", style = MaterialTheme.typography.titleMedium)
             for (i in 0 until buttons.length()) {
                 val btn = buttons.getJSONObject(i)
-                ElevatedCard {
+                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f))) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -774,6 +779,7 @@ private fun ButtonRowInspector(
                             Row {
                                 IconButton(onClick = { moveInArray(buttons, i, -1); onLive() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
                                 IconButton(onClick = { moveInArray(buttons, i, +1); onLive() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                                IconButton(onClick = { removeAt(buttons, i); onLive() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
                             }
                         }
                         val label = remember { mutableStateOf(btn.optString("label","")) }
@@ -857,7 +863,7 @@ private fun SectionHeaderInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val title = remember { mutableStateOf(block.optString("title","")) }
@@ -906,6 +912,50 @@ private fun SectionHeaderInspector(
                 onLive()
             }
 
+            // Tipografia granulare
+            val textSize = remember { mutableStateOf(
+                block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
+            ) }
+            var fontFamily by remember { mutableStateOf(block.optString("fontFamily","")) }
+            var fontWeight by remember { mutableStateOf(block.optString("fontWeight","")) }
+
+            StepperField("textSize (sp)", textSize, 1.0) { v ->
+                if (v <= 0.0) { block.remove("textSizeSp") } else { block.put("textSizeSp", v) }
+                onLive()
+            }
+
+            ExposedDropdown(
+                value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+                label = "fontFamily",
+                options = listOf("(default)","serif","monospace","cursive")
+            ) { sel ->
+                val v = if (sel == "(default)") "" else sel
+                fontFamily = v
+                if (v.isBlank()) block.remove("fontFamily") else block.put("fontFamily", v)
+                onLive()
+            }
+
+            ExposedDropdown(
+                value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+                label = "fontWeight",
+                options = listOf("(default)","w300","w400","w500","w600","w700")
+            ) { sel ->
+                val v = if (sel == "(default)") "" else sel
+                fontWeight = v
+                if (v.isBlank()) block.remove("fontWeight") else block.put("fontWeight", v)
+                onLive()
+            }
+
+            // Palette colori nominali
+            NamedColorPicker(
+                currentHexOrEmpty = textColor,
+                label = "textColor (palette nomi)",
+                onPickHex = { hex ->
+                    textColor = hex
+                    if (hex.isBlank()) block.remove("textColor") else block.put("textColor", hex)
+                    onLive()
+                }
+            )
             Divider()
             Text("Azione al tap", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(value = clickAction.value, onValueChange = {
@@ -939,7 +989,7 @@ private fun SpacerInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val height = remember { mutableStateOf(block.optDouble("height", 8.0).toString()) }
@@ -971,7 +1021,7 @@ private fun DividerInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
@@ -1007,7 +1057,7 @@ private fun DividerVInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
@@ -1041,7 +1091,7 @@ private fun CardInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         var variant by remember { mutableStateOf(block.optString("variant","elevated")) }
@@ -1079,7 +1129,7 @@ private fun FabInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","play_arrow")) }
@@ -1133,7 +1183,7 @@ private fun IconButtonInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","more_vert")) }
@@ -1198,7 +1248,7 @@ private fun sizeModifier(size: String): Modifier = when (size) {
 @Composable
 private fun IconText(label: String, icon: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        NamedIcon(icon, null)
+        NamedIconEx(icon, null)
         Text(label)
     }
 }
@@ -1234,7 +1284,10 @@ private fun mapButtonColors(style: String, tint: String): Triple<Color, Color, D
 
 private val ICONS = listOf(
     "settings","more_vert","tune","play_arrow","pause","stop","add","flag",
-    "queue_music","widgets","palette","directions_run","home","menu","close","more_horiz"
+    "queue_music","widgets","palette","home","menu","close","more_horiz",
+    "directions_run","directions_walk","directions_bike","fitness_center",
+    "timer","timer_off","watch_later","map","my_location","place","speed",
+    "bolt","local_fire_department","sports_score"
 )
 
 @Composable
@@ -1251,14 +1304,14 @@ private fun IconPickerField(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            leadingIcon = { if (value.value.isNotBlank()) NamedIcon(value.value, null) },
+            leadingIcon = { if (value.value.isNotBlank()) NamedIconEx(value.value, null) },
             modifier = Modifier.menuAnchor()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             ICONS.forEach { name ->
                 DropdownMenuItem(
                     text = { Text(name) },
-                    leadingIcon = { NamedIcon(name, null) },
+                    leadingIcon = { NamedIconEx(name, null) },
                     onClick = { onSelected(name); expanded = false }
                 )
             }
@@ -1337,7 +1390,7 @@ private fun StepperField(
 /* ---- Icon helper ---- */
 
 @Composable
-private fun NamedIcon(name: String?, contentDescription: String?) {
+private fun NamedIconEx(name: String?, contentDescription: String?) {
     val image = when (name) {
         "settings"       -> Icons.Filled.Settings
         "more_vert"      -> Icons.Filled.MoreVert
@@ -1627,4 +1680,133 @@ private fun remove(root: JSONObject, path: String) {
     for (i in 0 until arr.length()) if (i != idx) tmp.add(arr.get(i))
     while (arr.length() > 0) arr.remove(arr.length()-1)
     tmp.forEach { arr.put(it) }
+}
+
+private fun removeAt(arr: JSONArray, index: Int) {
+    if (index < 0 || index >= arr.length()) return
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) if (i != index) tmp.add(arr.get(i))
+    while (arr.length() > 0) arr.remove(arr.length() - 1)
+    tmp.forEach { arr.put(it) }
+}
+
+@Composable
+private fun NamedIconEx(name: String?, contentDescription: String?) {
+    val image = when (name) {
+        // base
+        "settings" -> Icons.Filled.Settings
+        "more_vert" -> Icons.Filled.MoreVert
+        "tune" -> Icons.Filled.Tune
+        "play_arrow" -> Icons.Filled.PlayArrow
+        "pause" -> Icons.Filled.Pause
+        "stop" -> Icons.Filled.Stop
+        "add" -> Icons.Filled.Add
+        "flag" -> Icons.Filled.Flag
+        "queue_music" -> Icons.Filled.QueueMusic
+        "widgets" -> Icons.Filled.Widgets
+        "palette" -> Icons.Filled.Palette
+        "home" -> Icons.Filled.Home
+        "menu" -> Icons.Filled.Menu
+        "close" -> Icons.Filled.Close
+        "more_horiz" -> Icons.Filled.MoreHoriz
+        // running & fitness
+        "directions_run" -> Icons.Filled.DirectionsRun
+        "directions_walk" -> Icons.Filled.DirectionsWalk
+        "directions_bike" -> Icons.Filled.DirectionsBike
+        "fitness_center" -> Icons.Filled.FitnessCenter
+        "timer" -> Icons.Filled.Timer
+        "timer_off" -> Icons.Filled.TimerOff
+        "watch_later" -> Icons.Filled.WatchLater
+        "map" -> Icons.Filled.Map
+        "my_location" -> Icons.Filled.MyLocation
+        "place" -> Icons.Filled.Place
+        "speed" -> Icons.Filled.Speed
+        "bolt" -> Icons.Filled.Bolt
+        "local_fire_department" -> Icons.Filled.LocalFireDepartment
+        "sports_score" -> Icons.Filled.SportsScore
+        else -> null
+    }
+    if (image != null) {
+        Icon(image, contentDescription)
+    } else {
+        val ctx = LocalContext.current
+        val resName = if (name != null && name.startsWith("res:")) name.removePrefix("res:") else name ?: ""
+        val resId = if (resName.isNotBlank()) ctx.resources.getIdentifier(resName, "drawable", ctx.packageName) else 0
+        if (resId != 0) {
+            Icon(painterResource(id = resId), contentDescription)
+        } else {
+            Text("·")
+        }
+    }
+}
+
+@Composable
+private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
+    var st = base
+    val size = node.optDouble("textSizeSp", Double.NaN)
+    if (!size.isNaN()) st = st.copy(fontSize = size.sp)
+
+    val weightKey = node.optString("fontWeight","")
+    val weight = when (weightKey) {
+        "w300" -> FontWeight.Light
+        "w400" -> FontWeight.Normal
+        "w500" -> FontWeight.Medium
+        "w600" -> FontWeight.SemiBold
+        "w700" -> FontWeight.Bold
+        else -> null
+    }
+    if (weight != null) st = st.copy(fontWeight = weight)
+
+    val familyKey = node.optString("fontFamily","")
+    val family = when (familyKey) {
+        "serif" -> FontFamily.Serif
+        "monospace" -> FontFamily.Monospace
+        "cursive" -> FontFamily.Cursive
+        else -> null
+    }
+    if (family != null) st = st.copy(fontFamily = family)
+
+    return st
+}
+
+private val NAMED_COLORS = linkedMapOf(
+    "Red" to 0xFFE53935, "Pink" to 0xFFD81B60, "Purple" to 0xFF8E24AA, "Deep Purple" to 0xFF5E35B1,
+    "Indigo" to 0xFF3949AB, "Blue" to 0xFF1E88E5, "Light Blue" to 0xFF039BE5, "Cyan" to 0xFF00ACC1,
+    "Teal" to 0xFF00897B, "Green" to 0xFF43A047, "Light Green" to 0xFF7CB342, "Lime" to 0xFFC0CA33,
+    "Yellow" to 0xFFFDD835, "Amber" to 0xFFFFB300, "Orange" to 0xFFFB8C00, "Deep Orange" to 0xFFF4511E,
+    "Brown" to 0xFF6D4C41, "Blue Grey" to 0xFF546E7A
+)
+
+@Composable
+private fun NamedColorPicker(
+    currentHexOrEmpty: String,
+    label: String,
+    onPickHex: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val display = if (currentHexOrEmpty.isBlank()) "(default)" else currentHexOrEmpty
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = display,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            NAMED_COLORS.forEach { (name, argb) ->
+                val c = Color(argb)
+                DropdownMenuItem(
+                    leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
+                    text = { Text(name) },
+                    onClick = {
+                        val hex = "#%06X".format(0xFFFFFF and argb.toInt())
+                        onPickHex(hex); expanded = false
+                    }
+                )
+            }
+            DropdownMenuItem(text = { Text("(default)") }, onClick = { onPickHex(""); expanded = false })
+        }
+    }
 }
