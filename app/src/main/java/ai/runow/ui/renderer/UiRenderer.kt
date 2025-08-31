@@ -909,6 +909,7 @@ private fun mapTextStyle(key: String): TextStyle = when (key) {
     else -> MaterialTheme.typography.titleMedium
 }
 
+@Composable
 private fun mapTextAlign(key: String): TextAlign = when (key) {
     "center" -> TextAlign.Center
     "end" -> TextAlign.End
