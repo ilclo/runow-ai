@@ -1316,7 +1316,7 @@ private fun IconPickerField(
             value = value.value,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             leadingIcon = { if (value.value.isNotBlank()) NamedIconEx(value.value, null) },
             modifier = Modifier.menuAnchor()
@@ -1351,7 +1351,7 @@ private fun ColorRolePicker(
             value = display,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor()
         )
@@ -1661,7 +1661,7 @@ private fun ExposedDropdown(
             value = value,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor()
         )
@@ -1804,7 +1804,7 @@ private fun NamedColorPicker(
             value = display,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label, style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium), color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current) },
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.menuAnchor()
         )
