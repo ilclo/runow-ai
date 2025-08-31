@@ -3,11 +3,11 @@
   "title": "runow ui schema v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["ui_schema_version", "screen", "blocks"],
+  "required": ["ui_schema_version","screen","blocks"],
   "properties": {
     "ui_schema_version": { "const": "1.0.0" },
     "screen": { "type": "string", "minLength": 1 },
-    "density": { "type": "string", "enum": ["compact", "default", "airy"] },
+    "density": { "type": "string", "enum": ["compact","default","airy"] },
     "blocks": { "type": "array", "items": { "$ref": "#/$defs/Block" } }
   },
   "$defs": {
@@ -15,7 +15,7 @@
     "ActionId": { "type": "string" },
     "Bind": { "type": "string", "pattern": "^[A-Za-z0-9_.]+$" },
     "Span": { "type": "integer", "minimum": 1, "maximum": 12 },
-    "Size": { "type": "string", "enum": ["sm", "md", "lg"] },
+    "Size": { "type": "string", "enum": ["sm","md","lg"] },
 
     "Block": {
       "type": "object",
@@ -32,6 +32,7 @@
         { "$ref": "#/$defs/Carousel" },
         { "$ref": "#/$defs/Spacer" },
         { "$ref": "#/$defs/Divider" },
+
         { "$ref": "#/$defs/IconButton" },
         { "$ref": "#/$defs/Card" },
         { "$ref": "#/$defs/DividerV" },
@@ -43,7 +44,7 @@
     "AppBar": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "title"],
+      "required": ["type","title"],
       "properties": {
         "type": { "const": "AppBar" },
         "title": { "type": "string" },
@@ -53,7 +54,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["icon", "actionId"],
+            "required": ["icon","actionId"],
             "properties": {
               "icon": { "$ref": "#/$defs/Icon" },
               "actionId": { "$ref": "#/$defs/ActionId" }
@@ -66,7 +67,7 @@
     "Tabs": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "tabs"],
+      "required": ["type","tabs"],
       "properties": {
         "type": { "const": "Tabs" },
         "tabs": {
@@ -74,7 +75,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["key", "label", "blocks"],
+            "required": ["key","label","blocks"],
             "properties": {
               "key": { "type": "string" },
               "label": { "type": "string" },
@@ -88,7 +89,7 @@
     "SectionHeader": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "title"],
+      "required": ["type","title"],
       "properties": {
         "type": { "const": "SectionHeader" },
         "title": { "type": "string" },
@@ -99,7 +100,7 @@
     "MetricsGrid": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "columns", "tiles"],
+      "required": ["type","columns","tiles"],
       "properties": {
         "type": { "const": "MetricsGrid" },
         "columns": { "type": "integer", "minimum": 1, "maximum": 3 },
@@ -108,7 +109,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["metric", "label"],
+            "required": ["metric","label"],
             "properties": {
               "metric": { "type": "string" },
               "label": { "type": "string" },
@@ -122,22 +123,22 @@
     "ButtonRow": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "buttons"],
+      "required": ["type","buttons"],
       "properties": {
         "type": { "const": "ButtonRow" },
-        "align": { "type": "string", "enum": ["start", "center", "end", "space_between"] },
+        "align": { "type": "string", "enum": ["start","center","end","space_between"] },
         "buttons": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["label", "style", "actionId"],
+            "required": ["label","style","actionId"],
             "properties": {
               "label": { "type": "string" },
-              "style": { "type": "string", "enum": ["primary", "tonal", "outlined", "text"] },
+              "style": { "type": "string", "enum": ["primary","tonal","outlined","text"] },
               "icon": { "$ref": "#/$defs/Icon" },
               "size": { "$ref": "#/$defs/Size" },
-              "tint": { "type": "string", "enum": ["default", "success", "warning", "error"] },
+              "tint": { "type": "string", "enum": ["default","success","warning","error"] },
               "confirm": { "type": "boolean" },
               "actionId": { "$ref": "#/$defs/ActionId" }
             }
@@ -149,7 +150,7 @@
     "ChipRow": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "chips"],
+      "required": ["type","chips"],
       "properties": {
         "type": { "const": "ChipRow" },
         "chips": {
@@ -157,12 +158,12 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["label", "bind"],
+            "required": ["label","bind"],
             "properties": {
               "label": { "type": "string" },
               "icon": { "$ref": "#/$defs/Icon" },
               "bind": { "$ref": "#/$defs/Bind" },
-              "value": { "type": ["string", "number", "boolean"] }
+              "value": { "type": ["string","number","boolean"] }
             }
           }
         }
@@ -172,7 +173,7 @@
     "Toggle": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "label", "bind"],
+      "required": ["type","label","bind"],
       "properties": {
         "type": { "const": "Toggle" },
         "label": { "type": "string" },
@@ -183,7 +184,7 @@
     "Slider": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "label", "min", "max", "bind"],
+      "required": ["type","label","min","max","bind"],
       "properties": {
         "type": { "const": "Slider" },
         "label": { "type": "string" },
@@ -198,7 +199,7 @@
     "List": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "items"],
+      "required": ["type","items"],
       "properties": {
         "type": { "const": "List" },
         "items": {
@@ -206,7 +207,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["icon", "title", "actionId"],
+            "required": ["icon","title","actionId"],
             "properties": {
               "icon": { "$ref": "#/$defs/Icon" },
               "title": { "type": "string" },
@@ -221,7 +222,7 @@
     "Carousel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "images"],
+      "required": ["type","images"],
       "properties": {
         "type": { "const": "Carousel" },
         "aspectRatio": { "type": "string", "pattern": "^[0-9]+:[0-9]+$" },
@@ -243,7 +244,7 @@
     "Spacer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "height"],
+      "required": ["type","height"],
       "properties": {
         "type": { "const": "Spacer" },
         "height": { "type": "number", "minimum": 0 }
@@ -254,15 +255,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["type"],
-      "properties": {
-        "type": { "const": "Divider" }
-      }
+      "properties": { "type": { "const": "Divider" } }
     },
 
+    /* ===== new: IconButton ===== */
     "IconButton": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "icon"],
+      "required": ["type","icon"],
       "properties": {
         "type": { "const": "IconButton" },
         "icon": { "$ref": "#/$defs/Icon" },
@@ -272,19 +272,21 @@
       }
     },
 
+    /* ===== new: Card ===== */
     "Card": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "blocks"],
+      "required": ["type","blocks"],
       "properties": {
         "type": { "const": "Card" },
-        "variant": { "type": "string", "enum": ["elevated", "outlined", "filled"], "default": "elevated" },
+        "variant": { "type": "string", "enum": ["elevated","outlined","filled"], "default": "elevated" },
         "clickActionId": { "$ref": "#/$defs/ActionId" },
         "span": { "$ref": "#/$defs/Span" },
         "blocks": { "type": "array", "items": { "$ref": "#/$defs/Block" } }
       }
     },
 
+    /* ===== new: DividerV ===== */
     "DividerV": {
       "type": "object",
       "additionalProperties": false,
@@ -296,24 +298,26 @@
       }
     },
 
+    /* ===== new: Fab ===== */
     "Fab": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "icon", "actionId"],
+      "required": ["type","icon","actionId"],
       "properties": {
         "type": { "const": "Fab" },
         "icon": { "$ref": "#/$defs/Icon" },
         "label": { "type": "string" },
-        "size": { "type": "string", "enum": ["small", "regular", "large"], "default": "regular" },
-        "variant": { "type": "string", "enum": ["regular", "extended"], "default": "regular" },
+        "size": { "type": "string", "enum": ["small","regular","large"], "default": "regular" },
+        "variant": { "type": "string", "enum": ["regular","extended"], "default": "regular" },
         "actionId": { "$ref": "#/$defs/ActionId" }
       }
     },
 
+    /* ===== new: Menu ===== */
     "Menu": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "id", "items"],
+      "required": ["type","id","items"],
       "properties": {
         "type": { "const": "Menu" },
         "id": { "type": "string" },
@@ -322,7 +326,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["label", "actionId"],
+            "required": ["label","actionId"],
             "properties": {
               "icon": { "$ref": "#/$defs/Icon" },
               "label": { "type": "string" },
