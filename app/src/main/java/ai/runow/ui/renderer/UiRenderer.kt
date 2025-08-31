@@ -464,21 +464,24 @@ private fun RenderBlock(
             val items = block.optJSONArray("items") ?: JSONArray()
             Column {
                 for (i in 0 until items.length()) {
-                    val it = items.optJSONObject(i) ?: continue
+                    val item = items.optJSONObject(i) ?: continue
                     ListItem(
-                        headlineContent = { Text(it.optString("title","")) },
-                        supportingContent = { Text(it.optString("subtitle","")) },
+                        headlineContent = { Text(item.optString("title","")) },
+                        supportingContent = {
+                            val sub = item.optString("subtitle","")
+                            if (sub.isNotBlank()) Text(sub)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
-                            .clickable(onClick = {  dispatch(it.optString("actionId","")) }
+                            .clickable(onClick = { dispatch(item.optString(\"actionId\", \"\\")) })
                     )
                     Divider()
                 }
             }
         }
 
-        "Carousel" -> Wrapper {
+        "Carousel" -> Wrapper { 
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Carousel (placeholder)", style = MaterialTheme.typography.titleSmall)
