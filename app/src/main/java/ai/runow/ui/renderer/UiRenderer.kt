@@ -342,9 +342,7 @@ private fun RenderBlock(
                     val action = btn.optString("actionId","")
                     val confirm = btn.optBoolean("confirm", false)
                     val sizeKey = btn.optString("size","md")
-                    
-                    val sizeDp = btn.optDouble("sizeDp", if (sizeKey=="sm") 36.0 else if (sizeKey=="lg") 52.0 else 40.0).toFloat()
-val tintKey = btn.optString("tint","default")
+                    val tintKey = btn.optString("tint","default")
                     val shapeKey = btn.optString("shape","rounded")
                     val corner = btn.optDouble("corner", 20.0).toFloat().dp
                     val pressEffect = btn.optString("pressEffect","none") == "scale"
@@ -370,7 +368,7 @@ val tintKey = btn.optString("tint","default")
                     }
                                                             val baseMod = Modifier
                         .graphicsLayer(scaleX = scale, scaleY = scale)
-                        .then(Modifier.height(sizeDp.dp))
+                        .then(sizeModifier(sizeKey))
 
                     Spacer(Modifier.width(6.dp))
                     val contentSlot: @Composable ()->Unit = {
@@ -757,7 +755,7 @@ private fun ButtonRowInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val buttons = block.optJSONArray("buttons") ?: JSONArray().also { block.put("buttons", it) }
@@ -779,7 +777,7 @@ private fun ButtonRowInspector(
             Text("Bottoni", style = MaterialTheme.typography.titleMedium)
             for (i in 0 until buttons.length()) {
                 val btn = buttons.getJSONObject(i)
-                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f))) {
+                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f))) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -820,7 +818,7 @@ private fun ButtonRowInspector(
                         ExposedDropdown(value = shape, label = "shape", options = listOf("rounded","pill","cut")) {
                             shape = it; btn.put("shape", it); onLive()
                         }
-                        	.0) { v ->
+                        StepperField(label = "corner (dp)", state = cornerStr, step = 2.0) { v ->
                             btn.put("corner", v); onLive()
                         }
 
@@ -838,7 +836,7 @@ private fun ButtonRowInspector(
                             }
                         )
 
-                        ExposedDropdown(value = press, label = "pressEffect", options = listOf("none","scale","glow","tilt","ripple","bounce")) {
+                        ExposedDropdown(value = press, label = "pressEffect", options = listOf("none","scale")) {
                             press = it; btn.put("pressEffect", it); onLive()
                         }
                         OutlinedTextField(value = action.value, onValueChange = {
@@ -879,7 +877,7 @@ private fun SectionHeaderInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val title = remember { mutableStateOf(block.optString("title","")) }
@@ -1005,7 +1003,7 @@ private fun SpacerInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val height = remember { mutableStateOf(block.optDouble("height", 8.0).toString()) }
@@ -1037,7 +1035,7 @@ private fun DividerInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
@@ -1073,7 +1071,7 @@ private fun DividerVInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
@@ -1107,7 +1105,7 @@ private fun CardInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         var variant by remember { mutableStateOf(block.optString("variant","elevated")) }
@@ -1145,7 +1143,7 @@ private fun FabInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","play_arrow")) }
@@ -1199,7 +1197,7 @@ private fun IconButtonInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","more_vert")) }
@@ -1849,7 +1847,7 @@ private fun ListInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val textSize = remember { mutableStateOf(
@@ -1925,7 +1923,7 @@ private fun ChipRowInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val textSize = remember { mutableStateOf(
