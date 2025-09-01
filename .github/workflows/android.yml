@@ -1,26 +1,53 @@
 name: Android Debug Build
+
 on:
-  push: { branches: [ "main", "alpha/**" ] }
-  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+      - dev
+      - alpha/**
+  workflow_dispatch:
+
+permissions:
+  contents: write  # necessario per "git push -f origin tag"
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # importante per i tag
+
       - uses: actions/setup-java@v4
-        with: { distribution: 'temurin', java-version: '17' }
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - uses: android-actions/setup-android@v3
+
       - name: Install Android SDK components
         run: |
           sdkmanager --install "platforms;android-34" "platform-tools" "build-tools;34.0.0"
           yes | sdkmanager --licenses
+
       - name: Build Debug APK with Gradle
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 8.7
           arguments: :app:assembleDebug
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Move last-green tag on success
+        if: ${{ success() }}
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "last-green/${BRANCH}" "${GITHUB_SHA}"
+          git push -f origin "last-green/${BRANCH}"
