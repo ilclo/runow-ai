@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -2370,5 +2371,348 @@ private fun SectionHeaderInspectorOverlay(
                 }
             }
         }
+    }
+}
+
+/* =========================
+ *  FULL-SCREEN INSPECTOR (overlay opaco + preview fissa + contenuto scrollabile)
+ * ========================= */
+@Composable
+private fun BoxScope.FullscreenInspectorSheet(
+    layout: JSONObject,
+    path: String,
+    title: String,
+    onApply: () -> Unit,
+    onCancel: () -> Unit,
+    onLive: () -> Unit,
+    body: @Composable (JSONObject) -> Unit
+) {
+    // Oggetto in modifica + backup per Annulla
+    val block = remember(path) { (jsonAtPath(layout, path) as JSONObject) }
+    val backup = remember(path) { JSONObject(block.toString()) }
+
+    // Overlay full-screen opaco, sopra tutto
+    Surface(
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .fillMaxSize()
+            .zIndex(999f),
+        color = MaterialTheme.colorScheme.surface, // opaco, niente trasparenze
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Column(Modifier.fillMaxSize()) {
+
+            // Header: indietro / titolo / OK
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = {
+                    // ripristina backup
+                    replaceAtPath(layout, path, backup)
+                    onCancel()
+                }) { Text("Indietro") }
+
+                Text(title, style = MaterialTheme.typography.titleMedium)
+
+                Button(onClick = { onApply() }) { Text("OK") }
+            }
+
+            Divider()
+
+            // PREVIEW fissa (altezza costante), riproduce visivamente il blocco in alto
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .shadow(2.dp, RoundedCornerShape(12.dp))
+            ) {
+                PreviewOfBlock(block)
+            }
+
+            Divider()
+
+            // CONTENUTO impostazioni – scrollabile
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                body(block)
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+/* --- Preview "leggera" del blocco (senza dispatch/uiState) --- */
+@Composable
+private fun PreviewOfBlock(block: JSONObject) {
+    when (block.optString("type")) {
+        "SectionHeader" -> {
+            val style = mapTextStyle(block.optString("style", "titleMedium"))
+            val align = mapTextAlign(block.optString("align", "start"))
+            val color = parseColorOrRole(block.optString("textColor","")) ?: LocalContentColor.current
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center) {
+                Text(
+                    text = block.optString("title","Anteprima titolo"),
+                    style = applyTextStyleOverrides(block, style),
+                    textAlign = align,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = color
+                )
+                val sub = block.optString("subtitle","")
+                if (sub.isNotBlank()) {
+                    Text(
+                        text = sub,
+                        style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium),
+                        textAlign = align,
+                        modifier = Modifier.fillMaxWidth(),
+                        color = color
+                    )
+                }
+            }
+        }
+        "ButtonRow" -> {
+            val buttons = block.optJSONArray("buttons") ?: JSONArray()
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (i in 0 until buttons.length()) {
+                    val btn = buttons.optJSONObject(i) ?: continue
+                    val label = btn.optString("label", "Button")
+                    val styleKey = btn.optString("style","primary")
+                    val sizeKey = btn.optString("size","md")
+                    val shapeKey = btn.optString("shape","rounded")
+                    val corner = btn.optDouble("corner", 20.0).toFloat().dp
+                    val icon = btn.optString("icon","")
+
+                    val shape = when (shapeKey) {
+                        "pill" -> RoundedCornerShape(50)
+                        "cut"  -> CutCornerShape(corner)
+                        else   -> RoundedCornerShape(corner)
+                    }
+
+                    var (container, content, border) = mapButtonColors(styleKey, btn.optString("tint","default"))
+                    // customColor override
+                    parseColorOrRole(btn.optString("customColor",""))?.let { col ->
+                        container = col
+                        content = bestOnColor(col)
+                    }
+
+                    val baseMod = Modifier
+                        .then(
+                            if (!btn.optDouble("heightDp", Double.NaN).isNaN())
+                                Modifier.height(btn.optDouble("heightDp", Double.NaN).toFloat().dp)
+                            else
+                                sizeModifier(sizeKey)
+                        )
+
+                    val slot: @Composable () -> Unit = {
+                        if (icon.isNotBlank()) IconText(label = label, icon = icon) else Text(label)
+                    }
+
+                    when (styleKey) {
+                        "outlined" -> OutlinedButton(
+                            onClick = { /* preview only */ },
+                            shape = shape,
+                            border = BorderStroke(border, content),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = content),
+                            modifier = baseMod
+                        ) { slot() }
+
+                        "tonal"    -> FilledTonalButton(
+                            onClick = { /* preview only */ },
+                            shape = shape,
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = container, contentColor = content),
+                            modifier = baseMod
+                        ) { slot() }
+
+                        "text"     -> TextButton(
+                            onClick = { /* preview only */ },
+                            shape = shape,
+                            colors = ButtonDefaults.textButtonColors(contentColor = content),
+                            modifier = baseMod
+                        ) { slot() }
+
+                        else       -> Button(
+                            onClick = { /* preview only */ },
+                            shape = shape,
+                            colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = content),
+                            modifier = baseMod
+                        ) { slot() }
+                    }
+                }
+            }
+        }
+        else -> {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Anteprima non disponibile per '${block.optString("type")}'")
+            }
+        }
+    }
+}
+
+/* --- Body: SectionHeader (solo contenuti, senza overlay/OK/Annulla) --- */
+@Composable
+private fun SectionHeaderInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val title = remember { mutableStateOf(block.optString("title","")) }
+    val subtitle = remember { mutableStateOf(block.optString("subtitle","")) }
+    var style by remember { mutableStateOf(block.optString("style","titleMedium")) }
+    var align by remember { mutableStateOf(block.optString("align","start")) }
+    var textColor by remember { mutableStateOf(block.optString("textColor","")) }
+
+    Text("SectionHeader – Proprietà", style = MaterialTheme.typography.titleMedium)
+
+    OutlinedTextField(value = title.value, onValueChange = {
+        title.value = it; block.put("title", it); onLive()
+    }, label = { Text("Titolo") })
+
+    OutlinedTextField(value = subtitle.value, onValueChange = {
+        subtitle.value = it; block.put("subtitle", it); onLive()
+    }, label = { Text("Sottotitolo (opz.)") })
+
+    ExposedDropdown(value = style, label = "style",
+        options = listOf("displaySmall","headlineSmall","titleLarge","titleMedium","titleSmall","bodyLarge","bodyMedium")
+    ) { sel -> style = sel; block.put("style", sel); onLive() }
+
+    ExposedDropdown(value = align, label = "align",
+        options = listOf("start","center","end")
+    ) { sel -> align = sel; block.put("align", sel); onLive() }
+
+    // Colore da palette nominale
+    NamedColorPicker(
+        currentHexOrEmpty = textColor,
+        label = "textColor (palette)",
+        onPickHex = { hex ->
+            textColor = hex
+            if (hex.isBlank()) block.remove("textColor") else block.put("textColor", hex)
+            onLive()
+        }
+    )
+
+    // Grandezze testuali a scelta rapida (tipo Word)
+    val textSize = remember {
+        mutableStateOf(block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() })
+    }
+    ExposedDropdown(
+        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
+        label = "textSize (sp)",
+        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24","28","32","36")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        textSize.value = v
+        if (v.isBlank()) block.remove("textSizeSp") else block.put("textSizeSp", v.toDouble())
+        onLive()
+    }
+}
+
+/* --- Body: ButtonRow (solo contenuti, senza overlay/OK/Annulla) --- */
+@Composable
+private fun ButtonRowInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val buttons = block.optJSONArray("buttons") ?: JSONArray().also { block.put("buttons", it) }
+
+    Text("ButtonRow – Proprietà riga", style = MaterialTheme.typography.titleMedium)
+
+    var align by remember { mutableStateOf(block.optString("align","center")) }
+    ExposedDropdown(
+        value = align, label = "align",
+        options = listOf("start","center","end","space_between","space_around","space_evenly")
+    ) { sel -> align = sel; block.put("align", sel); onLive() }
+
+    Divider()
+
+    Text("Bottoni", style = MaterialTheme.typography.titleMedium)
+
+    for (i in 0 until buttons.length()) {
+        val btn = buttons.getJSONObject(i)
+        ElevatedCard(colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.26f)
+        )) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Bottone ${i+1}", style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        IconButton(onClick = { moveInArray(buttons, i, -1); onLive() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                        IconButton(onClick = { moveInArray(buttons, i, +1); onLive() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                        IconButton(onClick = { removeAt(buttons, i); onLive() })       { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
+                    }
+                }
+
+                val label = remember { mutableStateOf(btn.optString("label","")) }
+                val icon  = remember { mutableStateOf(btn.optString("icon","")) }
+                var style by remember { mutableStateOf(btn.optString("style","primary")) }
+                var size  by remember { mutableStateOf(btn.optString("size","md")) }
+                val cornerStr = remember { mutableStateOf(btn.optDouble("corner", 20.0).toString()) }
+                var press by remember { mutableStateOf(btn.optString("pressEffect","none")) }
+                val action= remember { mutableStateOf(btn.optString("actionId","")) }
+                val customColor = remember { mutableStateOf(btn.optString("customColor","")) }
+
+                OutlinedTextField(value = label.value, onValueChange = {
+                    label.value = it; btn.put("label", it); onLive()
+                }, label = { Text("label") })
+
+                IconPickerField(value = icon, label = "icon") {
+                    icon.value = it; btn.put("icon", it); onLive()
+                }
+
+                ExposedDropdown(value = style, label = "style",
+                    options = listOf("primary","tonal","outlined","text")
+                ) { sel -> style = sel; btn.put("style", sel); onLive() }
+
+                // Taglie compatte
+                ExposedDropdown(value = size, label = "size",
+                    options = listOf("xs","sm","md","lg","xl")
+                ) { sel -> size = sel; btn.put("size", sel); onLive() }
+
+                // Corner con step 1
+                StepperField(label = "corner (dp)", state = cornerStr, step = 1.0) { v ->
+                    btn.put("corner", v); onLive()
+                }
+
+                // Solo customColor con palette
+                NamedColorPicker(
+                    currentHexOrEmpty = customColor.value,
+                    label = "customColor (palette)",
+                    onPickHex = { hex ->
+                        customColor.value = hex
+                        if (hex.isBlank()) btn.remove("customColor") else btn.put("customColor", hex)
+                        onLive()
+                    }
+                )
+
+                // Press effects (quelli extra sono no-op in preview)
+                ExposedDropdown(value = press, label = "pressEffect",
+                    options = listOf("none","scale","glow","tilt","alpha","rotate")
+                ) { sel -> press = sel; btn.put("pressEffect", sel); onLive() }
+
+                OutlinedTextField(value = action.value, onValueChange = {
+                    action.value = it; btn.put("actionId", it); onLive()
+                }, label = { Text("actionId (es. nav:settings)") })
+            }
+        }
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = {
+            buttons.put(JSONObject("{\"label\":\"Nuovo\",\"style\":\"text\",\"icon\":\"add\",\"actionId\":\"\"}"))
+            onLive()
+        }) { Text("+ Aggiungi bottone") }
     }
 }
