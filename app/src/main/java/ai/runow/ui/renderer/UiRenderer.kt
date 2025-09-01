@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -592,7 +593,7 @@ private fun BoxScope.DesignerOverlay(
     screenName: String,
     layout: JSONObject,
     selectedPath: String?,
-    setSelectedPath: (String?) -> Unit,
+    setSelectedPath: (String?, dispatch: (String) -> Unit, uiState: MutableMap<String, Any>) -> Unit,
     onLiveChange: () -> Unit,
     onLayoutChange: () -> Unit,
     onSaveDraft: () -> Unit,
@@ -717,7 +718,7 @@ private fun BoxScope.DesignerOverlay(
         val onCancel = { showInspector = false; onLiveChange() } // già ripristinato dentro inspector
         when (selectedBlock.optString("type")) {
             "ButtonRow" -> ButtonRowInspectorPanel(layout, selectedPath, onApply, onCancel, onLiveChange)
-            "SectionHeader" -> SectionHeaderInspector(layout, selectedPath, onApply, onCancel, onLiveChange)
+            "SectionHeader"->SectionHeaderInspectorOverlay(layout,selectedPath,selectedBlock,onApply,onCancel,onLiveChange,dispatch,uiState)
             "Spacer"        -> SpacerInspector(layout, selectedPath, onApply, onCancel, onLiveChange)
             "Divider"       -> DividerInspector(layout, selectedPath, onApply, onCancel, onLiveChange)
             "DividerV"      -> DividerVInspector(layout, selectedPath, onApply, onCancel, onLiveChange)
@@ -756,7 +757,7 @@ private fun ButtonRowInspector(
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        scrimColor = Color.Transparent
     ) {
         val buttons = block.optJSONArray("buttons") ?: JSONArray().also { block.put("buttons", it) }
         Column(
@@ -878,7 +879,7 @@ private fun SectionHeaderInspector(
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        scrimColor = Color.Transparent
     ) {
         val title = remember { mutableStateOf(block.optString("title","")) }
         val subtitle = remember { mutableStateOf(block.optString("subtitle","")) }
@@ -1004,7 +1005,7 @@ private fun SpacerInspector(
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        scrimColor = Color.Transparent
     ) {
         val height = remember { mutableStateOf(block.optDouble("height", 8.0).toString()) }
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1036,7 +1037,7 @@ private fun DividerInspector(
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        scrimColor = Color.Transparent
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
         val padStart = remember { mutableStateOf(block.optDouble("padStart", 0.0).toString()) }
@@ -1072,7 +1073,7 @@ private fun DividerVInspector(
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        scrimColor = Color.Transparent
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
         val height = remember { mutableStateOf(block.optDouble("height", 24.0).toString()) }
@@ -1106,7 +1107,7 @@ private fun CardInspector(
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        scrimColor = Color.Transparent
     ) {
         var variant by remember { mutableStateOf(block.optString("variant","elevated")) }
         val action = remember { mutableStateOf(block.optString("clickActionId","")) }
@@ -1144,7 +1145,7 @@ private fun FabInspector(
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        scrimColor = Color.Transparent
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","play_arrow")) }
         val label = remember { mutableStateOf(block.optString("label","Start")) }
@@ -1198,7 +1199,7 @@ private fun IconButtonInspector(
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        scrimColor = Color.Transparent
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","more_vert")) }
         val action = remember { mutableStateOf(block.optString("actionId","")) }
@@ -1848,7 +1849,7 @@ private fun ListInspector(
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        scrimColor = Color.Transparent
     ) {
         val textSize = remember { mutableStateOf(
             block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
@@ -1924,7 +1925,7 @@ private fun ChipRowInspector(
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
         containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        scrimColor = Color.Transparent
     ) {
         val textSize = remember { mutableStateOf(
             block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
@@ -2193,6 +2194,180 @@ private fun ButtonRowInspectorPanel(
                 }
 
                 Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeaderInspectorOverlay(
+    layout: JSONObject,
+    path: String,
+    block: JSONObject,
+    onApply: () -> Unit,
+    onCancel: () -> Unit,
+    onLive: () -> Unit,
+    dispatch: (String) -> Unit,
+    uiState: MutableMap<String, Any>
+) {
+    // Backup del nodo originale; ripristinato su Annulla
+    val backup = remember(path) { JSONObject(block.toString()) }
+
+    // Overlay full screen non trasparente
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface) // niente trasparenze qui
+    ) {
+        val menus = remember(layout) { collectMenus(layout) }
+        // Altezza fissa del pannello proprietà (55% dell'altezza, tra 320dp e max-120dp)
+        val sheetH = (maxHeight * 0.55f).coerceIn(320.dp, maxHeight - 120.dp)
+        val previewH = (maxHeight - sheetH)
+
+        Column(modifier = Modifier.fillMaxSize()) {
+
+            // PREVIEW PINNATA IN ALTO
+            Surface(
+                tonalElevation = 2.dp,
+                shadowElevation = 4.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(previewH)
+            ) {
+                // Nota: dispatch "muto" per non eseguire azioni dalla preview
+                val noDispatch: (String) -> Unit = {}
+                Box(Modifier.fillMaxSize().padding(12.dp)) {
+                    RenderBlock(
+                        block = block,
+                        dispatch = noDispatch,
+                        uiState = uiState,
+                        designerMode = false, // niente overlay designer dentro la preview
+                        path = path,
+                        menus = menus,
+                        onSelect = {}
+                    )
+                }
+            }
+
+            // PANNELLO PROPRIETÀ FISSO (scrollabile)
+            Surface(
+                tonalElevation = 1.dp,
+                shadowElevation = 2.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(sheetH)
+            ) {
+                val scroll = rememberScrollState()
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scroll)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("SectionHeader – Proprietà", style = MaterialTheme.typography.titleMedium)
+
+                    // --- Campi principali ---
+                    val title = remember { mutableStateOf(block.optString("title","")) }
+                    val subtitle = remember { mutableStateOf(block.optString("subtitle","")) }
+                    var style = remember { mutableStateOf(block.optString("style","titleMedium")) }.value
+                    var align = remember { mutableStateOf(block.optString("align","start")) }.value
+
+                    OutlinedTextField(
+                        value = title.value,
+                        onValueChange = { title.value = it; block.put("title", it); onLive() },
+                        label = { Text("Titolo") }
+                    )
+                    OutlinedTextField(
+                        value = subtitle.value,
+                        onValueChange = { subtitle.value = it; block.put("subtitle", it); onLive() },
+                        label = { Text("Sottotitolo (opz.)") }
+                    )
+
+                    ExposedDropdown(
+                        value = style,
+                        label = "style",
+                        options = listOf("displaySmall","headlineSmall","titleLarge","titleMedium","titleSmall","bodyLarge","bodyMedium")
+                    ) { sel ->
+                        style = sel; block.put("style", sel); onLive()
+                    }
+
+                    ExposedDropdown(
+                        value = align,
+                        label = "align",
+                        options = listOf("start","center","end")
+                    ) { sel ->
+                        align = sel; block.put("align", sel); onLive()
+                    }
+
+                    // --- Tipografia "tipo Word": taglie predefinite ---
+                    val textSize = remember {
+                        mutableStateOf(
+                            block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
+                        )
+                    }
+                    ExposedDropdown(
+                        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
+                        label = "textSize (sp)",
+                        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24","28","32","36","40")
+                    ) { sel ->
+                        val v = if (sel == "(default)") "" else sel
+                        textSize.value = v
+                        if (v.isBlank()) block.remove("textSizeSp") else block.put("textSizeSp", v.toDouble())
+                        onLive()
+                    }
+
+                    // Serie font più ampia
+                    var fontFamily = remember { mutableStateOf(block.optString("fontFamily","")) }.value
+                    ExposedDropdown(
+                        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+                        label = "fontFamily",
+                        options = listOf("(default)","serif","monospace","cursive")
+                    ) { sel ->
+                        val v = if (sel == "(default)") "" else sel
+                        fontFamily = v
+                        if (v.isBlank()) block.remove("fontFamily") else block.put("fontFamily", v)
+                        onLive()
+                    }
+
+                    var fontWeight = remember { mutableStateOf(block.optString("fontWeight","")) }.value
+                    ExposedDropdown(
+                        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+                        label = "fontWeight",
+                        options = listOf("(default)","w300","w400","w500","w600","w700")
+                    ) { sel ->
+                        val v = if (sel == "(default)") "" else sel
+                        fontWeight = v
+                        if (v.isBlank()) block.remove("fontWeight") else block.put("fontWeight", v)
+                        onLive()
+                    }
+
+                    // Colore con palette nominale (NamedColorPicker)
+                    var textColor = remember { mutableStateOf(block.optString("textColor","")) }.value
+                    NamedColorPicker(
+                        currentHexOrEmpty = textColor,
+                        label = "textColor (palette)",
+                        onPickHex = { hex ->
+                            textColor = hex
+                            if (hex.isBlank()) block.remove("textColor") else block.put("textColor", hex)
+                            onLive()
+                        }
+                    )
+
+                    Divider()
+
+                    // --- Azioni ---
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = {
+                            replaceAtPath(layout, path, backup)
+                            onCancel()
+                        }) { Text("Annulla") }
+                        Button(onClick = { onApply() }) { Text("OK") }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+                }
             }
         }
     }
