@@ -757,8 +757,8 @@ private fun ButtonRowInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+        scrimColor = Color.Transparent
     ) {
         val buttons = block.optJSONArray("buttons") ?: JSONArray().also { block.put("buttons", it) }
         Column(
@@ -779,7 +779,7 @@ private fun ButtonRowInspector(
             Text("Bottoni", style = MaterialTheme.typography.titleMedium)
             for (i in 0 until buttons.length()) {
                 val btn = buttons.getJSONObject(i)
-                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f))) {
+                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f))) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -879,8 +879,8 @@ private fun SectionHeaderInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+        scrimColor = Color.Transparent
     ) {
         val title = remember { mutableStateOf(block.optString("title","")) }
         val subtitle = remember { mutableStateOf(block.optString("subtitle","")) }
@@ -1005,8 +1005,8 @@ private fun SpacerInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+        scrimColor = Color.Transparent
     ) {
         val height = remember { mutableStateOf(block.optDouble("height", 8.0).toString()) }
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1037,8 +1037,8 @@ private fun DividerInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+        scrimColor = Color.Transparent
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
         val padStart = remember { mutableStateOf(block.optDouble("padStart", 0.0).toString()) }
@@ -1073,8 +1073,8 @@ private fun DividerVInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+        scrimColor = Color.Transparent
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
         val height = remember { mutableStateOf(block.optDouble("height", 24.0).toString()) }
@@ -1107,8 +1107,8 @@ private fun CardInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+        scrimColor = Color.Transparent
     ) {
         var variant by remember { mutableStateOf(block.optString("variant","elevated")) }
         val action = remember { mutableStateOf(block.optString("clickActionId","")) }
@@ -1145,8 +1145,8 @@ private fun FabInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+        scrimColor = Color.Transparent
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","play_arrow")) }
         val label = remember { mutableStateOf(block.optString("label","Start")) }
@@ -1199,8 +1199,8 @@ private fun IconButtonInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+        scrimColor = Color.Transparent
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","more_vert")) }
         val action = remember { mutableStateOf(block.optString("actionId","")) }
@@ -1849,8 +1849,8 @@ private fun ListInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+        scrimColor = Color.Transparent
     ) {
         val textSize = remember { mutableStateOf(
             block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
@@ -1925,8 +1925,8 @@ private fun ChipRowInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+        scrimColor = Color.Transparent
     ) {
         val textSize = remember { mutableStateOf(
             block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
@@ -1999,7 +1999,7 @@ private fun DockedInspectorShell(
     val menus = remember(layout) { collectMenus(layout) }
     val block = remember(layout, path) { jsonAtPath(layout, path) as? JSONObject }
 
-    // Overlay full-screen, super trasparente
+    // FULLSCREEN, nessuno scrim
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color.Transparent,
@@ -2007,18 +2007,20 @@ private fun DockedInspectorShell(
         shadowElevation = 0.dp
     ) {
         Column(Modifier.fillMaxSize()) {
-            // PREVIEW PINNATA IN ALTO
+
+            // PREVIEW PINNATA IN ALTO (molto trasparente)
             Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.06f)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp),
-                       verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(title, style = MaterialTheme.typography.labelMedium)
                     if (block != null) {
-                        // Render senza designer overlay, per anteprima pulita
                         RenderBlock(
                             block = block,
                             dispatch = dispatch,
                             uiState = uiState,
-                            designerMode = false,
+                            designerMode = false,     // anteprima pulita
                             path = path,
                             menus = menus,
                             onSelect = { }
@@ -2031,8 +2033,8 @@ private fun DockedInspectorShell(
 
             Divider()
 
-            // PANNELLO IMPOSTAZIONI CHE OCCUPA IL RESTO DELLO SCHERMO
-            Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.12f)) {
+            // PANNELLO IMPOSTAZIONI (senza scrim, molto trasparente)
+            Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.10f)) {
                 Column(
                     Modifier
                         .fillMaxWidth()
