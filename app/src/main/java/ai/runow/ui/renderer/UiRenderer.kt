@@ -750,18 +750,15 @@ private fun ButtonRowInspector(
     val backup = remember { JSONObject(block.toString()) }
 
     fun closeApply() { open = false; onApply() }
-    fun closeCancel() {
-        replaceAtPath(layout, path, backup)
-        open = false
-        onCancel()
-    }
+    fun closeCancel() { replaceAtPath(layout, path, backup); open = false; onCancel() }
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
-        scrimColor = Color.Black.copy(alpha = 0.32f)
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.30f),  // molto trasparente
+        scrimColor = Color.Black.copy(alpha = 0.18f)
     ) {
         val buttons = block.optJSONArray("buttons") ?: JSONArray().also { block.put("buttons", it) }
+
         Column(
             Modifier
                 .fillMaxWidth()
@@ -769,18 +766,31 @@ private fun ButtonRowInspector(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("ButtonRow - Proprietà riga", style = MaterialTheme.typography.titleMedium)
+            Text("ButtonRow – Proprietà riga", style = MaterialTheme.typography.titleMedium)
+
             var align by remember { mutableStateOf(block.optString("align","center")) }
-            ExposedDropdown(value = align, label = "align", options = listOf("start","center","end","space_between","space_around","space_evenly")) {
-                align = it; block.put("align", it); onLive()
+            ExposedDropdown(
+                value = align,
+                label = "align",
+                options = listOf("start","center","end","space_between","space_around","space_evenly")
+            ) { sel ->
+                align = sel
+                block.put("align", sel)
+                onLive()
             }
 
             Divider()
 
             Text("Bottoni", style = MaterialTheme.typography.titleMedium)
+
             for (i in 0 until buttons.length()) {
                 val btn = buttons.getJSONObject(i)
-                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f))) {
+
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.26f) // card quasi “solo contorno”
+                    )
+                ) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -789,83 +799,98 @@ private fun ButtonRowInspector(
                         ) {
                             Text("Bottone ${i+1}", style = MaterialTheme.typography.labelLarge)
                             Row {
-                                IconButton(onClick = { moveInArray(buttons, i, -1); onLive() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
-                                IconButton(onClick = { moveInArray(buttons, i, +1); onLive() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                                IconButton(onClick = { moveInArray(buttons, i, -1); onLive() }) {
+                                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null)
+                                }
+                                IconButton(onClick = { moveInArray(buttons, i, +1); onLive() }) {
+                                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null)
+                                }
+                                IconButton(onClick = { removeAt(buttons, i); onLive() }) {
+                                    Icon(Icons.Filled.Close, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                }
                             }
                         }
+
                         val label = remember { mutableStateOf(btn.optString("label","")) }
                         val icon  = remember { mutableStateOf(btn.optString("icon","")) }
                         var style by remember { mutableStateOf(btn.optString("style","primary")) }
-                        var size  by remember { mutableStateOf(btn.optString("size","md")) }
-                        var tint  by remember { mutableStateOf(btn.optString("tint","default")) }
-                        var shape by remember { mutableStateOf(btn.optString("shape","rounded")) }
+                        var size  by remember { mutableStateOf(btn.optString("size","md")) } // manterremo mappatura legacy (sm/md/lg)
                         val cornerStr = remember { mutableStateOf(btn.optDouble("corner", 20.0).toString()) }
                         var press by remember { mutableStateOf(if (btn.optString("pressEffect","none")=="scale") "scale" else "none") }
-                        val action= remember { mutableStateOf(btn.optString("actionId","")) }
+                        val action = remember { mutableStateOf(btn.optString("actionId","")) }
                         val customColor = remember { mutableStateOf(btn.optString("customColor","")) }
 
-                        OutlinedTextField(value = label.value, onValueChange = {
-                            label.value = it; btn.put("label", it); onLive()
-                        }, label = { Text("label") })
+                        OutlinedTextField(
+                            value = label.value,
+                            onValueChange = { label.value = it; btn.put("label", it); onLive() },
+                            label = { Text("label") }
+                        )
 
-                        IconPickerField(value = icon, label = "icon", onSelected = {
-                            icon.value = it; btn.put("icon", it); onLive()
-                        })
+                        IconPickerField(value = icon, label = "icon") { sel ->
+                            icon.value = sel; btn.put("icon", sel); onLive()
+                        }
 
-                                                }
-                        ExposedDropdown(value = size,  label = "size",  options = listOf("sm","md","lg")) {
-                            size = it; btn.put("size", it); onLive()
+                        ExposedDropdown(value = style, label = "style", options = listOf("primary","tonal","outlined","text")) {
+                            style = it; btn.put("style", it); onLive()
                         }
-                        ExposedDropdown(value = shape, label = "shape", options = listOf("rounded","pill","cut")) {
-                            shape = it; btn.put("shape", it); onLive()
+
+                        // Dimensione più granulare (per ora compatibile con render: xs->sm, xl->lg via mapping futuro)
+                        ExposedDropdown(
+                            value = size,
+                            label = "size",
+                            options = listOf("xs","sm","md","lg","xl")
+                        ) { sel ->
+                            size = sel; btn.put("size", sel); onLive()
                         }
+
+                        // Corner con step 1
                         StepperField(label = "corner (dp)", state = cornerStr, step = 1.0) { v ->
                             btn.put("corner", v); onLive()
                         }
-                        // Altezza bottone (dp)
-                        var heightStr by remember { mutableStateOf(btn.optDouble("heightDp", Double.NaN).let { if (it.isNaN()) "" else it.toInt().toString() }) }
-                        ExposedDropdown(value = if (heightStr.isBlank()) "(default)" else heightStr, label = "button height (dp)", options = listOf("(default)","28","32","36","40","44","48","56","64")) { sel ->
-                            val v = if (sel == "(default)") "" else sel
-                            heightStr = v
-                            if (v.isBlank()) btn.remove("heightDp") else btn.put("heightDp", v.toInt())
-                            onLive()
-                        }
 
-
-
-                        // Colori
-                                                }
+                        // Solo customColor (override completo, con palette)
                         NamedColorPicker(
                             currentHexOrEmpty = customColor.value,
-                            label = "customColor",
+                            label = "customColor (palette)",
                             onPickHex = { hex ->
-                                customColor.value = hex;
+                                customColor.value = hex
                                 if (hex.isBlank()) btn.remove("customColor") else btn.put("customColor", hex)
                                 onLive()
                             }
                         )
 
-                        ExposedDropdown(value = press, label = "pressEffect", options = listOf("none","scale","alpha","rotate","lift")) {
-                            press = it; btn.put("pressEffect", it); onLive()
+                        // Press effects estesi (in render è attivo 'scale'; gli altri sono no-op al momento)
+                        ExposedDropdown(
+                            value = press,
+                            label = "pressEffect",
+                            options = listOf("none","scale","glow","tilt")
+                        ) { sel ->
+                            press = sel; btn.put("pressEffect", sel); onLive()
                         }
-                        OutlinedTextField(value = action.value, onValueChange = {
-                            action.value = it; btn.put("actionId", it); onLive()
-                        }, label = { Text("actionId (es. nav:settings)") })
+
+                        OutlinedTextField(
+                            value = action.value,
+                            onValueChange = { action.value = it; btn.put("actionId", it); onLive() },
+                            label = { Text("actionId (es. nav:settings)") }
+                        )
                     }
                 }
             }
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { buttons.put(JSONObject("{\"label\":\"Nuovo\",\"style\":\"text\",\"icon\":\"add\",\"actionId\":\"\"}")); onLive() }) { Text("+ Aggiungi bottone") }
+                Button(onClick = {
+                    buttons.put(JSONObject("{\"label\":\"Nuovo\",\"style\":\"text\",\"icon\":\"add\",\"actionId\":\"\"}"))
+                    onLive()
+                }) { Text("+ Aggiungi bottone") }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { closeCancel() }) { Text("Annulla") }
                 Button(onClick = { closeApply() }) { Text("OK") }
             }
+
             Spacer(Modifier.height(24.dp))
         }
     }
 }
-
-@Composable
 private fun SectionHeaderInspector(
     layout: JSONObject,
     path: String,
@@ -1674,54 +1699,6 @@ private fun removeAt(arr: JSONArray, index: Int) {
 }
 
 @Composable
-private fun NamedIconEx_dup(name: String?, contentDescription: String?) {
-    val image = when (name) {
-        // base
-        "settings" -> Icons.Filled.Settings
-        "more_vert" -> Icons.Filled.MoreVert
-        "tune" -> Icons.Filled.Tune
-        "play_arrow" -> Icons.Filled.PlayArrow
-        "pause" -> Icons.Filled.Pause
-        "stop" -> Icons.Filled.Stop
-        "add" -> Icons.Filled.Add
-        "flag" -> Icons.Filled.Flag
-        "queue_music" -> Icons.Filled.QueueMusic
-        "widgets" -> Icons.Filled.Widgets
-        "palette" -> Icons.Filled.Palette
-        "home" -> Icons.Filled.Home
-        "menu" -> Icons.Filled.Menu
-        "close" -> Icons.Filled.Close
-        "more_horiz" -> Icons.Filled.MoreHoriz
-        // running & fitness
-        "directions_run" -> Icons.Filled.DirectionsRun
-        "directions_walk" -> Icons.Filled.DirectionsWalk
-        "directions_bike" -> Icons.Filled.DirectionsBike
-        "fitness_center" -> Icons.Filled.FitnessCenter
-        "timer" -> Icons.Filled.Timer
-        "timer_off" -> Icons.Filled.TimerOff
-        "watch_later" -> Icons.Filled.WatchLater
-        "map" -> Icons.Filled.Map
-        "my_location" -> Icons.Filled.MyLocation
-        "place" -> Icons.Filled.Place
-        "speed" -> Icons.Filled.Speed
-        "bolt" -> Icons.Filled.Bolt
-        "local_fire_department" -> Icons.Filled.LocalFireDepartment
-        "sports_score" -> Icons.Filled.SportsScore
-        else -> null
-    }
-    if (image != null) {
-        Icon(image, contentDescription)
-    } else {
-        val ctx = LocalContext.current
-        val resName = if (name != null && name.startsWith("res:")) name.removePrefix("res:") else name ?: ""
-        val resId = if (resName.isNotBlank()) ctx.resources.getIdentifier(resName, "drawable", ctx.packageName) else 0
-        if (resId != 0) {
-            Icon(painterResource(id = resId), contentDescription)
-        } else {
-            Text("·")
-        }
-    }
-}
 
 @Composable
 private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
