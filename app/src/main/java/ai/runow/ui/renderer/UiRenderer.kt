@@ -694,6 +694,7 @@ when (selectedBlock.optString("type")) {
 * ========================= */
 @Composable
 @Composable
+@Composable
 private fun ButtonRowInspector(
 layout: JSONObject,
 path: String,
@@ -829,6 +830,7 @@ Spacer(Modifier.height(24.dp))
 }
 }
 @Composable
+@Composable
 private fun SectionHeaderInspector(
 layout: JSONObject,
 path: String,
@@ -911,6 +913,7 @@ Spacer(Modifier.height(12.dp))
 }
 @Composable
 @Composable
+@Composable
 private fun SpacerInspector(
 layout: JSONObject,
 path: String,
@@ -940,6 +943,7 @@ Button(onClick = { closeApply() }) { Text("OK") }
 }
 }
 }
+@Composable
 @Composable
 @Composable
 private fun DividerInspector(
@@ -977,6 +981,7 @@ Button(onClick = { closeApply() }) { Text("OK") }
 }
 @Composable
 @Composable
+@Composable
 private fun DividerVInspector(
 layout: JSONObject,
 path: String,
@@ -1008,6 +1013,7 @@ Button(onClick = { closeApply() }) { Text("OK") }
 }
 }
 }
+@Composable
 @Composable
 @Composable
 private fun CardInspector(
@@ -1045,6 +1051,7 @@ Button(onClick = { closeApply() }) { Text("OK") }
 }
 }
 }
+@Composable
 @Composable
 @Composable
 private fun FabInspector(
@@ -1094,6 +1101,7 @@ Button(onClick = { closeApply() }) { Text("OK") }
 }
 }
 }
+@Composable
 @Composable
 @Composable
 private fun IconButtonInspector(
@@ -1572,6 +1580,7 @@ for (i in 0 until arr.length()) if (i != index) tmp.add(arr.get(i))
 while (arr.length() > 0) arr.remove(arr.length() - 1)
 tmp.forEach { arr.put(it) }
 }
+@Composable
 @Composable
 @Composable
 private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
