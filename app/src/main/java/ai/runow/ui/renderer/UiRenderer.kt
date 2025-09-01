@@ -24,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -78,7 +77,7 @@ fun UiScreen(
             Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
-                .verticalScroll(scrollState)
+                .verticalScroll(rememberScrollState())
                 .padding(
                     start = 16.dp, end = 16.dp, top = 16.dp,
                     bottom = if (designerMode) overlayHeightDp + 32.dp else 16.dp
@@ -763,7 +762,7 @@ private fun ButtonRowInspector(
         Column(
             Modifier
                 .fillMaxWidth()
-                .verticalScroll(scrollState)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -895,7 +894,7 @@ private fun SectionHeaderInspector(
         Column(
             Modifier
                 .fillMaxWidth()
-                .verticalScroll(scrollState)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1858,7 +1857,7 @@ private fun ListInspector(
         var fontWeight by remember { mutableStateOf(block.optString("fontWeight","")) }
         var textColor  by remember { mutableStateOf(block.optString("textColor","")) }
 
-        Column(Modifier.fillMaxWidth().verticalScroll(scrollState).padding(16.dp),
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
             Text("List - Proprietà testo", style = MaterialTheme.typography.titleMedium)
@@ -1934,7 +1933,7 @@ private fun ChipRowInspector(
         var fontWeight by remember { mutableStateOf(block.optString("fontWeight","")) }
         var textColor  by remember { mutableStateOf(block.optString("textColor","")) }
 
-        Column(Modifier.fillMaxWidth().verticalScroll(scrollState).padding(16.dp),
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
             Text("ChipRow - Proprietà testo", style = MaterialTheme.typography.titleMedium)
