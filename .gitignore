@@ -1,0 +1,10 @@
+
+# Local editor/patch backups
+app/src/main/java/ai/runow/ui/renderer/UiRenderer.kt.bak.*
+app/src/main/java/ai/runow/ui/renderer/UiRenderer.kt.*.bak
+app/src/main/java/ai/runow/ui/renderer/UiRenderer.kt.broken.*
+
+# Local editor/patch backups
+app/src/main/java/ai/runow/ui/renderer/UiRenderer.kt.bak.*
+app/src/main/java/ai/runow/ui/renderer/UiRenderer.kt.*.bak
+app/src/main/java/ai/runow/ui/renderer/UiRenderer.kt.broken.*
