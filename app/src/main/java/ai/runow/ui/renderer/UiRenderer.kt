@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -345,12 +346,14 @@ private fun RenderBlock(
                     val tintKey = btn.optString("tint","default")
                     val shapeKey = btn.optString("shape","rounded")
                     val corner = btn.optDouble("corner", 20.0).toFloat().dp
-                    val pressEffect = btn.optString("pressEffect","none") == "scale"
+                    val pressKey = btn.optString("pressEffect","none")
                     val icon = btn.optString("icon","")
 
                     val interaction = remember { MutableInteractionSource() }
                     val pressed by interaction.collectIsPressedAsState()
-                    val scale by animateFloatAsState(targetValue = if (pressEffect && pressed) 0.96f else 1f, label = "btnScale")
+                    val scale by animateFloatAsState(targetValue = if (pressKey == "scale" && pressed) 0.96f else 1f, label = "btnScale")
+                    val alpha by animateFloatAsState(targetValue = if (pressKey == "alpha" && pressed) 0.6f else 1f, label = "btnAlpha")
+                    val rotation by animateFloatAsState(targetValue = if (pressKey == "rotate" && pressed) -2f else 0f, label = "btnRot")
 
                     val shape = when (shapeKey) {
                         "pill" -> RoundedCornerShape(50)
@@ -367,8 +370,8 @@ private fun RenderBlock(
                         }
                     }
                                                             val baseMod = Modifier
-                        .graphicsLayer(scaleX = scale, scaleY = scale)
-                        .then(sizeModifier(sizeKey))
+                        .graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha, rotationZ = rotation)
+                        .then(if (!btn.optDouble("heightDp", Double.NaN).isNaN()) Modifier.height(btn.optDouble("heightDp", Double.NaN).toFloat().dp) else sizeModifier(sizeKey))
 
                     Spacer(Modifier.width(6.dp))
                     val contentSlot: @Composable ()->Unit = {
@@ -755,7 +758,7 @@ private fun ButtonRowInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val buttons = block.optJSONArray("buttons") ?: JSONArray().also { block.put("buttons", it) }
@@ -777,7 +780,7 @@ private fun ButtonRowInspector(
             Text("Bottoni", style = MaterialTheme.typography.titleMedium)
             for (i in 0 until buttons.length()) {
                 val btn = buttons.getJSONObject(i)
-                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f))) {
+                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f))) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -809,23 +812,29 @@ private fun ButtonRowInspector(
                             icon.value = it; btn.put("icon", it); onLive()
                         })
 
-                        ExposedDropdown(value = style, label = "style", options = listOf("primary","tonal","outlined","text")) {
-                            style = it; btn.put("style", it); onLive()
-                        }
+                                                }
                         ExposedDropdown(value = size,  label = "size",  options = listOf("sm","md","lg")) {
                             size = it; btn.put("size", it); onLive()
                         }
                         ExposedDropdown(value = shape, label = "shape", options = listOf("rounded","pill","cut")) {
                             shape = it; btn.put("shape", it); onLive()
                         }
-                        StepperField(label = "corner (dp)", state = cornerStr, step = 2.0) { v ->
+                        StepperField(label = "corner (dp)", state = cornerStr, step = 1.0) { v ->
                             btn.put("corner", v); onLive()
                         }
+                        // Altezza bottone (dp)
+                        var heightStr by remember { mutableStateOf(btn.optDouble("heightDp", Double.NaN).let { if (it.isNaN()) "" else it.toInt().toString() }) }
+                        ExposedDropdown(value = if (heightStr.isBlank()) "(default)" else heightStr, label = "button height (dp)", options = listOf("(default)","28","32","36","40","44","48","56","64")) { sel ->
+                            val v = if (sel == "(default)") "" else sel
+                            heightStr = v
+                            if (v.isBlank()) btn.remove("heightDp") else btn.put("heightDp", v.toInt())
+                            onLive()
+                        }
+
+
 
                         // Colori
-                        ColorRolePicker(value = tint, label = "tint (ruolo)", options = listOf("default","success","warning","error")) {
-                            tint = it; btn.put("tint", it); onLive()
-                        }
+                                                }
                         NamedColorPicker(
                             currentHexOrEmpty = customColor.value,
                             label = "customColor",
@@ -836,7 +845,7 @@ private fun ButtonRowInspector(
                             }
                         )
 
-                        ExposedDropdown(value = press, label = "pressEffect", options = listOf("none","scale")) {
+                        ExposedDropdown(value = press, label = "pressEffect", options = listOf("none","scale","alpha","rotate","lift")) {
                             press = it; btn.put("pressEffect", it); onLive()
                         }
                         OutlinedTextField(value = action.value, onValueChange = {
@@ -877,7 +886,7 @@ private fun SectionHeaderInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val title = remember { mutableStateOf(block.optString("title","")) }
@@ -913,17 +922,8 @@ private fun SectionHeaderInspector(
                 align = it; block.put("align", it); onLive()
             }
 
-            // Stepper +/- per spaziature e padding
-            StepperField("spaceTop (dp)", spaceTop, 2.0) { v -> block.put("spaceTop", v); onLive() }
-            StepperField("spaceBottom (dp)", spaceBottom, 2.0) { v -> block.put("spaceBottom", v); onLive() }
-            StepperField("padStart (dp)", padStart, 2.0) { v -> block.put("padStart", v); onLive() }
-            StepperField("padEnd (dp)", padEnd, 2.0) { v -> block.put("padEnd", v); onLive() }
-
             // Colore testo
-            ColorRolePicker(value = textColor, label = "textColor (ruolo o #RRGGBB)", options = COLOR_ROLES_WITH_EMPTY) {
-                textColor = it
-                if (it.isBlank()) block.remove("textColor") else block.put("textColor", it)
-                onLive()
+                            onLive()
             }
 
             // Tipografia granulare
@@ -933,44 +933,13 @@ private fun SectionHeaderInspector(
             var fontFamily by remember { mutableStateOf(block.optString("fontFamily","")) }
             var fontWeight by remember { mutableStateOf(block.optString("fontWeight","")) }
 
-            StepperField("textSize (sp)", textSize, 1.0) { v ->
-                if (v <= 0.0) { block.remove("textSizeSp") } else { block.put("textSizeSp", v) }
+            ExposedDropdown(value = if (textSize.value.isBlank()) "(default)" else textSize.value, label = "text size (sp)", options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24","28","32","36")) {
+                val v = if (it == "(default)") "" else it
+                textSize.value = v
+                if (v.isBlank()) { block.remove("textSizeSp") } else { block.put("textSizeSp", v.toDouble()) }
                 onLive()
             }
-
-            ExposedDropdown(
-                value = if (fontFamily.isBlank()) "(default)" else fontFamily,
-                label = "fontFamily",
-                options = listOf("(default)","serif","monospace","cursive")
-            ) { sel ->
-                val v = if (sel == "(default)") "" else sel
-                fontFamily = v
-                if (v.isBlank()) block.remove("fontFamily") else block.put("fontFamily", v)
-                onLive()
-            }
-
-            ExposedDropdown(
-                value = if (fontWeight.isBlank()) "(default)" else fontWeight,
-                label = "fontWeight",
-                options = listOf("(default)","w300","w400","w500","w600","w700")
-            ) { sel ->
-                val v = if (sel == "(default)") "" else sel
-                fontWeight = v
-                if (v.isBlank()) block.remove("fontWeight") else block.put("fontWeight", v)
-                onLive()
-            }
-
-            // Palette colori nominali
-            NamedColorPicker(
-                currentHexOrEmpty = textColor,
-                label = "textColor (palette nomi)",
-                onPickHex = { hex ->
-                    textColor = hex
-                    if (hex.isBlank()) block.remove("textColor") else block.put("textColor", hex)
-                    onLive()
-                }
-            )
-            Divider()
+Divider()
             Text("Azione al tap", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(value = clickAction.value, onValueChange = {
                 clickAction.value = it; block.put("clickActionId", it); onLive()
@@ -1003,7 +972,7 @@ private fun SpacerInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val height = remember { mutableStateOf(block.optDouble("height", 8.0).toString()) }
@@ -1035,7 +1004,7 @@ private fun DividerInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
@@ -1071,7 +1040,7 @@ private fun DividerVInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
@@ -1105,7 +1074,7 @@ private fun CardInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         var variant by remember { mutableStateOf(block.optString("variant","elevated")) }
@@ -1143,7 +1112,7 @@ private fun FabInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","play_arrow")) }
@@ -1197,7 +1166,7 @@ private fun IconButtonInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","more_vert")) }
@@ -1847,7 +1816,7 @@ private fun ListInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val textSize = remember { mutableStateOf(
@@ -1869,7 +1838,7 @@ private fun ListInspector(
             ExposedDropdown(
                 value = if (fontFamily.isBlank()) "(default)" else fontFamily,
                 label = "fontFamily",
-                options = listOf("(default)","serif","monospace","cursive")
+                options = listOf("(default)","sans","serif","monospace","cursive")
             ) { sel ->
                 val v = if (sel == "(default)") "" else sel
                 fontFamily = v
@@ -1923,7 +1892,7 @@ private fun ChipRowInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
         scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val textSize = remember { mutableStateOf(
@@ -1945,7 +1914,7 @@ private fun ChipRowInspector(
             ExposedDropdown(
                 value = if (fontFamily.isBlank()) "(default)" else fontFamily,
                 label = "fontFamily",
-                options = listOf("(default)","serif","monospace","cursive")
+                options = listOf("(default)","sans","serif","monospace","cursive")
             ) { sel ->
                 val v = if (sel == "(default)") "" else sel
                 fontFamily = v
