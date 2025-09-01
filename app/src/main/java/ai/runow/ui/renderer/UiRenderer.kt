@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -77,7 +78,7 @@ fun UiScreen(
             Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(
                     start = 16.dp, end = 16.dp, top = 16.dp,
                     bottom = if (designerMode) overlayHeightDp + 32.dp else 16.dp
@@ -122,8 +123,6 @@ fun UiScreen(
                     selectedPath = null
                     tick++
                 },
-                dispatch = dispatch,
-                uiState = uiState,
                 onOverlayHeight = { overlayHeightPx = it }
             )
         }
@@ -600,7 +599,7 @@ private fun BoxScope.DesignerOverlay(
     onSaveDraft: () -> Unit,
     onPublish: () -> Unit,
     onReset: () -> Unit,
-    dispatch: (String) -> Unit, uiState: MutableMap<String, Any>, onOverlayHeight: (Int) -> Unit
+    onOverlayHeight: (Int) -> Unit
 ) {
     var showInspector by remember { mutableStateOf(false) }
     val selectedBlock = selectedPath?.let { jsonAtPath(layout, it) as? JSONObject }
@@ -757,14 +756,14 @@ private fun ButtonRowInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-        scrimColor = Color.Transparent
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val buttons = block.optJSONArray("buttons") ?: JSONArray().also { block.put("buttons", it) }
         Column(
             Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -779,7 +778,7 @@ private fun ButtonRowInspector(
             Text("Bottoni", style = MaterialTheme.typography.titleMedium)
             for (i in 0 until buttons.length()) {
                 val btn = buttons.getJSONObject(i)
-                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f))) {
+                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.45f))) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -879,8 +878,8 @@ private fun SectionHeaderInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-        scrimColor = Color.Transparent
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val title = remember { mutableStateOf(block.optString("title","")) }
         val subtitle = remember { mutableStateOf(block.optString("subtitle","")) }
@@ -896,7 +895,7 @@ private fun SectionHeaderInspector(
         Column(
             Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1005,8 +1004,8 @@ private fun SpacerInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-        scrimColor = Color.Transparent
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val height = remember { mutableStateOf(block.optDouble("height", 8.0).toString()) }
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1037,8 +1036,8 @@ private fun DividerInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-        scrimColor = Color.Transparent
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
         val padStart = remember { mutableStateOf(block.optDouble("padStart", 0.0).toString()) }
@@ -1073,8 +1072,8 @@ private fun DividerVInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-        scrimColor = Color.Transparent
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
         val height = remember { mutableStateOf(block.optDouble("height", 24.0).toString()) }
@@ -1107,8 +1106,8 @@ private fun CardInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-        scrimColor = Color.Transparent
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         var variant by remember { mutableStateOf(block.optString("variant","elevated")) }
         val action = remember { mutableStateOf(block.optString("clickActionId","")) }
@@ -1145,8 +1144,8 @@ private fun FabInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-        scrimColor = Color.Transparent
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","play_arrow")) }
         val label = remember { mutableStateOf(block.optString("label","Start")) }
@@ -1199,8 +1198,8 @@ private fun IconButtonInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-        scrimColor = Color.Transparent
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val icon = remember { mutableStateOf(block.optString("icon","more_vert")) }
         val action = remember { mutableStateOf(block.optString("actionId","")) }
@@ -1849,8 +1848,8 @@ private fun ListInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-        scrimColor = Color.Transparent
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val textSize = remember { mutableStateOf(
             block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
@@ -1859,7 +1858,7 @@ private fun ListInspector(
         var fontWeight by remember { mutableStateOf(block.optString("fontWeight","")) }
         var textColor  by remember { mutableStateOf(block.optString("textColor","")) }
 
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+        Column(Modifier.fillMaxWidth().verticalScroll(scrollState).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
             Text("List - Proprietà testo", style = MaterialTheme.typography.titleMedium)
@@ -1925,8 +1924,8 @@ private fun ChipRowInspector(
 
     ModalBottomSheet(
         onDismissRequest = { closeCancel() },
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-        scrimColor = Color.Transparent
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        scrimColor = Color.Black.copy(alpha = 0.32f)
     ) {
         val textSize = remember { mutableStateOf(
             block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
@@ -1935,7 +1934,7 @@ private fun ChipRowInspector(
         var fontWeight by remember { mutableStateOf(block.optString("fontWeight","")) }
         var textColor  by remember { mutableStateOf(block.optString("textColor","")) }
 
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+        Column(Modifier.fillMaxWidth().verticalScroll(scrollState).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
             Text("ChipRow - Proprietà testo", style = MaterialTheme.typography.titleMedium)
@@ -1980,84 +1979,6 @@ private fun ChipRowInspector(
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { closeCancel() }) { Text("Annulla") }
                 Button(onClick = { closeApply() }) { Text("OK") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DockedInspectorShell(
-    layout: JSONObject,
-    path: String,
-    dispatch: (String) -> Unit,
-    uiState: MutableMap<String, Any>,
-    title: String,
-    onApply: () -> Unit,
-    onCancel: () -> Unit,
-    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
-) {
-    val menus = remember(layout) { collectMenus(layout) }
-    val block = remember(layout, path) { jsonAtPath(layout, path) as? JSONObject }
-
-    // FULLSCREEN, nessuno scrim
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color.Transparent,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Column(Modifier.fillMaxSize()) {
-
-            // PREVIEW PINNATA IN ALTO (molto trasparente)
-            Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.06f)) {
-                Column(
-                    Modifier.fillMaxWidth().padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(title, style = MaterialTheme.typography.labelMedium)
-                    if (block != null) {
-                        RenderBlock(
-                            block = block,
-                            dispatch = dispatch,
-                            uiState = uiState,
-                            designerMode = false,     // anteprima pulita
-                            path = path,
-                            menus = menus,
-                            onSelect = { }
-                        )
-                    } else {
-                        Text("Blocco non trovato", color = Color.Red)
-                    }
-                }
-            }
-
-            Divider()
-
-            // PANNELLO IMPOSTAZIONI (senza scrim, molto trasparente)
-            Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.10f)) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Proprietà", style = MaterialTheme.typography.titleMedium)
-                        Row {
-                            TextButton(onClick = onCancel) { Text("Indietro") }
-                            Spacer(Modifier.width(8.dp))
-                            Button(onClick = onApply) { Text("OK") }
-                        }
-                    }
-                    content()
-                    Spacer(Modifier.height(16.dp))
-                }
             }
         }
     }
