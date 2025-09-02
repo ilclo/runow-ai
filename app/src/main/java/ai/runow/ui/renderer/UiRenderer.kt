@@ -836,6 +836,30 @@ private fun BoxScope.DesignerOverlay(
                     val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.MoreHoriz, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Settings, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.MoreHoriz, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
             }
         }
 
@@ -962,7 +986,12 @@ private fun BoxScope.DesignerOverlay(
 						"Progress" -> ProgressInspectorPanel(working, onChange = bumpPreview)
 						"Alert"    -> AlertInspectorPanel(working, onChange = bumpPreview)
 						"Image"    -> ImageInspectorPanel(working, onChange = bumpPreview)
-						else -> Text("Inspector non ancora implementato per ${working.optString("type")}")
+						                        "ChipRow"     -> ChipRowInspectorPanel(working, onChange = bumpPreview)
+                        "Slider"      -> SliderInspectorPanel(working, onChange = bumpPreview)
+                        "Toggle"      -> ToggleInspectorPanel(working, onChange = bumpPreview)
+                        "Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
+                        "MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
+else -> Text("Inspector non ancora implementato per ${working.optString("type")}")
 					}
 					Spacer(Modifier.height(8.dp))
 					Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
