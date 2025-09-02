@@ -745,7 +745,7 @@ private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String,
 }
 
 /* =========================
- * DESIGNER OVERLAY
+ * DESIGNER OVERLAYY
  * ========================= */
 
 @Composable
