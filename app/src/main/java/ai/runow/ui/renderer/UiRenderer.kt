@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -1049,10 +1050,10 @@ private fun ButtonRowInspectorBody(block: JSONObject, onLive: () -> Unit) {
                 }
 
                 // Solo customColor (override completo, con palette)
-                NamedColorPicker(
-                    currentHexOrEmpty = customColor.value,
-                    label = "customColor (palette)",
-                    onPickHex = { hex ->
+                NamedColorPickerPlus(
+                    current = customColor.value,
+                    label = "customColor (palette)", allowRoles = true,
+                    onPick = { hex ->
                         customColor.value = hex
                         if (hex.isBlank()) btn.remove("customColor") else btn.put("customColor", hex)
                         onLive()
@@ -1287,10 +1288,10 @@ private fun ListInspectorBody(block: JSONObject, onLive: () -> Unit) {
         onLive()
     }
 
-    NamedColorPicker(
-        currentHexOrEmpty = textColor,
+    NamedColorPickerPlus(
+        current = textColor,
         label = "textColor",
-        onPickHex = { hex ->
+        onPick = { hex ->
             textColor = hex
             if (hex.isBlank()) block.remove("textColor") else block.put("textColor", hex)
             onLive()
@@ -1336,10 +1337,10 @@ private fun ChipRowInspectorBody(block: JSONObject, onLive: () -> Unit) {
         onLive()
     }
 
-    NamedColorPicker(
-        currentHexOrEmpty = textColor,
+    NamedColorPickerPlus(
+        current = textColor,
         label = "textColor",
-        onPickHex = { hex ->
+        onPick = { hex ->
             textColor = hex
             if (hex.isBlank()) block.remove("textColor") else block.put("textColor", hex)
             onLive()
@@ -1549,7 +1550,13 @@ private fun StepperField(
 
 @Composable
 private fun NamedIconEx(name: String?, contentDescription: String?) {
-    val image = when (name) {
+        val __ctx = LocalContext.current
+    if (name?.startsWith("res:") == true) {
+        val resName = name.removePrefix("res:")
+        val id = __ctx.resources.getIdentifier(resName, "drawable", __ctx.packageName)
+        if (id != 0) { Icon(painterResource(id), contentDescription); return }
+    }
+val image = when (name) {
         "settings" -> Icons.Filled.Settings
         "more_vert" -> Icons.Filled.MoreVert
         "tune" -> Icons.Filled.Tune
@@ -1629,7 +1636,7 @@ private val NAMED_COLORS = linkedMapOf(
 )
 
 @Composable
-private fun NamedColorPicker(
+private fun NamedColorPickerPlus(
     currentHexOrEmpty: String,
     label: String,
     onPickHex: (String) -> Unit
@@ -1923,6 +1930,7 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
         "serif" -> FontFamily.Serif
         "monospace" -> FontFamily.Monospace
         "cursive" -> FontFamily.Cursive
+        "sans" -> FontFamily.SansSerif
         else -> null
     }
     if (family != null) st = st.copy(fontFamily = family)
@@ -2029,10 +2037,10 @@ private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
 
                 // Solo customColor con palette
                 val customColor = remember { mutableStateOf(btn.optString("customColor", "")) }
-                NamedColorPicker(
-                    currentHexOrEmpty = customColor.value,
+                NamedColorPickerPlus(
+                    current = customColor.value,
                     label = "customColor (palette)",
-                    onPickHex = { hex ->
+                    onPick = { hex ->
                         customColor.value = hex
                         if (hex.isBlank()) btn.remove("customColor") else btn.put("customColor", hex)
                         onChange()
@@ -2137,5 +2145,89 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
         textSize.value = v
         if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
         onChange()
+    }
+}
+
+/* ---- Extended palette & color picker with Material roles ---- */
+private val NAMED_SWATCHES = linkedMapOf(
+    // Neutri
+    "White" to 0xFFFFFFFF, "Black" to 0xFF000000,
+    "Gray50" to 0xFFFAFAFA, "Gray100" to 0xFFF5F5F5, "Gray200" to 0xFFEEEEEE,
+    "Gray300" to 0xFFE0E0E0, "Gray400" to 0xFFBDBDBD, "Gray500" to 0xFF9E9E9E,
+    "Gray600" to 0xFF757575, "Gray700" to 0xFF616161, "Gray800" to 0xFF424242, "Gray900" to 0xFF212121,
+
+    // Material-like
+    "Red" to 0xFFE53935, "RedDark" to 0xFFC62828, "RedLight" to 0xFFEF5350,
+    "Pink" to 0xFFD81B60, "PinkDark" to 0xFFC2185B, "PinkLight" to 0xFFF06292,
+    "Purple" to 0xFF8E24AA, "PurpleDark" to 0xFF6A1B9A, "PurpleLight" to 0xFFBA68C8,
+    "DeepPurple" to 0xFF5E35B1, "Indigo" to 0xFF3949AB,
+    "Blue" to 0xFF1E88E5, "BlueDark" to 0xFF1565C0, "BlueLight" to 0xFF64B5F6,
+    "LightBlue" to 0xFF039BE5, "Cyan" to 0xFF00ACC1,
+    "Teal" to 0xFF00897B, "TealLight" to 0xFF26A69A,
+    "Green" to 0xFF43A047, "GreenDark" to 0xFF2E7D32, "GreenLight" to 0xFF66BB6A,
+    "LightGreen" to 0xFF7CB342, "Lime" to 0xFFC0CA33,
+    "Yellow" to 0xFFFDD835, "Amber" to 0xFFFFB300,
+    "Orange" to 0xFFFB8C00, "DeepOrange" to 0xFFF4511E,
+    "Brown" to 0xFF6D4C41, "BlueGrey" to 0xFF546E7A
+)
+
+private val MATERIAL_ROLES = listOf(
+    "primary","secondary","tertiary","error","surface",
+    "onPrimary","onSecondary","onTertiary","onSurface","onError"
+)
+
+@Composable
+private fun NamedColorPickerPlus(
+    current: String,
+    label: String,
+    allowRoles: Boolean = false,
+    onPick: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val display = if (current.isBlank()) "(default)" else current
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = display,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (allowRoles) {
+                val cs = MaterialTheme.colorScheme
+                fun roleColor(role: String): Color = when (role) {
+                    "primary","onPrimary"   -> cs.primary
+                    "secondary","onSecondary" -> cs.secondary
+                    "tertiary","onTertiary" -> cs.tertiary
+                    "error","onError"       -> cs.error
+                    "surface","onSurface"   -> cs.surface
+                    else -> cs.primary
+                }
+                MATERIAL_ROLES.forEach { role ->
+                    val c = roleColor(role)
+                    DropdownMenuItem(
+                        leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
+                        text = { Text(role) },
+                        onClick = { onPick(role); expanded = false }
+                    )
+                }
+                Divider()
+            }
+            NAMED_SWATCHES.forEach { (name, argb) ->
+                val c = Color(argb)
+                DropdownMenuItem(
+                    leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
+                    text = { Text(name) },
+                    onClick = {
+                        val hex = "#%06X".format(0xFFFFFF and argb.toInt())
+                        onPick(hex); expanded = false
+                    }
+                )
+            }
+            DropdownMenuItem(text = { Text("(default)") }, onClick = { onPick(""); expanded = false })
+        }
     }
 }
