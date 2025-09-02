@@ -51,7 +51,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
 
-
 /* =========================
  * ENTRYPOINT
  * ========================= */
@@ -155,7 +154,7 @@ private fun RenderBlock(
 ) {
     val borderSelected = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
 
-    // wrapper con overlay selezione (in DesignerMode cattura il tap su tutta l'area)
+    // wrapper con overlay selezione
     @Composable
     fun Wrapper(content: @Composable () -> Unit) {
         if (designerMode) {
@@ -175,7 +174,6 @@ private fun RenderBlock(
                         content()
                     }
                 }
-                // Overlay "trasparente" per selezionare sempre il blocco
                 Box(Modifier.matchParentSize().clickable(onClick = { onSelect(path) }))
             }
         } else {
@@ -184,6 +182,74 @@ private fun RenderBlock(
     }
 
     when (block.optString("type")) {
+        // ---------- PAGE ----------
+        "Page" -> Wrapper {
+            val appBar = block.optJSONObject("appBar")
+            val contentObj = block.optJSONObject("content") ?: JSONObject()
+            val bottom = block.optJSONObject("bottomBar")
+            val contentBlocks = contentObj.optJSONArray("blocks") ?: JSONArray()
+            val scrollable = contentObj.optBoolean("scrollable", true)
+
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // top
+                if (appBar != null) {
+                    val title = appBar.optString("title","")
+                    val actions = appBar.optJSONArray("actions") ?: JSONArray()
+                    Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(10.dp)) {
+                        TopAppBar(
+                            title = { Text(title) },
+                            actions = {
+                                for (i in 0 until actions.length()) {
+                                    val a = actions.optJSONObject(i) ?: continue
+                                    val icon = a.optString("icon","")
+                                    val act = a.optString("actionId","")
+                                    IconButton(onClick = { if (act.isNotBlank()) dispatch(act) }) {
+                                        NamedIconEx(icon, null)
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+
+                // content
+                val contentMod = if (scrollable)
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                else
+                    Modifier.fillMaxWidth()
+
+                Column(contentMod, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    for (i in 0 until contentBlocks.length()) {
+                        val b = contentBlocks.optJSONObject(i) ?: continue
+                        val p2 = "$path/content/blocks/$i"
+                        RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                    }
+                }
+
+                // bottom
+                if (bottom != null) {
+                    val items = bottom.optJSONArray("items") ?: JSONArray()
+                    if (items.length() > 0) {
+                        NavigationBar {
+                            for (i in 0 until items.length()) {
+                                val it = items.optJSONObject(i) ?: continue
+                                val icon = it.optString("icon","")
+                                val lbl  = it.optString("label","")
+                                val act  = it.optString("actionId","")
+                                NavigationBarItem(
+                                    selected = false,
+                                    onClick = { if (act.isNotBlank()) dispatch(act) },
+                                    icon = { NamedIconEx(icon, null) },
+                                    label = if (lbl.isNotBlank()) ({ Text(lbl, maxLines = 1) }) else null
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---------- Altri blocchi già esistenti ----------
         "AppBar" -> Wrapper {
             Text(block.optString("title", ""), style = MaterialTheme.typography.titleLarge)
             val actions = block.optJSONArray("actions") ?: JSONArray()
@@ -198,7 +264,6 @@ private fun RenderBlock(
                 }
             }
         }
-
         "IconButton" -> Wrapper {
             val iconName = block.optString("icon", "more_vert")
             val openMenuId = block.optString("openMenuId", "")
@@ -235,7 +300,6 @@ private fun RenderBlock(
                 }
             }
         }
-
         "Progress" -> Wrapper {
             val label = block.optString("label","")
             val value = block.optDouble("value", 0.0).toFloat().coerceIn(0f, 100f)
@@ -256,7 +320,6 @@ private fun RenderBlock(
                 }
             }
         }
-
         "Alert" -> Wrapper {
             val severity = block.optString("severity","info")
             val (bg, fg) = when (severity) {
@@ -287,7 +350,6 @@ private fun RenderBlock(
                 }
             }
         }
-
         "Image" -> Wrapper {
             val source = block.optString("source","")
             val height = block.optDouble("heightDp", 160.0).toFloat().dp
@@ -296,15 +358,11 @@ private fun RenderBlock(
                 "crop" -> ContentScale.Crop
                 else   -> ContentScale.Fit
             }
-
-            // Solo risorse locali: res:<nome>
             val resId = if (source.startsWith("res:"))
                 LocalContext.current.resources.getIdentifier(source.removePrefix("res:"), "drawable", LocalContext.current.packageName)
             else 0
-
             Surface(shape = RoundedCornerShape(corner), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
                 if (resId != 0) {
-                    // Material3 non include coil: mostriamo l’immagine di drawable
                     androidx.compose.foundation.Image(
                         painter = painterResource(resId),
                         contentDescription = null,
@@ -312,14 +370,12 @@ private fun RenderBlock(
                         contentScale = scale
                     )
                 } else {
-                    // Placeholder
                     Box(Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
                         Text("Image: ${if (source.isBlank()) "(not set)" else source}", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
         }
-
         "Card" -> Wrapper {
             val variant = block.optString("variant", "elevated")
             val clickAction = block.optString("clickActionId", "")
@@ -335,27 +391,20 @@ private fun RenderBlock(
             }
             val mod = Modifier
                 .fillMaxWidth()
-                .then(
-                    if (clickAction.isNotBlank() && !designerMode)
-                        Modifier.clickable(onClick = { dispatch(clickAction) })
-                    else Modifier
-                )
+                .then(if (clickAction.isNotBlank() && !designerMode) Modifier.clickable(onClick = { dispatch(clickAction) }) else Modifier)
 
             when (variant) {
                 "outlined" -> OutlinedCard(mod) { Column(Modifier.padding(12.dp)) { inner() } }
-                "filled" -> Card(mod) { Column(Modifier.padding(12.dp)) { inner() } }
-                else -> ElevatedCard(mod) { Column(Modifier.padding(12.dp)) { inner() } }
+                "filled"   -> Card(mod)       { Column(Modifier.padding(12.dp)) { inner() } }
+                else       -> ElevatedCard(mod){ Column(Modifier.padding(12.dp)) { inner() } }
             }
         }
-
         "Tabs" -> Wrapper {
             val tabs = block.optJSONArray("tabs") ?: JSONArray()
             var idx by remember(path) { mutableStateOf(block.optInt("initialIndex", 0).coerceAtLeast(0)) }
             val count = tabs.length().coerceAtLeast(1)
             if (idx >= count) idx = 0
-            val labels = (0 until count).map {
-                tabs.optJSONObject(it)?.optString("label", "Tab ${it + 1}") ?: "Tab ${it + 1}"
-            }
+            val labels = (0 until count).map { tabs.optJSONObject(it)?.optString("label", "Tab ${it + 1}") ?: "Tab ${it + 1}" }
             TabRow(selectedTabIndex = idx) {
                 labels.forEachIndexed { i, label ->
                     Tab(
@@ -376,7 +425,6 @@ private fun RenderBlock(
                 }
             }
         }
-
         "SectionHeader" -> Wrapper {
             val style = mapTextStyle(block.optString("style", "titleMedium"))
             val align = mapTextAlign(block.optString("align", "start"))
@@ -384,13 +432,7 @@ private fun RenderBlock(
             val textColor = parseColorOrRole(block.optString("textColor", ""))
 
             Column(
-                Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (clickAction.isNotBlank() && !designerMode)
-                            Modifier.clickable { dispatch(clickAction) }
-                        else Modifier
-                    )
+                Modifier.fillMaxWidth().then(if (clickAction.isNotBlank() && !designerMode) Modifier.clickable { dispatch(clickAction) } else Modifier)
             ) {
                 Text(
                     text = block.optString("title", ""),
@@ -411,13 +453,11 @@ private fun RenderBlock(
                 }
             }
         }
-
         "MetricsGrid" -> Wrapper {
             val tiles = block.optJSONArray("tiles") ?: JSONArray()
             val cols = block.optInt("columns", 2).coerceIn(1, 3)
             GridSection(tiles, cols, uiState)
         }
-
         "ButtonRow" -> Wrapper {
             val align = when (block.optString("align")) {
                 "start" -> Arrangement.Start
@@ -544,7 +584,6 @@ private fun RenderBlock(
                 }
             }
         }
-
         "ChipRow" -> Wrapper {
             val chips = block.optJSONArray("chips") ?: JSONArray()
             val isSingle = (0 until chips.length()).any { chips.optJSONObject(it)?.has("value") == true }
@@ -567,9 +606,7 @@ private fun RenderBlock(
                                         ?: LocalContentColor.current
                                 )
                             },
-                            leadingIcon = if (current == v) {
-                                { Icon(Icons.Filled.Check, null) }
-                            } else null
+                            leadingIcon = if (current == v) { { Icon(Icons.Filled.Check, null) } } else null
                         )
                     } else {
                         val current = (uiState[bind] as? Boolean) ?: false
@@ -584,15 +621,12 @@ private fun RenderBlock(
                                         ?: LocalContentColor.current
                                 )
                             },
-                            leadingIcon = if (current) {
-                                { Icon(Icons.Filled.Check, null) }
-                            } else null
+                            leadingIcon = if (current) { { Icon(Icons.Filled.Check, null) } } else null
                         )
                     }
                 }
             }
         }
-
         "Toggle" -> Wrapper {
             val label = block.optString("label", "")
             val bind = block.optString("bind", "")
@@ -603,7 +637,6 @@ private fun RenderBlock(
                 Text(label)
             }
         }
-
         "Slider" -> Wrapper {
             val label = block.optString("label", "")
             val bind = block.optString("bind", "")
@@ -621,7 +654,6 @@ private fun RenderBlock(
                 valueRange = min..max
             )
         }
-
         "List" -> Wrapper {
             val items = block.optJSONArray("items") ?: JSONArray()
             val align = mapTextAlign(block.optString("align", "start"))
@@ -658,7 +690,6 @@ private fun RenderBlock(
                 }
             }
         }
-
         "Carousel" -> Wrapper {
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
@@ -667,7 +698,6 @@ private fun RenderBlock(
                 }
             }
         }
-
         "Fab" -> Wrapper {
             val icon = block.optString("icon", "play_arrow")
             val label = block.optString("label", "")
@@ -689,94 +719,23 @@ private fun RenderBlock(
                 }
             }
         }
-
-        "Divider" -> {
-            val thick = block.optDouble("thickness", 1.0).toFloat().dp
+        "Divider" -> { val thick = block.optDouble("thickness", 1.0).toFloat().dp
             val padStart = block.optDouble("padStart", 0.0).toFloat().dp
             val padEnd = block.optDouble("padEnd", 0.0).toFloat().dp
             Divider(modifier = Modifier.padding(start = padStart, end = padEnd), thickness = thick)
         }
-
-        "DividerV" -> {
-            val thickness = block.optDouble("thickness", 1.0).toFloat().dp
+        "DividerV" -> { val thickness = block.optDouble("thickness", 1.0).toFloat().dp
             val height = block.optDouble("height", 24.0).toFloat().dp
             VerticalDivider(modifier = Modifier.height(height), thickness = thickness)
         }
-
-        
-            "Page" -> Wrapper {
-                val top = block.optJSONArray("top") ?: JSONArray()
-                val bottom = block.optJSONArray("bottom") ?: JSONArray()
-                val contentArr = block.optJSONArray("content") ?: JSONArray()
-                val fab = block.optJSONObject("fab")
-                val scroll = block.optBoolean("scroll", true)
-
-                Scaffold(
-                    topBar = {
-                        if (top.length() > 0) {
-                            Column {
-                                for (i in 0 until top.length()) {
-                                    val child = top.optJSONObject(i) ?: continue
-                                    RenderBlock(child, dispatch, uiState, designerMode, "$path/top/$i", menus, onSelect)
-                                }
-                            }
-                        }
-                    },
-                    bottomBar = {
-                        if (bottom.length() > 0) {
-                            Column {
-                                for (i in 0 until bottom.length()) {
-                                    val child = bottom.optJSONObject(i) ?: continue
-                                    RenderBlock(child, dispatch, uiState, designerMode, "$path/bottom/$i", menus, onSelect)
-                                }
-                            }
-                        }
-                    },
-                    floatingActionButton = {
-                        if (fab != null) {
-                            RenderBlock(fab, dispatch, uiState, designerMode, "$path/fab", menus, onSelect)
-                        }
-                    }
-                ) { innerPadding ->
-                    val baseMod = Modifier.fillMaxSize().padding(innerPadding)
-                    if (scroll) {
-                        Column(
-                            baseMod.verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            for (i in 0 until contentArr.length()) {
-                                val child = contentArr.optJSONObject(i) ?: continue
-                                RenderBlock(child, dispatch, uiState, designerMode, "$path/content/$i", menus, onSelect)
-                            }
-                        }
-                    } else {
-                        Column(
-                            baseMod,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            for (i in 0 until contentArr.length()) {
-                                val child = contentArr.optJSONObject(i) ?: continue
-                                RenderBlock(child, dispatch, uiState, designerMode, "$path/content/$i", menus, onSelect)
-                            }
-                        }
-                    }
-                }
-            }
-"Spacer" -> {
-            Spacer(Modifier.height((block.optDouble("height", 8.0)).toFloat().dp))
-        }
-
+        "Spacer" -> { Spacer(Modifier.height((block.optDouble("height", 8.0)).toFloat().dp)) }
         "Menu" -> {
             if (designerMode) {
                 ElevatedCard {
-                    Text(
-                        "Menu: ${block.optString("id")} (${block.optJSONArray("items")?.length() ?: 0} voci)",
-                        Modifier.padding(8.dp)
-                    )
+                    Text("Menu: ${block.optString("id")} (${block.optJSONArray("items")?.length() ?: 0} voci)", Modifier.padding(8.dp))
                 }
             }
         }
-
         else -> {
             if (designerMode) {
                 Surface(tonalElevation = 1.dp) {
@@ -858,6 +817,12 @@ private fun BoxScope.DesignerOverlay(
             ) {
                 Text("Palette:", style = MaterialTheme.typography.labelLarge)
 
+                // NEW: Page
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Home, null); Spacer(Modifier.width(6.dp)); Text("Page") }
+
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
                     setSelectedPath(path); onLayoutChange()
@@ -919,14 +884,7 @@ private fun BoxScope.DesignerOverlay(
                 }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
 
                 FilledTonalButton(onClick = {
-                    val path = 
-                        ElevatedCard(onClick = {
-                            val p = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
-                            setSelectedPath(p); onLayoutChange()
-                        }) { Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.ViewDay, null); Spacer(Modifier.width(8.dp)); Text("Page")
-                        } }
-insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
 
@@ -955,9 +913,7 @@ insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
         // Selezione + Azioni salvataggio
         Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
             Column(
-                Modifier
-                    .padding(10.dp)
-                    .fillMaxWidth(),
+                Modifier.padding(10.dp).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
@@ -1069,18 +1025,18 @@ insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     when (working.optString("type")) {
-                        "ButtonRow"   -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
+                        "ButtonRow"     -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
                         "SectionHeader" -> SectionHeaderInspectorPanel(working, onChange = bumpPreview)
-                        "Progress"    -> ProgressInspectorPanel(working, onChange = bumpPreview)
-                        "Alert"       -> AlertInspectorPanel(working, onChange = bumpPreview)
-                        "Image"       -> ImageInspectorPanel(working, onChange = bumpPreview)
-                        "ChipRow"     -> ChipRowInspectorPanel(working, onChange = bumpPreview)
-                        "Slider"      -> SliderInspectorPanel(working, onChange = bumpPreview)
-                        "Toggle"      -> ToggleInspectorPanel(working, onChange = bumpPreview)
-                        "Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
-                        "MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
-                        "List"        -> ListInspectorPanel(working, onChange = bumpPreview)
-                        else          -> Text("Inspector non ancora implementato per ${working.optString("type")}")
+                        "Progress"      -> ProgressInspectorPanel(working, onChange = bumpPreview)
+                        "Alert"         -> AlertInspectorPanel(working, onChange = bumpPreview)
+                        "Image"         -> ImageInspectorPanel(working, onChange = bumpPreview)
+                        "ChipRow"       -> ChipRowInspectorPanel(working, onChange = bumpPreview)
+                        "Slider"        -> SliderInspectorPanel(working, onChange = bumpPreview)
+                        "Toggle"        -> ToggleInspectorPanel(working, onChange = bumpPreview)
+                        "Tabs"          -> TabsInspectorPanel(working, onChange = bumpPreview)
+                        "MetricsGrid"   -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
+                        "List"          -> ListInspectorPanel(working, onChange = bumpPreview)
+                        else            -> Text("Inspector non ancora implementato per ${working.optString("type")}")
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1866,7 +1822,6 @@ private fun parseColorOrRole(value: String?): Color? {
     if (value.isNullOrBlank()) return null
     val v = value.trim()
 
-    // Hex
     if (v.startsWith("#") && (v.length == 7 || v.length == 9)) {
         return try { Color(android.graphics.Color.parseColor(v)) } catch (_: Exception) { null }
     }
@@ -1888,15 +1843,12 @@ private fun parseColorOrRole(value: String?): Color? {
 }
 
 private val NAMED_SWATCHES = linkedMapOf(
-    // Neutri
     "White" to 0xFFFFFFFF, "Black" to 0xFF000000,
     "Gray50" to 0xFFFAFAFA, "Gray100" to 0xFFF5F5F5, "Gray200" to 0xFFEEEEEE,
     "Gray300" to 0xFFE0E0E0, "Gray400" to 0xFFBDBDBD, "Gray500" to 0xFF9E9E9E,
     "Gray600" to 0xFF757575, "Gray700" to 0xFF616161, "Gray800" to 0xFF424242, "Gray900" to 0xFF212121,
-
-    // Material-like
     "Red" to 0xFFE53935, "RedDark" to 0xFFC62828, "RedLight" to 0xFFEF5350,
-    "Pink" to 0xFFD81B60, "PinkDark" to 0xFFC2185B, "PinkLight" to 0xFFF06292,
+    "Pink" to 0xFFD81B60, "PinkDark" to 0xXC2185B, "PinkLight" to 0xFFF06292,
     "Purple" to 0xFF8E24AA, "PurpleDark" to 0xFF6A1B9A, "PurpleLight" to 0xFFBA68C8,
     "DeepPurple" to 0xFF5E35B1, "Indigo" to 0xFF3949AB,
     "Blue" to 0xFF1E88E5, "BlueDark" to 0xFF1565C0, "BlueLight" to 0xFF64B5F6,
@@ -2232,6 +2184,18 @@ private fun newList() = JSONObject(
     """.trimIndent()
 )
 
+/** NEW: blueprint per Page */
+private fun newPage() = JSONObject(
+    """
+    {
+      "type":"Page",
+      "appBar": { "title":"Nuova pagina", "actions":[ {"icon":"settings","actionId":"nav:settings"} ] },
+      "content": { "scrollable": true, "blocks":[ {"type":"SectionHeader","title":"Contenuto","style":"titleSmall","align":"start"} ] },
+      "bottomBar": { "items":[ {"icon":"home","label":"Home","actionId":"home"} ] }
+    }
+    """.trimIndent()
+)
+
 /* =========================
  * TEXT STYLE OVERRIDES
  * ========================= */
@@ -2264,31 +2228,3 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
 
     return st
 }
-
-private fun newPage(): JSONObject = JSONObject(
-    """
-    {
-      "type":"Page",
-      "scroll": true,
-      "top": [],
-      "content": [
-        { "type":"SectionHeader", "title":"Nuova pagina", "subtitle":"Sottotitolo", "align":"center" }
-      ],
-      "bottom": []
-    }
-    """.trimIndent()
-)
-
-private fun newPage(): JSONObject = JSONObject(
-    """
-    {
-      "type":"Page",
-      "scroll": true,
-      "top": [],
-      "content": [
-        { "type":"SectionHeader", "title":"Nuova pagina", "subtitle":"Sottotitolo", "align":"center" }
-      ],
-      "bottom": []
-    }
-    """.trimIndent()
-)
