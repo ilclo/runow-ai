@@ -1848,7 +1848,7 @@ private val NAMED_SWATCHES = linkedMapOf(
     "Gray300" to 0xFFE0E0E0, "Gray400" to 0xFFBDBDBD, "Gray500" to 0xFF9E9E9E,
     "Gray600" to 0xFF757575, "Gray700" to 0xFF616161, "Gray800" to 0xFF424242, "Gray900" to 0xFF212121,
     "Red" to 0xFFE53935, "RedDark" to 0xFFC62828, "RedLight" to 0xFFEF5350,
-    "Pink" to 0xFFD81B60, "PinkDark" to 0xXC2185B, "PinkLight" to 0xFFF06292,
+    "Pink" to 0xFFD81B60, "PinkDark" to 0xFFC2185B, "PinkLight" to 0xFFF06292,
     "Purple" to 0xFF8E24AA, "PurpleDark" to 0xFF6A1B9A, "PurpleLight" to 0xFFBA68C8,
     "DeepPurple" to 0xFF5E35B1, "Indigo" to 0xFF3949AB,
     "Blue" to 0xFF1E88E5, "BlueDark" to 0xFF1565C0, "BlueLight" to 0xFF64B5F6,
