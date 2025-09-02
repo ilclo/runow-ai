@@ -2,8 +2,6 @@
 
 package ai.runow.ui.renderer
 
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -862,31 +860,6 @@ private fun BoxScope.DesignerOverlay(
                     val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
-				
-				FilledTonalButton(onClick = {
-					val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
-					setSelectedPath(path); onLayoutChange()
-				}) { Icon(Icons.Filled.MoreHoriz, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
-
-				FilledTonalButton(onClick = {
-					val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
-					setSelectedPath(path); onLayoutChange()
-				}) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
-
-				FilledTonalButton(onClick = {
-					val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
-					setSelectedPath(path); onLayoutChange()
-				}) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
-
-				FilledTonalButton(onClick = {
-					val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
-					setSelectedPath(path); onLayoutChange()
-				}) { Icon(Icons.Filled.Settings, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
-
-				FilledTonalButton(onClick = {
-					val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
-					setSelectedPath(path); onLayoutChange()
-				}) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
             }
         }
 
@@ -1013,12 +986,11 @@ private fun BoxScope.DesignerOverlay(
 						"Progress" -> ProgressInspectorPanel(working, onChange = bumpPreview)
 						"Alert"    -> AlertInspectorPanel(working, onChange = bumpPreview)
 						"Image"    -> ImageInspectorPanel(working, onChange = bumpPreview)
-						"Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
 						"ChipRow"     -> ChipRowInspectorPanel(working, onChange = bumpPreview)
-						"Slider"      -> SliderInspectorPanel(working, onChange = bumpPreview)
-						"Toggle"      -> ToggleInspectorPanel(working, onChange = bumpPreview)
-						"MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
-
+                        "Slider"      -> SliderInspectorPanel(working, onChange = bumpPreview)
+                        "Toggle"      -> ToggleInspectorPanel(working, onChange = bumpPreview)
+                        "Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
+                        "MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
 else -> Text("Inspector non ancora implementato per ${working.optString("type")}")
 					}
 					Spacer(Modifier.height(8.dp))
@@ -2706,40 +2678,6 @@ private fun newImage() = JSONObject(
     """{ "type":"Image", "source":"res:ic_launcher_foreground", "heightDp": 160, "corner": 12, "contentScale":"fit" }"""
 )
 
-private fun newTabs() = JSONObject(
-    """
-    {"type":"Tabs","tabs":[
-      {"label":"Tab 1","blocks":[{"type":"SectionHeader","title":"Contenuto tab 1"}]},
-      {"label":"Tab 2","blocks":[{"type":"SectionHeader","title":"Contenuto tab 2"}]}
-    ]}
-    """.trimIndent()
-)
-
-private fun newChipRow() = JSONObject(
-    """
-    {"type":"ChipRow","chips":[
-      {"label":"Opzione A","bind":"chipA"},
-      {"label":"Opzione B","bind":"chipB"}
-    ]}
-    """.trimIndent()
-)
-
-private fun newSlider() = JSONObject(
-    """{"type":"Slider","label":"Intensità","bind":"level","min":0,"max":10,"step":1,"unit":""}"""
-)
-
-private fun newToggle() = JSONObject(
-    """{"type":"Toggle","label":"Attiva opzione","bind":"toggle_1"}"""
-)
-
-private fun newMetricsGrid() = JSONObject(
-    """
-    {"type":"MetricsGrid","columns":2,"tiles":[
-      {"label":"Pace"}, {"label":"Calorie"}, {"label":"Distanza"}, {"label":"Tempo"}
-    ]}
-    """.trimIndent()
-)
-
 /* =========================
  * NEW INSPECTOR PANELS
  * ========================= */
@@ -2970,4 +2908,8 @@ private fun newMetricsGrid() = JSONObject(
 
 private fun newSlider() = JSONObject(
     """{"type":"Slider","label":"Pace","bind":"pace","min":3.0,"max":7.0,"step":0.1,"unit":" min/km"}""".trimIndent()
+)
+
+private fun newToggle() = JSONObject(
+    """{"type":"Toggle","label":"Attiva opzione","bind":"toggle_1"}"""
 )
