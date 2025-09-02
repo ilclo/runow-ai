@@ -1628,6 +1628,19 @@ private fun bestOnColor(bg: Color): Color {
     return if (l < 0.5f) Color.White else Color.Black
 }
 
+private fun newProgress() = JSONObject(
+    """{ "type":"Progress", "label":"Avanzamento", "value": 40, "color": "primary", "showPercent": true }"""
+)
+
+private fun newAlert() = JSONObject(
+    """{ "type":"Alert", "severity":"info", "title":"Titolo avviso", "message":"Testo dell'avviso", "actionId": "" }"""
+)
+
+private fun newImage() = JSONObject(
+    """{ "type":"Image", "source":"res:ic_launcher_foreground", "heightDp": 160, "corner": 12, "contentScale":"fit" }"""
+)
+
+
 /* =========================
  * JSON UTILS
  * ========================= */
