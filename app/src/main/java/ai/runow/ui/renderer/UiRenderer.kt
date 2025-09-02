@@ -51,15 +51,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
 
-// Scaffold / Drawer
-import androidx.compose.material3.BottomAppBar
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 
 /* =========================
  * ENTRYPOINT
@@ -193,145 +184,6 @@ private fun RenderBlock(
     }
 
     when (block.optString("type")) {
-
-        /* ======== PAGE (SCAFFOLD) ======== */
-        "Page" -> Wrapper {
-            val title = block.optString("title", "Page")
-            val actions = block.optJSONArray("topBarActions") ?: JSONArray()
-            val scroll = block.optBoolean("scroll", true)
-            val navMenuId = block.optString("navMenuId", "")
-            val fab = block.optJSONObject("fab")
-            val bottomRow = block.optJSONObject("bottomRow")
-            val contentArr = block.optJSONArray("content") ?: JSONArray()
-
-            val drawerState = rememberDrawerState(DrawerValue.Closed)
-            val scope = rememberCoroutineScope()
-
-            @Composable
-            fun PageScaffold() {
-                Scaffold(
-                    topBar = {
-                        CenterAlignedTopAppBar(
-                            title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            navigationIcon = {
-                                if (navMenuId.isNotBlank()) {
-                                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                        Icon(Icons.Filled.Menu, contentDescription = "Menu")
-                                    }
-                                }
-                            },
-                            actions = {
-                                for (i in 0 until actions.length()) {
-                                    val a = actions.optJSONObject(i) ?: continue
-                                    val ic = a.optString("icon", "")
-                                    IconButton(onClick = { dispatch(a.optString("actionId", "")) }) {
-                                        if (ic.isNotBlank()) NamedIconEx(ic, null) else Icon(Icons.Filled.MoreVert, null)
-                                    }
-                                }
-                            }
-                        )
-                    },
-                    floatingActionButton = {
-                        if (fab != null) {
-                            val icon = fab.optString("icon", "play_arrow")
-                            val label = fab.optString("label", "")
-                            val action = fab.optString("actionId", "")
-                            if (label.isNotBlank()) {
-                                ExtendedFloatingActionButton(
-                                    onClick = { dispatch(action) },
-                                    icon = { NamedIconEx(icon, null) },
-                                    text = { Text(label) }
-                                )
-                            } else {
-                                FloatingActionButton(onClick = { dispatch(action) }) { NamedIconEx(icon, null) }
-                            }
-                        }
-                    },
-                    bottomBar = {
-                        if (bottomRow != null) {
-                            BottomAppBar {
-                                // Riusa il renderer di ButtonRow come sottoblocco
-                                RenderBlock(
-                                    block = bottomRow,
-                                    dispatch = dispatch,
-                                    uiState = uiState,
-                                    designerMode = designerMode,
-                                    path = "$path/bottomRow",
-                                    menus = menus,
-                                    onSelect = onSelect
-                                )
-                            }
-                        }
-                    }
-                ) { innerPadding ->
-                    val base = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
-
-                    if (scroll) {
-                        Column(
-                            base.verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            for (i in 0 until contentArr.length()) {
-                                val b = contentArr.optJSONObject(i) ?: continue
-                                val p2 = "$path/content/$i"
-                                RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
-                            }
-                        }
-                    } else {
-                        Column(base, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            for (i in 0 until contentArr.length()) {
-                                val b = contentArr.optJSONObject(i) ?: continue
-                                val p2 = "$path/content/$i"
-                                RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (navMenuId.isNotBlank()) {
-                val items = menus[navMenuId] // presi dal layout tramite collectMenus
-                ModalNavigationDrawer(
-                    drawerState = drawerState,
-                    drawerContent = {
-                        ModalDrawerSheet {
-                            Text("Menu", Modifier.padding(16.dp), style = MaterialTheme.typography.titleSmall)
-                            Divider()
-                            if (items != null) {
-                                for (i in 0 until items.length()) {
-                                    val it = items.optJSONObject(i) ?: continue
-                                    Row(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                scope.launch { drawerState.close() }
-                                                dispatch(it.optString("actionId", ""))
-                                            }
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        val ic = it.optString("icon", "")
-                                        if (ic.isNotBlank()) {
-                                            NamedIconEx(ic, null)
-                                            Spacer(Modifier.width(12.dp))
-                                        }
-                                        Text(it.optString("label", ""))
-                                    }
-                                }
-                            } else {
-                                Text("Menu '$navMenuId' non trovato", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    }
-                ) { PageScaffold() }
-            } else {
-                PageScaffold()
-            }
-        }
-
         "AppBar" -> Wrapper {
             Text(block.optString("title", ""), style = MaterialTheme.typography.titleLarge)
             val actions = block.optJSONArray("actions") ?: JSONArray()
@@ -851,7 +703,66 @@ private fun RenderBlock(
             VerticalDivider(modifier = Modifier.height(height), thickness = thickness)
         }
 
-        "Spacer" -> {
+        
+            "Page" -> Wrapper {
+                val top = block.optJSONArray("top") ?: JSONArray()
+                val bottom = block.optJSONArray("bottom") ?: JSONArray()
+                val contentArr = block.optJSONArray("content") ?: JSONArray()
+                val fab = block.optJSONObject("fab")
+                val scroll = block.optBoolean("scroll", true)
+
+                Scaffold(
+                    topBar = {
+                        if (top.length() > 0) {
+                            Column {
+                                for (i in 0 until top.length()) {
+                                    val child = top.optJSONObject(i) ?: continue
+                                    RenderBlock(child, dispatch, uiState, designerMode, "$path/top/$i", menus, onSelect)
+                                }
+                            }
+                        }
+                    },
+                    bottomBar = {
+                        if (bottom.length() > 0) {
+                            Column {
+                                for (i in 0 until bottom.length()) {
+                                    val child = bottom.optJSONObject(i) ?: continue
+                                    RenderBlock(child, dispatch, uiState, designerMode, "$path/bottom/$i", menus, onSelect)
+                                }
+                            }
+                        }
+                    },
+                    floatingActionButton = {
+                        if (fab != null) {
+                            RenderBlock(fab, dispatch, uiState, designerMode, "$path/fab", menus, onSelect)
+                        }
+                    }
+                ) { innerPadding ->
+                    val baseMod = Modifier.fillMaxSize().padding(innerPadding)
+                    if (scroll) {
+                        Column(
+                            baseMod.verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            for (i in 0 until contentArr.length()) {
+                                val child = contentArr.optJSONObject(i) ?: continue
+                                RenderBlock(child, dispatch, uiState, designerMode, "$path/content/$i", menus, onSelect)
+                            }
+                        }
+                    } else {
+                        Column(
+                            baseMod,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            for (i in 0 until contentArr.length()) {
+                                val child = contentArr.optJSONObject(i) ?: continue
+                                RenderBlock(child, dispatch, uiState, designerMode, "$path/content/$i", menus, onSelect)
+                            }
+                        }
+                    }
+                }
+            }
+"Spacer" -> {
             Spacer(Modifier.height((block.optDouble("height", 8.0)).toFloat().dp))
         }
 
@@ -948,11 +859,6 @@ private fun BoxScope.DesignerOverlay(
                 Text("Palette:", style = MaterialTheme.typography.labelLarge)
 
                 FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Home, null); Spacer(Modifier.width(6.dp)); Text("Page") }
-
-                FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
@@ -1013,7 +919,14 @@ private fun BoxScope.DesignerOverlay(
                 }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
 
                 FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
+                    val path = 
+                        ElevatedCard(onClick = {
+                            val p = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
+                            setSelectedPath(p); onLayoutChange()
+                        }) { Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.ViewDay, null); Spacer(Modifier.width(8.dp)); Text("Page")
+                        } }
+insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
 
@@ -1156,19 +1069,18 @@ private fun BoxScope.DesignerOverlay(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     when (working.optString("type")) {
-                        "Page"         -> PageInspectorPanel(working, onChange = bumpPreview)
-                        "ButtonRow"    -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
-                        "SectionHeader"-> SectionHeaderInspectorPanel(working, onChange = bumpPreview)
-                        "Progress"     -> ProgressInspectorPanel(working, onChange = bumpPreview)
-                        "Alert"        -> AlertInspectorPanel(working, onChange = bumpPreview)
-                        "Image"        -> ImageInspectorPanel(working, onChange = bumpPreview)
-                        "ChipRow"      -> ChipRowInspectorPanel(working, onChange = bumpPreview)
-                        "Slider"       -> SliderInspectorPanel(working, onChange = bumpPreview)
-                        "Toggle"       -> ToggleInspectorPanel(working, onChange = bumpPreview)
-                        "Tabs"         -> TabsInspectorPanel(working, onChange = bumpPreview)
-                        "MetricsGrid"  -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
-                        "List"         -> ListInspectorPanel(working, onChange = bumpPreview)
-                        else           -> Text("Inspector non ancora implementato per ${working.optString("type")}")
+                        "ButtonRow"   -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
+                        "SectionHeader" -> SectionHeaderInspectorPanel(working, onChange = bumpPreview)
+                        "Progress"    -> ProgressInspectorPanel(working, onChange = bumpPreview)
+                        "Alert"       -> AlertInspectorPanel(working, onChange = bumpPreview)
+                        "Image"       -> ImageInspectorPanel(working, onChange = bumpPreview)
+                        "ChipRow"     -> ChipRowInspectorPanel(working, onChange = bumpPreview)
+                        "Slider"      -> SliderInspectorPanel(working, onChange = bumpPreview)
+                        "Toggle"      -> ToggleInspectorPanel(working, onChange = bumpPreview)
+                        "Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
+                        "MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
+                        "List"        -> ListInspectorPanel(working, onChange = bumpPreview)
+                        else          -> Text("Inspector non ancora implementato per ${working.optString("type")}")
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1189,86 +1101,6 @@ private fun BoxScope.DesignerOverlay(
 /* =========================
  * INSPECTOR PANELS
  * ========================= */
-
-@Composable
-private fun PageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("Page – Proprietà", style = MaterialTheme.typography.titleMedium)
-
-    val title = remember { mutableStateOf(working.optString("title", "Page")) }
-    OutlinedTextField(
-        value = title.value,
-        onValueChange = { title.value = it; working.put("title", it); onChange() },
-        label = { Text("title") }
-    )
-
-    val nav = remember { mutableStateOf(working.optString("navMenuId", "")) }
-    OutlinedTextField(
-        value = nav.value,
-        onValueChange = {
-            nav.value = it
-            if (it.isBlank()) working.remove("navMenuId") else working.put("navMenuId", it)
-            onChange()
-        },
-        label = { Text("navMenuId (opz.)") }
-    )
-
-    var scroll by remember { mutableStateOf(working.optBoolean("scroll", true)) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = scroll, onCheckedChange = {
-            scroll = it; working.put("scroll", it); onChange()
-        })
-        Spacer(Modifier.width(8.dp)); Text("content scrollable")
-    }
-
-    Divider()
-
-    var showFab by remember { mutableStateOf(working.has("fab")) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = showFab, onCheckedChange = {
-            showFab = it
-            if (it) {
-                if (!working.has("fab"))
-                    working.put("fab", JSONObject("""{"icon":"play_arrow","label":"Start","actionId":"start"}"""))
-            } else {
-                working.remove("fab")
-            }
-            onChange()
-        })
-        Spacer(Modifier.width(8.dp)); Text("FAB")
-    }
-
-    if (working.has("fab")) {
-        val fab = working.getJSONObject("fab")
-        val icon = remember { mutableStateOf(fab.optString("icon","play_arrow")) }
-        IconPickerField(icon, "fab.icon") { sel -> icon.value = sel; fab.put("icon", sel); onChange() }
-        val label = remember { mutableStateOf(fab.optString("label","")) }
-        OutlinedTextField(label.value, { label.value = it; fab.put("label", it); onChange() }, label = { Text("fab.label (opz.)") })
-        val action = remember { mutableStateOf(fab.optString("actionId","")) }
-        OutlinedTextField(action.value, { action.value = it; fab.put("actionId", it); onChange() }, label = { Text("fab.actionId") })
-    }
-
-    Divider()
-
-    var showBottom by remember { mutableStateOf(working.has("bottomRow")) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = showBottom, onCheckedChange = {
-            showBottom = it
-            if (it) {
-                if (!working.has("bottomRow")) working.put("bottomRow", newButtonRow())
-            } else {
-                working.remove("bottomRow")
-            }
-            onChange()
-        })
-        Spacer(Modifier.width(8.dp)); Text("Bottom bar (ButtonRow)")
-    }
-
-    Text(
-        "Nota: per modificare i blocchi del contenuto apri le proprietà dei singoli blocchi sotto “content”.",
-        style = MaterialTheme.typography.bodySmall,
-        color = LocalContentColor.current.copy(alpha = 0.7f)
-    )
-}
 
 @Composable
 private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
@@ -2059,8 +1891,8 @@ private val NAMED_SWATCHES = linkedMapOf(
     // Neutri
     "White" to 0xFFFFFFFF, "Black" to 0xFF000000,
     "Gray50" to 0xFFFAFAFA, "Gray100" to 0xFFF5F5F5, "Gray200" to 0xFFEEEEEE,
-    "Gray300" to 0xFFE0E0E0, "Gray400" to 0xFFBDBDBD,
-    "Gray500" to 0xFF9E9E9E, "Gray600" to 0xFF757575, "Gray700" to 0xFF616161, "Gray800" to 0xFF424242, "Gray900" to 0xFF212121,
+    "Gray300" to 0xFFE0E0E0, "Gray400" to 0xFFBDBDBD, "Gray500" to 0xFF9E9E9E,
+    "Gray600" to 0xFF757575, "Gray700" to 0xFF616161, "Gray800" to 0xFF424242, "Gray900" to 0xFF212121,
 
     // Material-like
     "Red" to 0xFFE53935, "RedDark" to 0xFFC62828, "RedLight" to 0xFFEF5350,
@@ -2322,30 +2154,6 @@ private fun removeAt(arr: JSONArray, index: Int) {
  * BLUEPRINTS
  * ========================= */
 
-private fun newPage() = JSONObject(
-    """
-    {
-      "type": "Page",
-      "title": "Nuova pagina",
-      "scroll": true,
-      "topBarActions": [
-        {"icon":"settings","actionId":"nav:settings"}
-      ],
-      "content": [
-        {"type":"SectionHeader","title":"Contenuto","style":"titleMedium","align":"start"},
-        {"type":"Spacer","height":8}
-      ],
-      "bottomRow": {
-        "type":"ButtonRow","align":"space_evenly","buttons":[
-          {"label":"Start","style":"primary","icon":"play_arrow","size":"md","shape":"rounded","corner":20,"pressEffect":"scale","actionId":"start_run"},
-          {"label":"Pausa","style":"tonal","icon":"pause","size":"md","shape":"rounded","corner":20,"actionId":"pause_run"},
-          {"label":"Stop","style":"outlined","icon":"stop","size":"md","tint":"error","shape":"rounded","corner":20,"actionId":"stop_run","confirm":true}
-        ]
-      }
-    }
-    """.trimIndent()
-)
-
 private fun newSectionHeader() = JSONObject("""{"type":"SectionHeader","title":"Nuova sezione"}""")
 
 private fun newButtonRow() = JSONObject(
@@ -2456,3 +2264,31 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
 
     return st
 }
+
+private fun newPage(): JSONObject = JSONObject(
+    """
+    {
+      "type":"Page",
+      "scroll": true,
+      "top": [],
+      "content": [
+        { "type":"SectionHeader", "title":"Nuova pagina", "subtitle":"Sottotitolo", "align":"center" }
+      ],
+      "bottom": []
+    }
+    """.trimIndent()
+)
+
+private fun newPage(): JSONObject = JSONObject(
+    """
+    {
+      "type":"Page",
+      "scroll": true,
+      "top": [],
+      "content": [
+        { "type":"SectionHeader", "title":"Nuova pagina", "subtitle":"Sottotitolo", "align":"center" }
+      ],
+      "bottom": []
+    }
+    """.trimIndent()
+)
