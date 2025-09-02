@@ -184,49 +184,6 @@ private fun RenderBlock(
     }
 
     when (block.optString("type")) {
-        "Page" -> Wrapper {
-            // Scaffolded page container
-            val top = block.optJSONObject("topBar")
-            val bottom = block.optJSONObject("bottomBar")
-            val fab = block.optJSONObject("fab")
-            val content = block.optJSONArray("content") ?: JSONArray()
-
-            Scaffold(
-                topBar = {
-                    if (top != null) {
-                        val p2 = "$path/topBar"
-                        RenderBlock(top, dispatch, uiState, designerMode, p2, menus, onSelect)
-                    }
-                },
-                bottomBar = {
-                    if (bottom != null) {
-                        val p2 = "$path/bottomBar"
-                        RenderBlock(bottom, dispatch, uiState, designerMode, p2, menus, onSelect)
-                    }
-                },
-                floatingActionButton = {
-                    if (fab != null) {
-                        val p2 = "$path/fab"
-                        RenderBlock(fab, dispatch, uiState, designerMode, p2, menus, onSelect)
-                    }
-                }
-            ) { innerPadding ->
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    for (i in 0 until content.length()) {
-                        val child = content.optJSONObject(i) ?: continue
-                        val p2 = "$path/content/$i"
-                        RenderBlock(child, dispatch, uiState, designerMode, p2, menus, onSelect)
-                    }
-                }
-            }
-        }
-
         "AppBar" -> Wrapper {
             Text(block.optString("title", ""), style = MaterialTheme.typography.titleLarge)
             val actions = block.optJSONArray("actions") ?: JSONArray()
@@ -390,6 +347,62 @@ private fun RenderBlock(
                 else -> ElevatedCard(mod) { Column(Modifier.padding(12.dp)) { inner() } }
             }
         }
+
+
+        "Page" -> Wrapper {
+            val scrollable = block.optBoolean("scrollContent", true)
+            val topArr = block.optJSONArray("topBar") ?: JSONArray()
+            val contentArr = block.optJSONArray("content") ?: JSONArray()
+            val bottomArr = block.optJSONArray("bottomBar") ?: JSONArray()
+
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (topArr.length() > 0) {
+                    Surface(
+                        tonalElevation = 1.dp,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (i in 0 until topArr.length()) {
+                                val b = topArr.optJSONObject(i) ?: continue
+                                val p2 = "$path/topBar/$i"
+                                RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                            }
+                        }
+                    }
+                }
+
+                val contentMod = if (scrollable)
+                    Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                else
+                    Modifier.fillMaxWidth()
+
+                Column(contentMod, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    for (i in 0 until contentArr.length()) {
+                        val b = contentArr.optJSONObject(i) ?: continue
+                        val p2 = "$path/content/$i"
+                        RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                    }
+                }
+
+                if (bottomArr.length() > 0) {
+                    Surface(
+                        tonalElevation = 2.dp,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (i in 0 until bottomArr.length()) {
+                                val b = bottomArr.optJSONObject(i) ?: continue
+                                val p2 = "$path/bottomBar/$i"
+                                RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
 
         "Tabs" -> Wrapper {
             val tabs = block.optJSONArray("tabs") ?: JSONArray()
@@ -845,12 +858,7 @@ private fun BoxScope.DesignerOverlay(
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
                     setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); 
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Page") }
-Text("Progress") }
+                }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
 
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
@@ -931,6 +939,12 @@ Text("Progress") }
                     val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
+
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Home, null); Spacer(Modifier.width(6.dp)); Text("Page") }
             }
         }
 
@@ -1050,8 +1064,7 @@ Text("Progress") }
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    when (working.optString("type")) {                        "Page"        -> PageInspectorPanel(working, onChange = bumpPreview)
-
+                    when (working.optString("type")) {
                         "ButtonRow"   -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
                         "SectionHeader" -> SectionHeaderInspectorPanel(working, onChange = bumpPreview)
                         "Progress"    -> ProgressInspectorPanel(working, onChange = bumpPreview)
@@ -1063,6 +1076,7 @@ Text("Progress") }
                         "Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
                         "MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
                         "List"        -> ListInspectorPanel(working, onChange = bumpPreview)
+                        "Page"        -> PageInspectorPanel(working, onChange = bumpPreview)
                         else          -> Text("Inspector non ancora implementato per ${working.optString("type")}")
                     }
                     Spacer(Modifier.height(8.dp))
@@ -1623,82 +1637,79 @@ private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
         if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
         onChange()
     }
+}
 
 @Composable
 private fun PageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     Text("Page – Proprietà", style = MaterialTheme.typography.titleMedium)
 
-    // Top App Bar toggle + title
-    var hasTop by remember { mutableStateOf(working.has("topBar")) }
+    var scrollable by remember { mutableStateOf(working.optBoolean("scrollContent", true)) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = hasTop, onCheckedChange = {
-            hasTop = it
-            if (it) {
-                if (!working.has("topBar")) working.put("topBar", JSONObject("{\"type\":\"AppBar\",\"title\":\"Titolo\"}"))
-            } else {
-                working.remove("topBar")
-            }
-            onChange()
+        Switch(checked = scrollable, onCheckedChange = {
+            scrollable = it; working.put("scrollContent", it); onChange()
         })
-        Spacer(Modifier.width(8.dp)); Text("Top app bar")
-    }
-    if (hasTop) {
-        val tb = working.optJSONObject("topBar") ?: JSONObject().also { working.put("topBar", it) }
-        val title = remember { mutableStateOf(tb.optString("title","")) }
-        OutlinedTextField(value = title.value, onValueChange = {
-            title.value = it; tb.put("title", it); onChange()
-        }, label = { Text("title") })
+        Spacer(Modifier.width(8.dp)); Text("scroll content")
     }
 
-    Spacer(Modifier.height(8.dp))
     Divider()
 
-    // Bottom bar (ButtonRow) toggle
-    var hasBottom by remember { mutableStateOf(working.has("bottomBar")) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = hasBottom, onCheckedChange = {
-            hasBottom = it
-            if (it) {
-                working.put("bottomBar", newButtonRow())
-            } else {
-                working.remove("bottomBar")
+    fun slot(title: String, key: String, adders: List<Pair<String, () -> JSONObject>>) {
+        val arr = ensureArray(working, key)
+        Text(title, style = MaterialTheme.typography.titleMedium)
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            adders.forEach { (name, ctor) ->
+                OutlinedButton(onClick = { arr.put(ctor()); onChange() }) { Text("+ " + name) }
             }
-            onChange()
-        })
-        Spacer(Modifier.width(8.dp)); Text("Bottom bar (ButtonRow)")
-    }
+        }
+        Spacer(Modifier.height(8.dp))
 
-    Spacer(Modifier.height(8.dp))
-    Divider()
-
-    // Floating Action Button toggle
-    var hasFab by remember { mutableStateOf(working.has("fab")) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = hasFab, onCheckedChange = {
-            hasFab = it
-            if (it) {
-                working.put("fab", newFab())
-            } else {
-                working.remove("fab")
+        for (i in 0 until arr.length()) {
+            val b = arr.getJSONObject(i)
+            ElevatedCard {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(b.optString("type","(?)"), style = MaterialTheme.typography.labelLarge)
+                        Row {
+                            IconButton(onClick = { moveInArray(arr, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                            IconButton(onClick = { moveInArray(arr, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                            IconButton(onClick = { removeAt(arr, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
+                        }
+                    }
+                }
             }
-            onChange()
-        })
-        Spacer(Modifier.width(8.dp)); Text("Floating Action Button")
+            Spacer(Modifier.height(8.dp))
+        }
+        Divider()
     }
 
-    Spacer(Modifier.height(8.dp))
-    Divider()
+    slot(
+        title = "Top Bar",
+        key = "topBar",
+        adders = listOf("SectionHeader" to ::newSectionHeader)
+    )
 
-    // Content manager (add common blocks inside content)
-    Text("Contenuto", style = MaterialTheme.typography.titleMedium)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { insertIntoPageContentAndReturnPath(working, newSectionHeader()); onChange() }) { Text("+ SectionHeader") }
-        Button(onClick = { insertIntoPageContentAndReturnPath(working, newList()); onChange() }) { Text("+ List") }
-        Button(onClick = { insertIntoPageContentAndReturnPath(working, newButtonRow()); onChange() }) { Text("+ ButtonRow") }
-        Button(onClick = { insertIntoPageContentAndReturnPath(working, newSlider()); onChange() }) { Text("+ Slider") }
-    }
+    slot(
+        title = "Content",
+        key = "content",
+        adders = listOf(
+            "SectionHeader" to ::newSectionHeader,
+            "ButtonRow" to ::newButtonRow,
+            "List" to ::newList,
+            "Spacer" to ::newSpacer
+        )
+    )
+
+    slot(
+        title = "Bottom Bar",
+        key = "bottomBar",
+        adders = listOf(
+            "ButtonRow" to ::newButtonRow,
+            "Spacer" to ::newSpacer
+        )
+    )
 }
-}
+
 
 /* =========================
  * HELPERS: mapping, pickers, utils
@@ -2039,6 +2050,15 @@ private fun bestOnColor(bg: Color): Color {
  * JSON utils
  * ========================= */
 
+private fun ensureArray(obj: JSONObject, key: String): JSONArray {
+    val arr = obj.optJSONArray(key)
+    if (arr != null) return arr
+    val created = JSONArray()
+    obj.put(key, created)
+    return created
+}
+
+
 private fun collectMenus(root: JSONObject): Map<String, JSONArray> {
     val map = mutableMapOf<String, JSONArray>()
     fun walk(n: Any?) {
@@ -2212,10 +2232,6 @@ private fun removeAt(arr: JSONArray, index: Int) {
  * BLUEPRINTS
  * ========================= */
 
-
-private fun newPage() = JSONObject(
-    "{\"type\":\"Page\",\"content\":[]}"
-)
 private fun newSectionHeader() = JSONObject("""{"type":"SectionHeader","title":"Nuova sezione"}""")
 
 private fun newButtonRow() = JSONObject(
@@ -2292,6 +2308,17 @@ private fun newList() = JSONObject(
       {"title":"Voce 2","subtitle":"Sottotitolo 2","actionId":"list:2"}
     ]}
     """.trimIndent()
+)
+
+
+private fun newPage() = JSONObject(
+    """{
+      "type":"Page",
+      "scrollContent": true,
+      "topBar": [],
+      "content": [],
+      "bottomBar": []
+    }""".trimIndent()
 )
 
 /* =========================
