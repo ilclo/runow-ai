@@ -190,7 +190,7 @@ when (block.optString("type")) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 for (i in 0 until inner.length()) {
                     val b = inner.optJSONObject(i) ?: continue
-                    val p2 = "/blocks/"
+                    val p2 = "$path\/blocks\/$i"
                     RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
                 }
             }
@@ -895,6 +895,10 @@ private fun BoxScope.DesignerOverlay(
                     val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
+								FilledTonalButton(onClick = {
+				val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
+				setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Page") }
             }
         }
 
