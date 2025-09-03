@@ -5,10 +5,6 @@ import org.json.JSONObject
 import java.io.File
 
 object UiLoader {
-    private fun readAssetText(ctx: Context, path: String): String? = try {
-        ctx.assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) }
-    } catch (_: Throwable) { null }
-
     private fun readFileText(file: File): String? = try {
         if (file.exists()) file.readText(Charsets.UTF_8) else null
     } catch (_: Throwable) { null }
@@ -19,31 +15,22 @@ object UiLoader {
         true
     } catch (_: Throwable) { false }
 
-    // --- NUOVO: prima esecuzione -> pubblica layout vuoti per le schermate note
-    private fun ensureBlankPublishedOnFirstRun(ctx: Context) {
-        val sp = ctx.getSharedPreferences("ui_loader", Context.MODE_PRIVATE)
-        if (!sp.getBoolean("blankInitDone", false)) {
-            val empty = """{"blocks":[]}"""
-            listScreens().forEach { screen ->
-                val p = File(ctx.filesDir, "published/ui/$screen.json")
-                if (!p.exists()) writeFileText(p, empty)
-            }
-            sp.edit().putBoolean("blankInitDone", true).apply()
-        }
-    }
+    private fun emptyDocument(): JSONObject = JSONObject("""{"blocks": []}""")
 
-    fun loadLayout(ctx: Context, screen: String): JSONObject? {
-        ensureBlankPublishedOnFirstRun(ctx) // <--- NUOVO
+    /**
+     * Regola richiesta: avvio "pulito".
+     * Non carichiamo più i layout di default dagli asset.
+     * Se non esistono bozza o pubblicato locali, ritorniamo un documento vuoto.
+     */
+    fun loadLayout(ctx: Context, screen: String): JSONObject {
+        val draft = File(ctx.filesDir, "drafts/ui/$screen.json")
+        readFileText(draft)?.let { return JSONObject(it) }
 
-        // precedence: published (local) -> asset default -> blank
         val pub = File(ctx.filesDir, "published/ui/$screen.json")
         readFileText(pub)?.let { return JSONObject(it) }
 
-        val asset = readAssetText(ctx, "configs/ui/$screen.json")
-        if (asset != null) return JSONObject(asset)
-
-        // fallback davvero vuoto se non esiste nulla
-        return JSONObject("""{"blocks":[]}""")
+        // start from an empty page
+        return emptyDocument()
     }
 
     fun loadDraft(ctx: Context, screen: String): JSONObject? {
@@ -68,5 +55,9 @@ object UiLoader {
         return if (p.exists()) p.delete() else true
     }
 
+    /**
+     * Manteniamo la firma esistente; l’elenco schermate è gestito altrove.
+     * Il contenuto iniziale sarà vuoto grazie a loadLayout().
+     */
     fun listScreens(): List<String> = listOf("run", "settings", "music")
 }
