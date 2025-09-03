@@ -83,50 +83,32 @@ fun UiScreen(
     val overlayHeightDp = with(LocalDensity.current) { (overlayHeightPx / density).dp }
 
     Box(Modifier.fillMaxSize()) {
-        // --- NUOVO: se il layout ha esattamente un blocco "Page", renderizzalo full-screen ---
-        val blocks = layout!!.optJSONArray("blocks") ?: JSONArray()
-        val isSingleRootPage = (blocks.length() == 1 && (blocks.optJSONObject(0)?.optString("type") == "Page"))
-
-        if (isSingleRootPage) {
-            val page = blocks.getJSONObject(0)
-            // Renderizza la Page direttamente, niente Column esterna
-            RenderBlock(
-                block = page,
-                dispatch = dispatch,
-                uiState = uiState,
-                designerMode = designerMode,
-                path = "/blocks/0",
-                menus = menus,
-                onSelect = { p -> selectedPath = p }
-            )
-        } else {
-            // fallback: lista blocchi standard (comportamento che già avevi)
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(scaffoldPadding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 16.dp,
-                        bottom = if (designerMode) overlayHeightDp + 32.dp else 16.dp
-                    ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                for (i in 0 until blocks.length()) {
-                    val block = blocks.optJSONObject(i) ?: continue
-                    val path = "/blocks/$i"
-                    RenderBlock(
-                        block = block,
-                        dispatch = dispatch,
-                        uiState = uiState,
-                        designerMode = designerMode,
-                        path = path,
-                        menus = menus,
-                        onSelect = { p -> selectedPath = p }
-                    )
-                }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(scaffoldPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 16.dp,
+                    bottom = if (designerMode) overlayHeightDp + 32.dp else 16.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            val blocks = layout!!.optJSONArray("blocks") ?: JSONArray()
+            for (i in 0 until blocks.length()) {
+                val block = blocks.optJSONObject(i) ?: continue
+                val path = "/blocks/$i"
+                RenderBlock(
+                    block = block,
+                    dispatch = dispatch,
+                    uiState = uiState,
+                    designerMode = designerMode,
+                    path = path,
+                    menus = menus,
+                    onSelect = { p -> selectedPath = p }
+                )
             }
         }
 
@@ -202,22 +184,36 @@ private fun RenderBlock(
     }
 
     when (block.optString("type")) {
-	
-		"Page" -> Wrapper {
-			val title = block.optString("title","")
-			if (title.isNotBlank()) {
-				Text(title, style = MaterialTheme.typography.titleLarge)
-				Spacer(Modifier.height(8.dp))
-			}
-			val inner = block.optJSONArray("blocks") ?: JSONArray()
-			Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-				for (i in 0 until inner.length()) {
-					val b = inner.optJSONObject(i) ?: continue
-					val p2 = "$path/blocks/$i"
-					RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
-				}
-			}
-		}
+        // Contenitore "Page": semplice wrapper che contiene altri blocchi
+        "Page" -> {
+            val inner = block.optJSONArray("blocks") ?: JSONArray()
+            // in designer mostriamo un bordo leggero per renderla selezionabile senza card piena
+            if (designerMode) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                        .clickable { onSelect(path) },
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Page", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    for (i in 0 until inner.length()) {
+                        val b = inner.optJSONObject(i) ?: continue
+                        val p2 = "$path/blocks/$i"
+                        RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                    }
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    for (i in 0 until inner.length()) {
+                        val b = inner.optJSONObject(i) ?: continue
+                        val p2 = "$path/blocks/$i"
+                        RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                    }
+                }
+            }
+        }
 
         "AppBar" -> Wrapper {
             Text(block.optString("title", ""), style = MaterialTheme.typography.titleLarge)
@@ -580,7 +576,6 @@ private fun RenderBlock(
             }
         }
 
-
         "ChipRow" -> Wrapper {
             val chips = block.optJSONArray("chips") ?: JSONArray()
             val isSingle = (0 until chips.length()).any { chips.optJSONObject(it)?.has("value") == true }
@@ -764,91 +759,6 @@ private fun RenderBlock(
     }
 }
 
-@Composable
-private fun RenderPage(
-    page: JSONObject,
-    dispatch: (String) -> Unit,
-    uiState: MutableMap<String, Any>,
-    designerMode: Boolean,
-    path: String,
-    menus: Map<String, JSONArray>,
-    onSelect: (String) -> Unit
-) {
-    val title = page.optString("title", "")
-    val scroll = page.optBoolean("scroll", true)
-
-    // AppBar azioni (facoltative) – stesso schema dell’“AppBar” simple
-    val actions = page.optJSONArray("actions") ?: JSONArray()
-
-    Scaffold(
-        topBar = {
-            if (title.isNotBlank() || actions.length() > 0) {
-                TopAppBar(
-                    title = { Text(title) },
-                    actions = {
-                        for (i in 0 until actions.length()) {
-                            val a = actions.optJSONObject(i) ?: continue
-                            IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-                                NamedIconEx(a.optString("icon", "more_vert"), null)
-                            }
-                        }
-                    }
-                )
-            }
-        },
-        bottomBar = {
-            val bottomButtons = page.optJSONArray("bottomButtons") ?: JSONArray()
-            if (bottomButtons.length() > 0) {
-                Surface(tonalElevation = 3.dp) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        for (i in 0 until bottomButtons.length()) {
-                            val btn = bottomButtons.optJSONObject(i) ?: continue
-                            val label = btn.optString("label", "Button")
-                            val action = btn.optString("actionId", "")
-                            TextButton(onClick = { dispatch(action) }) { Text(label) }
-                        }
-                    }
-                }
-            }
-        },
-        floatingActionButton = {
-            page.optJSONObject("fab")?.let { fab ->
-                FloatingActionButton(onClick = { dispatch(fab.optString("actionId", "")) }) {
-                    NamedIconEx(fab.optString("icon", "play_arrow"), null)
-                }
-            }
-        }
-    ) { innerPadding ->
-        val innerBlocks = page.optJSONArray("blocks") ?: JSONArray()
-        val base = Modifier
-            .fillMaxSize()
-            .padding(innerPadding)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-
-        val content: @Composable () -> Unit = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                for (i in 0 until innerBlocks.length()) {
-                    val b = innerBlocks.optJSONObject(i) ?: continue
-                    val p2 = "$path/blocks/$i"
-                    RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
-                }
-            }
-        }
-
-        if (scroll) {
-            Column(base.verticalScroll(rememberScrollState())) { content() }
-        } else {
-            Column(base) { content() }
-        }
-    }
-}
-
 /* =========================
  * GRID
  * ========================= */
@@ -919,15 +829,12 @@ private fun BoxScope.DesignerOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Palette:", style = MaterialTheme.typography.labelLarge)
-				
-				FilledTonalButton(onClick = {
-					val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
-					setSelectedPath(path); onLayoutChange()
-				}) { 
-					Icon(Icons.Filled.Widgets, null)
-					Spacer(Modifier.width(6.dp))
-					Text("Page")
-				}
+
+                // Page
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Page") }
 
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
@@ -2110,38 +2017,17 @@ private fun replaceAtPath(root: JSONObject, path: String, newNode: JSONObject) {
     p.first.put(p.second, JSONObject(newNode.toString()))
 }
 
-private fun insertBlockAndReturnPath(
-    root: JSONObject,
-    selectedPath: String?,
-    block: JSONObject,
-    position: String
-): String {
+private fun insertBlockAndReturnPath(root: JSONObject, selectedPath: String?, block: JSONObject, position: String): String {
     val parentArr: JSONArray
     val idx: Int
     val parentPath: String
 
     if (selectedPath != null) {
-        val selectedNode = jsonAtPath(root, selectedPath)
-        if (selectedNode is JSONObject) {
-            // Se il selezionato è un contenitore con "blocks", inserisco DENTRO
-            val container = selectedNode.optJSONArray("blocks")
-            if (container != null) {
-                parentArr = container
-                idx = parentArr.length() - 1
-                parentPath = "$selectedPath/blocks"
-            } else {
-                // fallback: prima/dopo rispetto al livello del selezionato
-                val pair = getParentAndIndex(root, selectedPath)
-                if (pair != null) {
-                    parentArr = pair.first
-                    idx = pair.second
-                    parentPath = selectedPath.substringBeforeLast("/")
-                } else {
-                    parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
-                    idx = parentArr.length() - 1
-                    parentPath = "/blocks"
-                }
-            }
+        val pair = getParentAndIndex(root, selectedPath)
+        if (pair != null) {
+            parentArr = pair.first
+            idx = pair.second
+            parentPath = selectedPath.substringBeforeLast("/")
         } else {
             parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
             idx = parentArr.length() - 1
@@ -2155,7 +2041,6 @@ private fun insertBlockAndReturnPath(
 
     val insertIndex = when (position) { "before" -> idx; else -> idx + 1 }.coerceIn(0, parentArr.length())
 
-    // Ricostruisco l'array inserendo nel punto calcolato
     val tmp = mutableListOf<Any?>()
     for (i in 0 until parentArr.length()) {
         if (i == insertIndex) tmp.add(block)
@@ -2168,7 +2053,6 @@ private fun insertBlockAndReturnPath(
 
     return "$parentPath/$insertIndex"
 }
-
 
 private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
     val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
@@ -2319,6 +2203,13 @@ private fun newList() = JSONObject(
     """.trimIndent()
 )
 
+/* ---- Page blueprint (contenitore semplice) ---- */
+private fun newPage() = JSONObject(
+    """
+    {"type":"Page","title":"","blocks":[]}
+    """.trimIndent()
+)
+
 /* =========================
  * TEXT STYLE OVERRIDES
  * ========================= */
@@ -2351,17 +2242,3 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
 
     return st
 }
-
-/* ---- Page blueprint (contenitore semplice) ---- */
-private fun newPage() = JSONObject(
-    """
-    {
-      "type":"Page",
-      "title":"",
-      "scroll": true,
-      "actions": [],
-      "bottomButtons": [],
-      "blocks":[]
-    }
-    """.trimIndent()
-)
