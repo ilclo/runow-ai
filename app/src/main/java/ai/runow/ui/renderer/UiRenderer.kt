@@ -190,7 +190,7 @@ when (block.optString("type")) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 for (i in 0 until inner.length()) {
                     val b = inner.optJSONObject(i) ?: continue
-                    val p2 = "$path\/blocks\/$i"
+                    val p2 = "$path/blocks/$i"
                     RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
                 }
             }
@@ -1030,6 +1030,7 @@ private fun BoxScope.DesignerOverlay(
                         "Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
                         "MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
                         "List"        -> ListInspectorPanel(working, onChange = bumpPreview)
+						"Page"        -> PageInspectorPanel(working, onChange = bumpPreview)
                         else          -> Text("Inspector non ancora implementato per ${working.optString("type")}")
                     }
                     Spacer(Modifier.height(8.dp))
