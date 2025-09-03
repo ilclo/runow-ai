@@ -21,15 +21,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -37,20 +34,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
-import android.annotation.SuppressLint
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.border
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.graphics.Brush
-
 
 /* =========================
  * ENTRYPOINT
@@ -113,28 +103,28 @@ fun UiScreen(
         }
 
         if (designerMode) {
-            DesignerOverlay(
-                screenName = screenName,
-                layout = layout!!,
-                selectedPath = selectedPath,
-                setSelectedPath = { selectedPath = it },
-                onLiveChange = { tick++ },
-                onLayoutChange = {
-                    UiLoader.saveDraft(ctx, screenName, layout!!)
-                    layout = JSONObject(layout.toString())
-                    tick++
-                },
-                onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
-                onReset = {
-                    UiLoader.resetPublished(ctx, screenName)
-                    layout = UiLoader.loadLayout(ctx, screenName)
-                    selectedPath = null
-                    tick++
-                },
-                topPadding = scaffoldPadding.calculateTopPadding(),
-                onOverlayHeight = { overlayHeightPx = it }
-            )
+			DesignerOverlay(
+				screenName = screenName,
+				layout = layout!!,
+				selectedPath = selectedPath,
+				setSelectedPath = { selectedPath = it },
+				onLiveChange = { tick++ },
+				onLayoutChange = {
+					UiLoader.saveDraft(ctx, screenName, layout!!)
+					layout = JSONObject(layout.toString())
+					tick++
+				},
+				onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+				onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
+				onReset = {
+					UiLoader.resetPublished(ctx, screenName)
+					layout = UiLoader.loadLayout(ctx, screenName)
+					selectedPath = null
+					tick++
+				},
+				topPadding = scaffoldPadding.calculateTopPadding(),     // <‑‑ NEW
+				onOverlayHeight = { overlayHeightPx = it }
+			)
         }
     }
 }
@@ -236,90 +226,6 @@ private fun RenderBlock(
             }
         }
 
-        "Progress" -> Wrapper {
-            val label = block.optString("label","")
-            val value = block.optDouble("value", 0.0).toFloat().coerceIn(0f, 100f)
-            val color = parseColorOrRole(block.optString("color","")) ?: MaterialTheme.colorScheme.primary
-            val showPercent = block.optBoolean("showPercent", true)
-
-            Column {
-                if (label.isNotBlank()) Text(label, style = MaterialTheme.typography.bodyMedium)
-                LinearProgressIndicator(
-                    progress = { value / 100f },
-                    trackColor = color.copy(alpha = 0.25f),
-                    color = color,
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp))
-                )
-                if (showPercent) {
-                    Spacer(Modifier.height(6.dp))
-                    Text("${value.toInt()}%", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-        }
-
-        "Alert" -> Wrapper {
-            val severity = block.optString("severity","info")
-            val (bg, fg) = when (severity) {
-                "success" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
-                "warning" -> Color(0xFFFFF3CD) to Color(0xFF664D03)
-                "error"   -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-                else      -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
-            }
-            val title = block.optString("title","")
-            val message = block.optString("message","")
-            val actionId = block.optString("actionId","")
-
-            Surface(
-                color = bg,
-                contentColor = fg,
-                shape = RoundedCornerShape(12.dp),
-                tonalElevation = 1.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (title.isNotBlank()) Text(title, style = MaterialTheme.typography.titleSmall)
-                    if (message.isNotBlank()) Text(message, style = MaterialTheme.typography.bodyMedium)
-                    if (actionId.isNotBlank()) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = { dispatch(actionId) }) { Text("Azione") }
-                        }
-                    }
-                }
-            }
-        }
-
-        "Image" -> Wrapper {
-            val source = block.optString("source","")
-            val height = block.optDouble("heightDp", 160.0).toFloat().dp
-            val corner = block.optDouble("corner", 12.0).toFloat().dp
-            val scale = when (block.optString("contentScale","fit")) {
-                "crop" -> ContentScale.Crop
-                else   -> ContentScale.Fit
-            }
-
-            // Solo risorse locali: res:<nome>
-            val resId = if (source.startsWith("res:"))
-                LocalContext.current.resources.getIdentifier(source.removePrefix("res:"), "drawable", LocalContext.current.packageName)
-            else 0
-
-            Surface(shape = RoundedCornerShape(corner), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
-                if (resId != 0) {
-                    // Material3 non include coil: mostriamo l’immagine di drawable
-                    androidx.compose.foundation.Image(
-                        painter = painterResource(resId),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxWidth().height(height),
-                        contentScale = scale
-                    )
-                } else {
-                    // Placeholder
-                    Box(Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
-                        Text("Image: ${if (source.isBlank()) "(not set)" else source}", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
-        }
-
         "Card" -> Wrapper {
             val variant = block.optString("variant", "elevated")
             val clickAction = block.optString("clickActionId", "")
@@ -344,13 +250,41 @@ private fun RenderBlock(
             when (variant) {
                 "outlined" -> OutlinedCard(mod) { Column(Modifier.padding(12.dp)) { inner() } }
                 "filled" -> Card(mod) { Column(Modifier.padding(12.dp)) { inner() } }
+
+        "Page" -> Wrapper {
+            // Minimal container page: renders nested "blocks" with optional scroll and background
+            val scrollable = block.optBoolean("scrollable", true)
+            val pad = block.optDouble("padding", 12.0).toFloat().dp
+            val bg = parseColorOrRole(block.optString("background",""))
+            val innerBlocks = block.optJSONArray("blocks") ?: JSONArray()
+            val mod = Modifier
+                .fillMaxWidth()
+                .then(if (bg != null) Modifier.background(bg, RoundedCornerShape(12.dp)) else Modifier)
+
+            Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = mod) {
+                val colMod = Modifier
+                    .fillMaxWidth()
+                    .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .padding(pad)
+                Column(colMod, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (innerBlocks.length() == 0) {
+                        Text("Page (vuota)", style = MaterialTheme.typography.labelMedium, color = LocalContentColor.current.copy(alpha = 0.6f))
+                    }
+                    for (i in 0 until innerBlocks.length()) {
+                        val b = innerBlocks.optJSONObject(i) ?: continue
+                        val p2 = "$path/blocks/$i"
+                        RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                    }
+                }
+            }
+        }
                 else -> ElevatedCard(mod) { Column(Modifier.padding(12.dp)) { inner() } }
             }
         }
 
         "Tabs" -> Wrapper {
             val tabs = block.optJSONArray("tabs") ?: JSONArray()
-            var idx by remember(path) { mutableStateOf(block.optInt("initialIndex", 0).coerceAtLeast(0)) }
+            var idx by remember { mutableStateOf(0) }
             val count = tabs.length().coerceAtLeast(1)
             if (idx >= count) idx = 0
             val labels = (0 until count).map {
@@ -476,20 +410,13 @@ private fun RenderBlock(
                         }
                     }
 
-                    val heightMod =
-                        if (!btn.optDouble("heightDp", Double.NaN).isNaN())
-                            Modifier.height(btn.optDouble("heightDp", Double.NaN).toFloat().dp)
-                        else sizeModifier(sizeKey)
-
-                    val widthMod =
-                        if (!btn.optDouble("widthDp", Double.NaN).isNaN())
-                            Modifier.width(btn.optDouble("widthDp", Double.NaN).toFloat().dp)
-                        else Modifier
-
                     val baseMod = Modifier
                         .graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha, rotationZ = rotation)
-                        .then(heightMod)
-                        .then(widthMod)
+                        .then(
+                            if (!btn.optDouble("heightDp", Double.NaN).isNaN())
+                                Modifier.height(btn.optDouble("heightDp", Double.NaN).toFloat().dp)
+                            else sizeModifier(sizeKey)
+                        )
 
                     Spacer(Modifier.width(6.dp))
 
@@ -624,8 +551,6 @@ private fun RenderBlock(
 
         "List" -> Wrapper {
             val items = block.optJSONArray("items") ?: JSONArray()
-            val align = mapTextAlign(block.optString("align", "start"))
-            val textColor = parseColorOrRole(block.optString("textColor",""))
             Column {
                 for (i in 0 until items.length()) {
                     val item = items.optJSONObject(i) ?: continue
@@ -634,9 +559,8 @@ private fun RenderBlock(
                             Text(
                                 item.optString("title", ""),
                                 style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyLarge),
-                                color = textColor ?: LocalContentColor.current,
-                                textAlign = align,
-                                modifier = Modifier.fillMaxWidth()
+                                color = parseColorOrRole(block.optString("textColor", ""))
+                                    ?: LocalContentColor.current
                             )
                         },
                         supportingContent = {
@@ -644,9 +568,8 @@ private fun RenderBlock(
                             if (sub.isNotBlank()) Text(
                                 sub,
                                 style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium),
-                                color = textColor ?: LocalContentColor.current,
-                                textAlign = align,
-                                modifier = Modifier.fillMaxWidth()
+                                color = parseColorOrRole(block.optString("textColor", ""))
+                                    ?: LocalContentColor.current
                             )
                         },
                         modifier = Modifier
@@ -681,6 +604,7 @@ private fun RenderBlock(
                         icon = { NamedIconEx(icon, null) },
                         text = { Text(label.ifBlank { "Azione" }) }
                     )
+
                     else -> when (size) {
                         "small" -> SmallFloatingActionButton(onClick = { dispatch(action) }) { NamedIconEx(icon, null) }
                         "large" -> LargeFloatingActionButton(onClick = { dispatch(action) }) { NamedIconEx(icon, null) }
@@ -717,51 +641,6 @@ private fun RenderBlock(
                 }
             }
         }
-        "Page" -> Wrapper {
-            val title = block.optString("title", "")
-            val scrollable = block.optBoolean("scrollable", true)
-            val topBar = block.optJSONObject("topBar")
-            val bottomBar = block.optJSONObject("bottomBar")
-            val contentArr = block.optJSONArray("content") ?: org.json.JSONArray()
-
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                tonalElevation = 1.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    Modifier
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.10f))
-                        .padding(12.dp)
-                ) {
-                    if (title.isNotBlank()) {
-                        Text(title, style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    if (topBar != null) {
-                        val pTop = "$path/topBar"
-                        RenderBlock(topBar, dispatch, uiState, designerMode, pTop, menus, onSelect)
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    val contentMod = if (scrollable) Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()) else Modifier.fillMaxWidth()
-                    Column(contentMod, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        for (i in 0 until contentArr.length()) {
-                            val b = contentArr.optJSONObject(i) ?: continue
-                            val p2 = "$path/content/$i"
-                            RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
-                        }
-                    }
-                    if (bottomBar != null) {
-                        Spacer(Modifier.height(8.dp))
-                        val pBot = "$path/bottomBar"
-                        RenderBlock(bottomBar, dispatch, uiState, designerMode, pBot, menus, onSelect)
-                    }
-                }
-            }
-        }
-
 
         else -> {
             if (designerMode) {
@@ -821,11 +700,12 @@ private fun BoxScope.DesignerOverlay(
     onSaveDraft: () -> Unit,
     onPublish: () -> Unit,
     onReset: () -> Unit,
-    topPadding: Dp,
+    topPadding: Dp, // <‑‑ NEW
     onOverlayHeight: (Int) -> Unit
 ) {
     var showInspector by remember { mutableStateOf(false) }
     val selectedBlock = selectedPath?.let { jsonAtPath(layout, it) as? JSONObject }
+    val canMove = selectedPath?.let { getParentAndIndex(layout, it) != null } == true
 
     Column(
         Modifier
@@ -845,19 +725,9 @@ private fun BoxScope.DesignerOverlay(
                 Text("Palette:", style = MaterialTheme.typography.labelLarge)
 
                 FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
                     setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
+                }) { Icon(Icons.Filled.Home, null); Spacer(Modifier.width(6.dp)); Text("Page") }
 
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
@@ -870,24 +740,14 @@ private fun BoxScope.DesignerOverlay(
                 }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
 
                 FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
-
-                FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
                     setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
+                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
 
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
                     setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
+                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
 
                 FilledTonalButton(onClick = {
                     val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
@@ -905,33 +765,9 @@ private fun BoxScope.DesignerOverlay(
                 }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
 
                 FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
                     setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Page") }
+                }) { Icon(Icons.Filled.MoreHoriz, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
             }
         }
 
@@ -951,27 +787,21 @@ private fun BoxScope.DesignerOverlay(
                     Text("Selezione:", style = MaterialTheme.typography.labelLarge)
 
                     OutlinedButton(onClick = {
-                        selectedPath?.let {
-                            val newPath = moveAndReturnNewPath(layout, it, -1)
-                            setSelectedPath(newPath); onLayoutChange()
-                        }
+                        val newPath = moveAndReturnNewPath(layout, selectedPath!!, -1)
+                        setSelectedPath(newPath); onLayoutChange()
                     }) { Icon(Icons.Filled.KeyboardArrowUp, null); Spacer(Modifier.width(4.dp)); Text("Su") }
 
                     OutlinedButton(onClick = {
-                        selectedPath?.let {
-                            val newPath = moveAndReturnNewPath(layout, it, +1)
-                            setSelectedPath(newPath); onLayoutChange()
-                        }
-                    }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giù") }
+                        val newPath = moveAndReturnNewPath(layout, selectedPath!!, +1)
+                        setSelectedPath(newPath); onLayoutChange()
+                    }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giu") }
 
-                    OutlinedButton(onClick = {
-                        selectedPath?.let { duplicate(layout, it); onLayoutChange() }
-                    }) { Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica") }
+                    OutlinedButton(onClick = { duplicate(layout, selectedPath!!); onLayoutChange() }) {
+                        Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica")
+                    }
 
                     TextButton(
-                        onClick = {
-                            selectedPath?.let { remove(layout, it); setSelectedPath(null); onLayoutChange() }
-                        },
+                        onClick = { remove(layout, selectedPath!!); setSelectedPath(null); onLayoutChange() },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
 
@@ -996,54 +826,144 @@ private fun BoxScope.DesignerOverlay(
     }
 
     // === FULL SCREEN INSPECTOR (no scrim, preview ancorata in alto) ===
-    if (showInspector && selectedBlock != null && selectedPath != null) {
-        val working = remember(selectedPath) { JSONObject(selectedBlock.toString()) }
-        var previewTick by remember { mutableStateOf(0) }
-        val bumpPreview: () -> Unit = { previewTick++ }
+	if (showInspector && selectedBlock != null && selectedPath != null) {
+		// working: copia del nodo reale; modifichiamo SOLO questa
+		val working = remember(selectedPath) { JSONObject(selectedBlock.toString()) }
+		var previewTick by remember { mutableStateOf(0) }
+		val bumpPreview: () -> Unit = { previewTick++ }
 
-        BackHandler(enabled = true) { showInspector = false }
+		// Back fisico chiude l'inspector (non l'app)
+		BackHandler(enabled = true) { showInspector = false }
 
-        Box(
-            Modifier
+		// Overlay a schermo intero, senza scrim, che intercetta i tocchi (non clicchi sotto)
+		Box(
+			Modifier
+				.fillMaxSize()
+				.clickable(
+					indication = null,
+					interactionSource = remember { MutableInteractionSource() }
+				) { /* swallow clicks */ }
+		) {
+			// ANTEPRIMA ANCORATA IN ALTO (sotto la top bar)
+			Surface(
+				modifier = Modifier
+					.align(Alignment.TopCenter)
+					.padding(start = 12.dp, end = 12.dp, top = topPadding + 8.dp)
+					.shadow(10.dp, RoundedCornerShape(16.dp))
+					.fillMaxWidth(),
+				shape = RoundedCornerShape(16.dp),
+				tonalElevation = 6.dp
+			) {
+				Column(Modifier.padding(12.dp)) {
+					Text("Anteprima", style = MaterialTheme.typography.labelLarge)
+					Spacer(Modifier.height(8.dp))
+					key(previewTick) {
+						// Render della COPIA: niente designerMode, niente dispatch
+						RenderBlock(
+							block = working,
+							dispatch = { /* no-op in anteprima */ },
+							uiState = mutableMapOf(), // anteprima non tocca lo stato reale
+							designerMode = false,
+							path = selectedPath,
+							menus = emptyMap(),
+							onSelect = {}
+						)
+					}
+				}
+			}
+
+			// PANNELLO PROPRIETÀ IN BASSO (fisso), scrollabile
+			Surface(
+				modifier = Modifier
+					.align(Alignment.BottomCenter)
+					.fillMaxWidth()
+					.fillMaxHeight(0.6f),
+				shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+				tonalElevation = 8.dp
+			) {
+				Column(
+					Modifier
+						.fillMaxSize()
+						.verticalScroll(rememberScrollState())
+						.padding(16.dp),
+					verticalArrangement = Arrangement.spacedBy(12.dp)
+				) {
+					when (working.optString("type")) {
+                        "Page" -> PageInspectorPanel(working, onChange = bumpPreview)
+
+						"ButtonRow" -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
+						"SectionHeader" -> SectionHeaderInspectorPanel(working, onChange = bumpPreview)
+						else -> Text("Inspector non ancora implementato per ${working.optString("type")}")
+					}
+					Spacer(Modifier.height(8.dp))
+					Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+						TextButton(onClick = { showInspector = false }) { Text("Annulla") }
+						Spacer(Modifier.weight(1f))
+						Button(onClick = {
+							// Commit: sovrascrivi il nodo reale con la working copy
+							replaceAtPath(layout, selectedPath, working)
+							showInspector = false
+							onLayoutChange()
+						}) { Text("OK") }
+					}
+				}
+			}
+		}
+	}
+}
+
+/* =========================
+ * FULL SCREEN INSPECTOR SHELL
+ * ========================= */
+
+@Composable
+private fun FullScreenInspector(
+    block: JSONObject,
+    path: String,
+    onClose: () -> Unit,
+    onApply: () -> Unit,
+    onCancel: () -> Unit,
+    body: @Composable (JSONObject, () -> Unit) -> Unit,
+) {
+    // wrapper overlay dentro lo screen (no Dialog => nessun dimming dello sfondo)
+    Box(
+        Modifier
+            .fillMaxSize()
+    ) {
+        Surface(
+            modifier = Modifier
                 .fillMaxSize()
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
+                .align(Alignment.BottomCenter)
+                .shadow(8.dp),
+            color = MaterialTheme.colorScheme.surface, // opaco
+            tonalElevation = 6.dp
         ) {
-            // ANTEPRIMA
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(start = 12.dp, end = 12.dp, top = topPadding + 8.dp)
-                    .shadow(10.dp, RoundedCornerShape(16.dp))
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 6.dp
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("Anteprima", style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.height(8.dp))
-                    key(previewTick) {
-                        RenderBlock(
-                            block = working,
-                            dispatch = { },
-                            uiState = mutableMapOf(),
-                            designerMode = false,
-                            path = selectedPath,
-                            menus = emptyMap(),
-                            onSelect = {}
-                        )
+            Column(Modifier.fillMaxSize()) {
+                // Header + Preview ancorata
+                Surface(tonalElevation = 2.dp) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Proprietà • ${block.optString("type")}",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            IconButton(onClick = onClose) {
+                                Icon(Icons.Filled.Close, contentDescription = "Chiudi")
+                            }
+                        }
+
+                        // PREVIEW
+                        PreviewOfBlock(block = block)
                     }
                 }
-            }
 
-            // PANNELLO BASSO
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.6f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-                tonalElevation = 8.dp
-            ) {
+                Divider()
+
+                // Corpo proprietà (scrollabile) + bottoni
                 Column(
                     Modifier
                         .fillMaxSize()
@@ -1051,30 +971,14 @@ private fun BoxScope.DesignerOverlay(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    when (working.optString("type")) {
-                        "ButtonRow"   -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
-                        "SectionHeader" -> SectionHeaderInspectorPanel(working, onChange = bumpPreview)
-                        "Progress"    -> ProgressInspectorPanel(working, onChange = bumpPreview)
-                        "Alert"       -> AlertInspectorPanel(working, onChange = bumpPreview)
-                        "Image"       -> ImageInspectorPanel(working, onChange = bumpPreview)
-                        "ChipRow"     -> ChipRowInspectorPanel(working, onChange = bumpPreview)
-                        "Slider"      -> SliderInspectorPanel(working, onChange = bumpPreview)
-                        "Toggle"      -> ToggleInspectorPanel(working, onChange = bumpPreview)
-                        "Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
-                        "MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
-                        "List"        -> ListInspectorPanel(working, onChange = bumpPreview)
-                        "Page"        -> PageInspectorPanel(working, onChange = bumpPreview)
-                        else          -> Text("Inspector non ancora implementato per ${working.optString("type")}")
-                    }
+                    body(block) {} // onLive gestito dai singoli body
+
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { showInspector = false }) { Text("Annulla") }
+                    Row(Modifier.fillMaxWidth()) {
                         Spacer(Modifier.weight(1f))
-                        Button(onClick = {
-                            replaceAtPath(layout, selectedPath, working)
-                            showInspector = false
-                            onLayoutChange()
-                        }) { Text("OK") }
+                        TextButton(onClick = onCancel) { Text("Annulla") }
+                        Spacer(Modifier.width(8.dp))
+                        Button(onClick = onApply) { Text("OK") }
                     }
                 }
             }
@@ -1082,29 +986,52 @@ private fun BoxScope.DesignerOverlay(
     }
 }
 
+@Composable
+private fun PreviewOfBlock(block: JSONObject) {
+    // Per la preview usiamo RenderBlock con dispatch no-op e uiState vuoto
+    val dummyState = remember { mutableMapOf<String, Any>() }
+    val menus = remember { emptyMap<String, JSONArray>() }
+    val copy = remember(block) { JSONObject(block.toString()) }
+    RenderBlock(
+        block = copy,
+        dispatch = { },
+        uiState = dummyState,
+        designerMode = false,
+        path = "/preview",
+        menus = menus,
+        onSelect = {}
+    )
+}
+
 /* =========================
- * INSPECTOR PANELS
+ * INSPECTOR BODIES (solo contenuti, shell già gestita)
  * ========================= */
 
 @Composable
-private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    val buttons = working.optJSONArray("buttons") ?: JSONArray().also { working.put("buttons", it) }
+private fun ButtonRowInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val buttons = block.optJSONArray("buttons") ?: JSONArray().also { block.put("buttons", it) }
 
-    Text("ButtonRow – Proprietà", style = MaterialTheme.typography.titleMedium)
+    Text("ButtonRow – Proprietà riga", style = MaterialTheme.typography.titleMedium)
 
-    var align by remember { mutableStateOf(working.optString("align", "center")) }
+    var align by remember { mutableStateOf(block.optString("align", "center")) }
     ExposedDropdown(
         value = align,
         label = "align",
-        options = listOf("start","center","end","space_between","space_around","space_evenly")
-    ) { sel -> align = sel; working.put("align", sel); onChange() }
+        options = listOf("start", "center", "end", "space_between", "space_around", "space_evenly")
+    ) { sel ->
+        align = sel; block.put("align", sel); onLive()
+    }
 
     Divider()
     Text("Bottoni", style = MaterialTheme.typography.titleMedium)
 
     for (i in 0 until buttons.length()) {
         val btn = buttons.getJSONObject(i)
-        ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        ElevatedCard(
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surface // opaca
+            )
+        ) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1113,88 +1040,69 @@ private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
                 ) {
                     Text("Bottone ${i + 1}", style = MaterialTheme.typography.labelLarge)
                     Row {
-                        IconButton(onClick = { moveInArray(buttons, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
-                        IconButton(onClick = { moveInArray(buttons, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
-                        IconButton(onClick = { removeAt(buttons, i); onChange() }) {
+                        IconButton(onClick = { moveInArray(buttons, i, -1); onLive() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                        IconButton(onClick = { moveInArray(buttons, i, +1); onLive() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                        IconButton(onClick = { removeAt(buttons, i); onLive() }) {
                             Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
 
                 val label = remember { mutableStateOf(btn.optString("label", "")) }
+                val icon = remember { mutableStateOf(btn.optString("icon", "")) }
+                var style by remember { mutableStateOf(btn.optString("style", "primary")) }
+                var size by remember { mutableStateOf(btn.optString("size", "md")) } // mapping legacy
+                val cornerStr = remember { mutableStateOf(btn.optDouble("corner", 20.0).toString()) }
+                var press by remember { mutableStateOf(if (btn.optString("pressEffect", "none") == "scale") "scale" else "none") }
+                val action = remember { mutableStateOf(btn.optString("actionId", "")) }
+                val customColor = remember { mutableStateOf(btn.optString("customColor", "")) }
+
                 OutlinedTextField(
                     value = label.value,
-                    onValueChange = { label.value = it; btn.put("label", it); onChange() },
+                    onValueChange = { label.value = it; btn.put("label", it); onLive() },
                     label = { Text("label") }
                 )
 
-                val icon = remember { mutableStateOf(btn.optString("icon", "")) }
-                IconPickerField(icon, "icon") { sel -> icon.value = sel; btn.put("icon", sel); onChange() }
+                IconPickerField(value = icon, label = "icon") { sel ->
+                    icon.value = sel; btn.put("icon", sel); onLive()
+                }
 
-                var style by remember { mutableStateOf(btn.optString("style", "primary")) }
                 ExposedDropdown(
                     value = style, label = "style",
-                    options = listOf("primary","tonal","outlined","text")
-                ) { style = it; btn.put("style", it); onChange() }
+                    options = listOf("primary", "tonal", "outlined", "text")
+                ) { style = it; btn.put("style", it); onLive() }
 
-                var size by remember { mutableStateOf(btn.optString("size", "md")) }
+                // Dimensione più granulare (xs/sm/md/lg/xl) mantenendo compatibilità
                 ExposedDropdown(
                     value = size, label = "size",
-                    options = listOf("xs","sm","md","lg","xl")
-                ) { sel -> size = sel; btn.put("size", sel); onChange() }
+                    options = listOf("xs", "sm", "md", "lg", "xl")
+                ) { sel -> size = sel; btn.put("size", sel); onLive() }
 
-                // Height preset
-                var heightStr by remember {
-                    mutableStateOf(btn.optDouble("heightDp", Double.NaN).let { if (it.isNaN()) "(auto)" else it.toInt().toString() })
-                }
-                ExposedDropdown(
-                    value = heightStr, label = "height (dp)",
-                    options = listOf("(auto)","32","36","40","44","48","52","56","64")
-                ) { sel ->
-                    heightStr = sel
-                    if (sel == "(auto)") btn.remove("heightDp") else btn.put("heightDp", sel.toDouble())
-                    onChange()
+                // Corner con step 1.0
+                StepperField(label = "corner (dp)", state = cornerStr, step = 1.0) { v ->
+                    btn.put("corner", v); onLive()
                 }
 
-                // Width preset
-                var widthStr by remember {
-                    mutableStateOf(btn.optDouble("widthDp", Double.NaN).let { if (it.isNaN()) "(auto)" else it.toInt().toString() })
-                }
-                ExposedDropdown(
-                    value = widthStr, label = "width (dp)",
-                    options = listOf("(auto)","72","96","120","160","200")
-                ) { sel ->
-                    widthStr = sel
-                    if (sel == "(auto)") btn.remove("widthDp") else btn.put("widthDp", sel.toDouble())
-                    onChange()
-                }
+                // Solo customColor (override completo, con palette)
+                NamedColorPicker(
+                    currentHexOrEmpty = customColor.value,
+                    label = "customColor (palette)",
+                    onPickHex = { hex ->
+                        customColor.value = hex
+                        if (hex.isBlank()) btn.remove("customColor") else btn.put("customColor", hex)
+                        onLive()
+                    }
+                )
 
-                // Corner con step = 1.0
-                val cornerStr = remember { mutableStateOf(btn.optDouble("corner", 20.0).toString()) }
-                StepperField("corner (dp)", cornerStr, 1.0) { v -> btn.put("corner", v); onChange() }
-
-                // Colore personalizzato (palette/ruoli)
-                val customColor = remember { mutableStateOf(btn.optString("customColor", "")) }
-                NamedColorPickerPlus(
-                    current = customColor.value,
-                    label = "customColor (palette/ruoli)",
-                    allowRoles = true
-                ) { hex ->
-                    customColor.value = hex
-                    if (hex.isBlank()) btn.remove("customColor") else btn.put("customColor", hex)
-                    onChange()
-                }
-
-                var press by remember { mutableStateOf(btn.optString("pressEffect", "none")) }
+                // Press effects estesi (in render è attivo 'scale'; gli altri sono no‑op al momento)
                 ExposedDropdown(
                     value = press, label = "pressEffect",
-                    options = listOf("none","scale")
-                ) { sel -> press = sel; btn.put("pressEffect", sel); onChange() }
+                    options = listOf("none", "scale", "glow", "tilt")
+                ) { sel -> press = sel; btn.put("pressEffect", sel); onLive() }
 
-                val action = remember { mutableStateOf(btn.optString("actionId", "")) }
                 OutlinedTextField(
                     value = action.value,
-                    onValueChange = { action.value = it; btn.put("actionId", it); onChange() },
+                    onValueChange = { action.value = it; btn.put("actionId", it); onLive() },
                     label = { Text("actionId (es. nav:settings)") }
                 )
             }
@@ -1204,525 +1112,274 @@ private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = {
-            buttons.put(JSONObject("""{"label":"Nuovo","style":"text","icon":"add","actionId":""}"""))
-            onChange()
+            buttons.put(JSONObject("{\"label\":\"Nuovo\",\"style\":\"text\",\"icon\":\"add\",\"actionId\":\"\"}"))
+            onLive()
         }) { Text("+ Aggiungi bottone") }
     }
 }
 
 @Composable
-private fun ToggleInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("Toggle – Proprietà", style = MaterialTheme.typography.titleMedium)
-    val label = remember { mutableStateOf(working.optString("label","")) }
-    OutlinedTextField(value = label.value, onValueChange = {
-        label.value = it; working.put("label", it); onChange()
-    }, label = { Text("label") })
-    val bind = remember { mutableStateOf(working.optString("bind","toggle_1")) }
-    OutlinedTextField(value = bind.value, onValueChange = {
-        bind.value = it; working.put("bind", it); onChange()
-    }, label = { Text("bind (boolean)") })
-}
+private fun SectionHeaderInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val title = remember { mutableStateOf(block.optString("title", "")) }
+    val subtitle = remember { mutableStateOf(block.optString("subtitle", "")) }
 
-@Composable
-private fun SliderInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("Slider – Proprietà", style = MaterialTheme.typography.titleMedium)
-    val label = remember { mutableStateOf(working.optString("label","")) }
-    OutlinedTextField(value = label.value, onValueChange = {
-        label.value = it; working.put("label", it); onChange()
-    }, label = { Text("label") })
+    var style by remember { mutableStateOf(block.optString("style", "titleMedium")) }
+    var align by remember { mutableStateOf(block.optString("align", "start")) }
+    val clickAction = remember { mutableStateOf(block.optString("clickActionId", "")) }
 
-    val bind = remember { mutableStateOf(working.optString("bind","value_1")) }
-    OutlinedTextField(value = bind.value, onValueChange = {
-        bind.value = it; working.put("bind", it); onChange()
-    }, label = { Text("bind (numero)") })
-
-    val minS = remember { mutableStateOf(working.optDouble("min",0.0).toString()) }
-    val maxS = remember { mutableStateOf(working.optDouble("max",10.0).toString()) }
-    val stepS = remember { mutableStateOf(working.optDouble("step",1.0).toString()) }
-    StepperField("min", minS, 1.0) { v -> working.put("min", v); onChange() }
-    StepperField("max", maxS, 1.0) { v -> working.put("max", v); onChange() }
-    StepperField("step", stepS, 0.5) { v -> working.put("step", v); onChange() }
-
-    val unit = remember { mutableStateOf(working.optString("unit","")) }
-    OutlinedTextField(value = unit.value, onValueChange = {
-        unit.value = it; working.put("unit", it); onChange()
-    }, label = { Text("unit (opz.)") })
-}
-
-@Composable
-private fun ChipRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("ChipRow – Proprietà", style = MaterialTheme.typography.titleMedium)
-
-    val chips = working.optJSONArray("chips") ?: JSONArray().also { working.put("chips", it) }
-    for (i in 0 until chips.length()) {
-        val chip = chips.getJSONObject(i)
-        ElevatedCard {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Chip ${i+1}", style = MaterialTheme.typography.labelLarge)
-                    Row {
-                        IconButton(onClick = { moveInArray(chips, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
-                        IconButton(onClick = { moveInArray(chips, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
-                        IconButton(onClick = { removeAt(chips, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
-                    }
-                }
-                val label = remember { mutableStateOf(chip.optString("label","")) }
-                OutlinedTextField(value = label.value, onValueChange = {
-                    label.value = it; chip.put("label", it); onChange()
-                }, label = { Text("label") })
-
-                val bind = remember { mutableStateOf(chip.optString("bind","")) }
-                OutlinedTextField(value = bind.value, onValueChange = {
-                    bind.value = it; if (it.isBlank()) chip.remove("bind") else chip.put("bind", it); onChange()
-                }, label = { Text("bind (multi‑selezione: boolean per chip)") })
-
-                val value = remember { mutableStateOf(chip.opt("value")?.toString() ?: "") }
-                OutlinedTextField(value = value.value, onValueChange = {
-                    value.value = it
-                    if (it.isBlank()) chip.remove("value") else chip.put("value", it)
-                    onChange()
-                }, label = { Text("value (opz., abilita selezione singola su bind di gruppo)") })
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-    }
-
-    Button(onClick = {
-        chips.put(JSONObject("""{"label":"Nuovo","bind":"chip_new"}""")); onChange()
-    }) { Text("+ Aggiungi chip") }
-
-    Divider()
-    // Stile testo
+    // Tipografia granulare
     val textSize = remember {
-        mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() })
-    }
-    ExposedDropdown(
-        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
-        label = "textSize (sp)",
-        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        textSize.value = v
-        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
-        onChange()
-    }
-    var fontWeight by remember { mutableStateOf(working.optString("fontWeight","")) }
-    ExposedDropdown(
-        value = if (fontWeight.isBlank()) "(default)" else fontWeight, label = "fontWeight",
-        options = listOf("(default)","w300","w400","w500","w600","w700")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        fontWeight = v
-        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
-        onChange()
-    }
-    var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) }
-    ExposedDropdown(
-        value = if (fontFamily.isBlank()) "(default)" else fontFamily, label = "fontFamily",
-        options = listOf("(default)","sans","serif","monospace","cursive")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        fontFamily = v
-        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
-        onChange()
-    }
-    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
-    NamedColorPickerPlus(current = textColor.value, label = "textColor") { hex ->
-        textColor.value = hex
-        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
-        onChange()
-    }
-}
-
-@Composable
-private fun TabsInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("Tabs – Proprietà", style = MaterialTheme.typography.titleMedium)
-    val tabs = working.optJSONArray("tabs") ?: JSONArray().also { working.put("tabs", it) }
-
-    val count = tabs.length().coerceAtLeast(1)
-    val initIdxState = remember { mutableStateOf(working.optInt("initialIndex", 0).coerceIn(0, count-1).toString()) }
-    ExposedDropdown(
-        value = initIdxState.value,
-        label = "initialIndex",
-        options = (0 until count).map { it.toString() }
-    ) { sel -> initIdxState.value = sel; working.put("initialIndex", sel.toInt()); onChange() }
-
-    Divider()
-    Text("Tab", style = MaterialTheme.typography.titleMedium)
-
-    for (i in 0 until tabs.length()) {
-        val t = tabs.getJSONObject(i)
-        ElevatedCard {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Tab ${i+1}", style = MaterialTheme.typography.labelLarge)
-                    Row {
-                        IconButton(onClick = { moveInArray(tabs, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
-                        IconButton(onClick = { moveInArray(tabs, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
-                        IconButton(onClick = { removeAt(tabs, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
-                    }
-                }
-                val lbl = remember { mutableStateOf(t.optString("label","")) }
-                OutlinedTextField(lbl.value, { lbl.value = it; t.put("label", it); onChange() }, label = { Text("label") })
-            }
-        }
-        Spacer(Modifier.height(8.dp))
+        mutableStateOf(
+            block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
+        )
     }
 
-    Button(onClick = {
-        tabs.put(JSONObject("""{"label":"Nuova tab","blocks":[{"type":"SectionHeader","title":"Contenuto nuova tab"}]}"""))
-        onChange()
-    }) { Text("+ Aggiungi tab") }
-}
-
-@Composable
-private fun MetricsGridInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("MetricsGrid – Proprietà", style = MaterialTheme.typography.titleMedium)
-
-    val cols = remember { mutableStateOf(working.optInt("columns", 2).toString()) }
-    ExposedDropdown(
-        value = cols.value, label = "columns",
-        options = listOf("1","2","3")
-    ) { sel -> cols.value = sel; working.put("columns", sel.toInt()); onChange() }
-
-    Divider(); Text("Tiles", style = MaterialTheme.typography.titleMedium)
-
-    val tiles = working.optJSONArray("tiles") ?: JSONArray().also { working.put("tiles", it) }
-    for (i in 0 until tiles.length()) {
-        val tile = tiles.getJSONObject(i)
-        ElevatedCard {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Tile ${i+1}", style = MaterialTheme.typography.labelLarge)
-                    Row {
-                        IconButton(onClick = { moveInArray(tiles, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
-                        IconButton(onClick = { moveInArray(tiles, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
-                        IconButton(onClick = { removeAt(tiles, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
-                    }
-                }
-                val lbl = remember { mutableStateOf(tile.optString("label","")) }
-                OutlinedTextField(lbl.value, { lbl.value = it; tile.put("label", it); onChange() }, label = { Text("label") })
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-    }
-    Button(onClick = { tiles.put(JSONObject("""{"label":"Nuova"}""")); onChange() }) { Text("+ Aggiungi tile") }
-}
-
-@Composable
-private fun ProgressInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("Progress – Proprietà", style = MaterialTheme.typography.titleMedium)
-
-    val label = remember { mutableStateOf(working.optString("label","")) }
-    OutlinedTextField(value = label.value, onValueChange = {
-        label.value = it; working.put("label", it); onChange()
-    }, label = { Text("label") })
-
-    val value = remember { mutableStateOf(working.optDouble("value", 0.0).toString()) }
-    StepperField("value (0–100)", value, 1.0) { v ->
-        working.put("value", v.coerceIn(0.0, 100.0)); onChange()
-    }
-
-    val showPercent = remember { mutableStateOf(working.optBoolean("showPercent", true)) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = showPercent.value, onCheckedChange = {
-            showPercent.value = it; working.put("showPercent", it); onChange()
-        })
-        Spacer(Modifier.width(8.dp)); Text("mostra %")
-    }
-
-    val color = remember { mutableStateOf(working.optString("color","primary")) }
-    NamedColorPickerPlus(
-        current = color.value,
-        label = "color",
-        allowRoles = true
-    ) { pick ->
-        color.value = pick
-        if (pick.isBlank()) working.remove("color") else working.put("color", pick)
-        onChange()
-    }
-}
-
-@Composable
-private fun AlertInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("Alert – Proprietà", style = MaterialTheme.typography.titleMedium)
-
-    var severity by remember { mutableStateOf(working.optString("severity","info")) }
-    ExposedDropdown(
-        value = severity, label = "severity",
-        options = listOf("info","success","warning","error")
-    ) { sel -> severity = sel; working.put("severity", sel); onChange() }
-
-    val title = remember { mutableStateOf(working.optString("title","")) }
-    OutlinedTextField(value = title.value, onValueChange = {
-        title.value = it; working.put("title", it); onChange()
-    }, label = { Text("title") })
-
-    val message = remember { mutableStateOf(working.optString("message","")) }
-    OutlinedTextField(value = message.value, onValueChange = {
-        message.value = it; working.put("message", it); onChange()
-    }, label = { Text("message") })
-
-    val action = remember { mutableStateOf(working.optString("actionId","")) }
-    OutlinedTextField(value = action.value, onValueChange = {
-        action.value = it; working.put("actionId", it); onChange()
-    }, label = { Text("actionId (opz.)") })
-}
-
-@Composable
-private fun ImageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("Image – Proprietà", style = MaterialTheme.typography.titleMedium)
-
-    val source = remember { mutableStateOf(working.optString("source","")) }
-    OutlinedTextField(value = source.value, onValueChange = {
-        source.value = it; working.put("source", it); onChange()
-    }, label = { Text("source (es. res:ic_launcher_foreground)") })
-
-    val height = remember { mutableStateOf(working.optDouble("heightDp", 160.0).toString()) }
-    StepperField("height (dp)", height, 4.0) { v ->
-        working.put("heightDp", v.coerceAtLeast(64.0)); onChange()
-    }
-
-    val corner = remember { mutableStateOf(working.optDouble("corner", 12.0).toString()) }
-    StepperField("corner (dp)", corner, 2.0) { v ->
-        working.put("corner", v.coerceAtLeast(0.0)); onChange()
-    }
-
-    var scale by remember { mutableStateOf(working.optString("contentScale","fit")) }
-    ExposedDropdown(
-        value = scale, label = "contentScale",
-        options = listOf("fit","crop")
-    ) { sel -> scale = sel; working.put("contentScale", sel); onChange() }
-}
-
-@Composable
-private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     Text("SectionHeader – Proprietà", style = MaterialTheme.typography.titleMedium)
 
-    val title = remember { mutableStateOf(working.optString("title","")) }
     OutlinedTextField(
         value = title.value,
-        onValueChange = { title.value = it; working.put("title", it); onChange() },
+        onValueChange = { title.value = it; block.put("title", it); onLive() },
         label = { Text("Titolo") }
     )
-
-    val subtitle = remember { mutableStateOf(working.optString("subtitle","")) }
     OutlinedTextField(
         value = subtitle.value,
-        onValueChange = { subtitle.value = it; working.put("subtitle", it); onChange() },
+        onValueChange = { subtitle.value = it; block.put("subtitle", it); onLive() },
         label = { Text("Sottotitolo (opz.)") }
     )
 
-    var style by remember { mutableStateOf(working.optString("style","titleMedium")) }
     ExposedDropdown(
         value = style, label = "style",
-        options = listOf("displaySmall","headlineSmall","titleLarge","titleMedium","titleSmall","bodyLarge","bodyMedium")
-    ) { sel -> style = sel; working.put("style", sel); onChange() }
+        options = listOf(
+            "displaySmall", "headlineSmall",
+            "titleLarge", "titleMedium", "titleSmall",
+            "bodyLarge", "bodyMedium"
+        )
+    ) { style = it; block.put("style", it); onLive() }
 
-    var align by remember { mutableStateOf(working.optString("align","start")) }
     ExposedDropdown(
         value = align, label = "align",
-        options = listOf("start","center","end")
-    ) { sel -> align = sel; working.put("align", sel); onChange() }
+        options = listOf("start", "center", "end")
+    ) { align = it; block.put("align", it); onLive() }
 
-    val textSize = remember {
-        mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() })
-    }
     ExposedDropdown(
         value = if (textSize.value.isBlank()) "(default)" else textSize.value,
         label = "textSize (sp)",
-        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24","28","32","36")
+        options = listOf("(default)", "8", "9", "10", "11", "12", "14", "16", "18", "20", "22", "24", "28", "32", "36")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         textSize.value = v
-        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
-        onChange()
+        if (v.isBlank()) block.remove("textSizeSp") else block.put("textSizeSp", v.toDouble())
+        onLive()
     }
 
-    var fontWeight by remember { mutableStateOf(working.optString("fontWeight","")) }
-    ExposedDropdown(
-        value = if (fontWeight.isBlank()) "(default)" else fontWeight, label = "fontWeight",
-        options = listOf("(default)","w300","w400","w500","w600","w700")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        fontWeight = v
-        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
-        onChange()
-    }
-
-    var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) }
-    ExposedDropdown(
-        value = if (fontFamily.isBlank()) "(default)" else fontFamily, label = "fontFamily",
-        options = listOf("(default)","sans","serif","monospace","cursive")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        fontFamily = v
-        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
-        onChange()
-    }
-
-    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
-    NamedColorPickerPlus(current = textColor.value, label = "textColor") { hex ->
-        textColor.value = hex
-        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
-        onChange()
-    }
+    Divider()
+    Text("Azione al tap", style = MaterialTheme.typography.titleMedium)
+    OutlinedTextField(
+        value = clickAction.value,
+        onValueChange = { clickAction.value = it; block.put("clickActionId", it); onLive() },
+        label = { Text("clickActionId (es. nav:settings)") }
+    )
 }
 
 @Composable
-private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+private fun SpacerInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val height = remember { mutableStateOf(block.optDouble("height", 8.0).toString()) }
+
+    Text("Spacer – Proprietà", style = MaterialTheme.typography.titleMedium)
+    StepperField("height (dp)", height, 2.0) { v -> block.put("height", v); onLive() }
+}
+
+@Composable
+private fun DividerInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
+    val padStart = remember { mutableStateOf(block.optDouble("padStart", 0.0).toString()) }
+    val padEnd = remember { mutableStateOf(block.optDouble("padEnd", 0.0).toString()) }
+
+    Text("Divider – Proprietà", style = MaterialTheme.typography.titleMedium)
+    StepperField("thickness (dp)", thickness, 1.0) { v -> block.put("thickness", v); onLive() }
+    StepperField("padStart (dp)", padStart, 2.0) { v -> block.put("padStart", v); onLive() }
+    StepperField("padEnd (dp)", padEnd, 2.0) { v -> block.put("padEnd", v); onLive() }
+}
+
+@Composable
+private fun DividerVInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val thickness = remember { mutableStateOf(block.optDouble("thickness", 1.0).toString()) }
+    val height = remember { mutableStateOf(block.optDouble("height", 24.0).toString()) }
+
+    Text("DividerV – Proprietà", style = MaterialTheme.typography.titleMedium)
+    StepperField("thickness (dp)", thickness, 1.0) { v -> block.put("thickness", v); onLive() }
+    StepperField("height (dp)", height, 2.0) { v -> block.put("height", v); onLive() }
+}
+
+@Composable
+private fun CardInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    var variant by remember { mutableStateOf(block.optString("variant", "elevated")) }
+    val action = remember { mutableStateOf(block.optString("clickActionId", "")) }
+
+    Text("Card – Proprietà", style = MaterialTheme.typography.titleMedium)
+    ExposedDropdown(
+        value = variant, label = "variant",
+        options = listOf("elevated", "outlined", "filled")
+    ) { variant = it; block.put("variant", it); onLive() }
+
+    OutlinedTextField(
+        value = action.value,
+        onValueChange = { action.value = it; block.put("clickActionId", it); onLive() },
+        label = { Text("clickActionId (es. nav:run)") }
+    )
+}
+
+@Composable
+private fun FabInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val icon = remember { mutableStateOf(block.optString("icon", "play_arrow")) }
+    val label = remember { mutableStateOf(block.optString("label", "Start")) }
+    var variant by remember { mutableStateOf(block.optString("variant", "regular")) }
+    var size by remember { mutableStateOf(block.optString("size", "regular")) }
+    val action = remember { mutableStateOf(block.optString("actionId", "start_run")) }
+
+    Text("Fab – Proprietà", style = MaterialTheme.typography.titleMedium)
+
+    IconPickerField(icon, "icon") { sel -> icon.value = sel; block.put("icon", sel); onLive() }
+    OutlinedTextField(value = label.value, onValueChange = {
+        label.value = it; block.put("label", it); onLive()
+    }, label = { Text("label") })
+
+    ExposedDropdown(
+        value = variant, label = "variant",
+        options = listOf("regular", "extended")
+    ) { variant = it; block.put("variant", it); onLive() }
+
+    ExposedDropdown(
+        value = size, label = "size",
+        options = listOf("small", "regular", "large")
+    ) { size = it; block.put("size", it); onLive() }
+
+    OutlinedTextField(
+        value = action.value,
+        onValueChange = { action.value = it; block.put("actionId", it); onLive() },
+        label = { Text("actionId") }
+    )
+}
+
+@Composable
+private fun IconButtonInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val icon = remember { mutableStateOf(block.optString("icon", "more_vert")) }
+    val action = remember { mutableStateOf(block.optString("actionId", "")) }
+    val openMenuId = remember { mutableStateOf(block.optString("openMenuId", "")) }
+
+    Text("IconButton – Proprietà", style = MaterialTheme.typography.titleMedium)
+
+    IconPickerField(icon, "icon") { sel -> icon.value = sel; block.put("icon", sel); onLive() }
+
+    OutlinedTextField(
+        value = action.value,
+        onValueChange = { action.value = it; block.put("actionId", it); onLive() },
+        label = { Text("actionId (es. nav:settings o open_menu:<id>)") }
+    )
+
+    OutlinedTextField(
+        value = openMenuId.value,
+        onValueChange = { openMenuId.value = it; block.put("openMenuId", it); onLive() },
+        label = { Text("openMenuId (se non usi actionId=open_menu:...)") }
+    )
+}
+
+@Composable
+private fun ListInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val textSize = remember {
+        mutableStateOf(block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() })
+    }
+    var fontFamily by remember { mutableStateOf(block.optString("fontFamily", "")) }
+    var fontWeight by remember { mutableStateOf(block.optString("fontWeight", "")) }
+    var textColor by remember { mutableStateOf(block.optString("textColor", "")) }
+
     Text("List – Proprietà testo", style = MaterialTheme.typography.titleMedium)
 
-    val textSize = remember { mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }) }
-    ExposedDropdown(
-        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
-        label = "textSize (sp)",
-        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        textSize.value = v
-        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
-        onChange()
+    StepperField("textSize (sp)", textSize, 1.0) { v ->
+        if (v <= 0.0) block.remove("textSizeSp") else block.put("textSizeSp", v)
+        onLive()
     }
 
-    var align by remember { mutableStateOf(working.optString("align","start")) }
-    ExposedDropdown(
-        value = align, label = "align",
-        options = listOf("start","center","end")
-    ) { sel -> align = sel; working.put("align", sel); onChange() }
-
-    var fontFamily by remember { mutableStateOf(working.optString("fontFamily", "")) }
     ExposedDropdown(
         value = if (fontFamily.isBlank()) "(default)" else fontFamily,
         label = "fontFamily",
-        options = listOf("(default)","sans","serif","monospace","cursive")
+        options = listOf("(default)", "sans", "serif", "monospace", "cursive")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontFamily = v
-        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
-        onChange()
+        if (v.isBlank()) block.remove("fontFamily") else block.put("fontFamily", v)
+        onLive()
     }
 
-    var fontWeight by remember { mutableStateOf(working.optString("fontWeight", "")) }
     ExposedDropdown(
         value = if (fontWeight.isBlank()) "(default)" else fontWeight,
         label = "fontWeight",
-        options = listOf("(default)","w300","w400","w500","w600","w700")
+        options = listOf("(default)", "w300", "w400", "w500", "w600", "w700")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontWeight = v
-        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
-        onChange()
+        if (v.isBlank()) block.remove("fontWeight") else block.put("fontWeight", v)
+        onLive()
     }
 
-    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
-    NamedColorPickerPlus(
-        current = textColor.value,
-        label = "textColor"
-    ) { hex ->
-        textColor.value = hex
-        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
-        onChange()
-    }
+    NamedColorPicker(
+        currentHexOrEmpty = textColor,
+        label = "textColor",
+        onPickHex = { hex ->
+            textColor = hex
+            if (hex.isBlank()) block.remove("textColor") else block.put("textColor", hex)
+            onLive()
+        }
+    )
 }
 
-
 @Composable
-private fun PageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("Page – Proprietà", style = MaterialTheme.typography.titleMedium)
+private fun ChipRowInspectorBody(block: JSONObject, onLive: () -> Unit) {
+    val textSize = remember {
+        mutableStateOf(block.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() })
+    }
+    var fontFamily by remember { mutableStateOf(block.optString("fontFamily", "")) }
+    var fontWeight by remember { mutableStateOf(block.optString("fontWeight", "")) }
+    var textColor by remember { mutableStateOf(block.optString("textColor", "")) }
 
-    val title = remember { mutableStateOf(working.optString("title","")) }
-    OutlinedTextField(
-        value = title.value,
-        onValueChange = { title.value = it; working.put("title", it); onChange() },
-        label = { Text("title (opz.)") }
-    )
+    Text("ChipRow – Proprietà testo", style = MaterialTheme.typography.titleMedium)
 
-    var scrollable by remember { mutableStateOf(working.optBoolean("scrollable", true)) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = scrollable, onCheckedChange = {
-            scrollable = it; working.put("scrollable", it); onChange()
-        })
-        Spacer(Modifier.width(8.dp)); Text("scrollable content")
+    StepperField("textSize (sp)", textSize, 1.0) { v ->
+        if (v <= 0.0) block.remove("textSizeSp") else block.put("textSizeSp", v)
+        onLive()
     }
 
-    Divider()
-
-    // TOP BAR
-    var hasTop by remember { mutableStateOf(working.has("topBar")) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = hasTop, onCheckedChange = { checked ->
-            hasTop = checked
-            if (checked) {
-                val tb = working.optJSONObject("topBar") ?: JSONObject("""{"type":"AppBar","title":"Titolo"}""")
-                working.put("topBar", tb)
-            } else {
-                working.remove("topBar")
-            }
-            onChange()
-        })
-        Spacer(Modifier.width(8.dp)); Text("topBar (AppBar)")
-    }
-    if (hasTop) {
-        val top = working.optJSONObject("topBar") ?: JSONObject().also { working.put("topBar", it) }
-        val t = remember { mutableStateOf(top.optString("title","")) }
-        OutlinedTextField(t.value, {
-            t.value = it; top.put("title", it); onChange()
-        }, label = { Text("topBar.title") })
+    ExposedDropdown(
+        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+        label = "fontFamily",
+        options = listOf("(default)", "sans", "serif", "monospace", "cursive")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontFamily = v
+        if (v.isBlank()) block.remove("fontFamily") else block.put("fontFamily", v)
+        onLive()
     }
 
-    Divider()
-
-    // BOTTOM BAR
-    var hasBottom by remember { mutableStateOf(working.has("bottomBar")) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = hasBottom, onCheckedChange = { checked ->
-            hasBottom = checked
-            if (checked) {
-                val bb = working.optJSONObject("bottomBar") ?: JSONObject("""{"type":"ButtonRow","align":"space_evenly","buttons":[{"label":"Action","style":"text","icon":"play_arrow","actionId":""}]}""")
-                working.put("bottomBar", bb)
-            } else {
-                working.remove("bottomBar")
-            }
-            onChange()
-        })
-        Spacer(Modifier.width(8.dp)); Text("bottomBar (ButtonRow)")
-    }
-    if (hasBottom) {
-        val bb = working.optJSONObject("bottomBar") ?: JSONObject().also { working.put("bottomBar", it) }
-        Text("Bottom bar – ButtonRow", style = MaterialTheme.typography.titleSmall)
-        ButtonRowInspectorPanel(bb, onChange)
+    ExposedDropdown(
+        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+        label = "fontWeight",
+        options = listOf("(default)", "w300", "w400", "w500", "w600", "w700")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontWeight = v
+        if (v.isBlank()) block.remove("fontWeight") else block.put("fontWeight", v)
+        onLive()
     }
 
-    Divider()
-    Text("Content", style = MaterialTheme.typography.titleMedium)
-
-    val content = working.optJSONArray("content") ?: JSONArray().also { working.put("content", it) }
-
-    // List items
-    for (i in 0 until content.length()) {
-        val node = content.getJSONObject(i)
-        ElevatedCard {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Blocco ${i+1}: " + node.optString("type","?"), style = MaterialTheme.typography.labelLarge)
-                    Row {
-                        IconButton(onClick = { moveInArray(content, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
-                        IconButton(onClick = { moveInArray(content, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
-                        IconButton(onClick = { removeAt(content, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
-                    }
-                }
-            }
+    NamedColorPicker(
+        currentHexOrEmpty = textColor,
+        label = "textColor",
+        onPickHex = { hex ->
+            textColor = hex
+            if (hex.isBlank()) block.remove("textColor") else block.put("textColor", hex)
+            onLive()
         }
-        Spacer(Modifier.height(8.dp))
-    }
-
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { content.put(newSectionHeader()); onChange() }) { Text("+ SectionHeader") }
-        OutlinedButton(onClick = { content.put(newSpacer()); onChange() }) { Text("+ Spacer") }
-        OutlinedButton(onClick = { content.put(JSONObject("""{"type":"Divider"}""")); onChange() }) { Text("+ Divider") }
-        OutlinedButton(onClick = { content.put(newButtonRow()); onChange() }) { Text("+ ButtonRow") }
-    }
+    )
 }
 
 /* =========================
@@ -1748,10 +1405,8 @@ private fun mapTextAlign(key: String): TextAlign = when (key) {
 }
 
 private fun sizeModifier(size: String): Modifier = when (size) {
-    "xs" -> Modifier.height(32.dp)
     "sm" -> Modifier.height(36.dp)
     "lg" -> Modifier.height(52.dp)
-    "xl" -> Modifier.height(56.dp)
     else -> Modifier.height(40.dp)
 }
 
@@ -1788,6 +1443,7 @@ private fun mapButtonColors(style: String, tint: String): Triple<Color, Color, D
             },
             1.dp
         )
+
         "text" -> Triple(
             Color.Transparent,
             when (tint) {
@@ -1798,7 +1454,9 @@ private fun mapButtonColors(style: String, tint: String): Triple<Color, Color, D
             },
             0.dp
         )
+
         "tonal" -> Triple(cs.secondaryContainer, cs.onSecondaryContainer, 0.dp)
+
         else -> Triple(baseContainer, baseContent, 0.dp)
     }
 }
@@ -1809,11 +1467,11 @@ private val ICONS = listOf(
     "settings", "more_vert", "tune",
     "play_arrow", "pause", "stop", "add",
     "flag", "queue_music", "widgets", "palette",
-    "home", "menu", "close", "more_horiz", "list", "tab", "grid_on",
+    "home", "menu", "close", "more_horiz",
     "directions_run", "directions_walk", "directions_bike",
     "fitness_center", "timer", "timer_off", "watch_later",
     "map", "my_location", "place", "speed",
-    "bolt", "local_fire_department", "sports_score", "toggle_on"
+    "bolt", "local_fire_department", "sports_score"
 )
 
 @Composable
@@ -1828,7 +1486,13 @@ private fun IconPickerField(
             value = value.value,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
+            label = {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LocalContentColor.current
+                )
+            },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             leadingIcon = { if (value.value.isNotBlank()) NamedIconEx(value.value, null) },
             modifier = Modifier.menuAnchor()
@@ -1858,7 +1522,13 @@ private fun ExposedDropdown(
             value = value,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
+            label = {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LocalContentColor.current
+                )
+            },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor()
         )
@@ -1880,7 +1550,10 @@ private fun StepperField(
     fun current(): Double = state.value.toDoubleOrNull() ?: 0.0
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, style = MaterialTheme.typography.labelMedium)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             OutlinedButton(onClick = {
                 val v = current() - step
                 state.value = "%.2f".format(max(v, -10000.0))
@@ -1911,12 +1584,6 @@ private fun StepperField(
 
 @Composable
 private fun NamedIconEx(name: String?, contentDescription: String?) {
-    val __ctx = LocalContext.current
-    if (name?.startsWith("res:") == true) {
-        val resName = name.removePrefix("res:")
-        val id = __ctx.resources.getIdentifier(resName, "drawable", __ctx.packageName)
-        if (id != 0) { Icon(painterResource(id), contentDescription); return }
-    }
     val image = when (name) {
         "settings" -> Icons.Filled.Settings
         "more_vert" -> Icons.Filled.MoreVert
@@ -1929,17 +1596,18 @@ private fun NamedIconEx(name: String?, contentDescription: String?) {
         "queue_music" -> Icons.Filled.QueueMusic
         "widgets" -> Icons.Filled.Widgets
         "palette" -> Icons.Filled.Palette
+        "directions_run" -> Icons.Filled.DirectionsRun
         "home" -> Icons.Filled.Home
         "menu" -> Icons.Filled.Menu
         "close" -> Icons.Filled.Close
         "more_horiz" -> Icons.Filled.MoreHoriz
-        "list" -> Icons.Filled.List
-        "tab" -> Icons.Filled.Tab
-        "grid_on" -> Icons.Filled.GridOn
-        "toggle_on" -> Icons.Filled.ToggleOn
         else -> null
     }
-    if (image != null) Icon(image, contentDescription) else Text(".")
+    if (image != null) {
+        Icon(image, contentDescription)
+    } else {
+        Text(".")
+    }
 }
 
 /* ---- Color parsing / pickers ---- */
@@ -1951,7 +1619,11 @@ private fun parseColorOrRole(value: String?): Color? {
 
     // Hex
     if (v.startsWith("#") && (v.length == 7 || v.length == 9)) {
-        return try { Color(android.graphics.Color.parseColor(v)) } catch (_: Exception) { null }
+        return try {
+            Color(android.graphics.Color.parseColor(v))
+        } catch (_: Exception) {
+            null
+        }
     }
 
     val cs = MaterialTheme.colorScheme
@@ -1970,85 +1642,62 @@ private fun parseColorOrRole(value: String?): Color? {
     }
 }
 
-private val NAMED_SWATCHES = linkedMapOf(
-    // Neutri
-    "White" to 0xFFFFFFFF, "Black" to 0xFF000000,
-    "Gray50" to 0xFFFAFAFA, "Gray100" to 0xFFF5F5F5, "Gray200" to 0xFFEEEEEE,
-    "Gray300" to 0xFFE0E0E0, "Gray400" to 0xFFBDBDBD, "Gray500" to 0xFF9E9E9E,
-    "Gray600" to 0xFF757575, "Gray700" to 0xFF616161, "Gray800" to 0xFF424242, "Gray900" to 0xFF212121,
-
-    // Material-like
-    "Red" to 0xFFE53935, "RedDark" to 0xFFC62828, "RedLight" to 0xFFEF5350,
-    "Pink" to 0xFFD81B60, "PinkDark" to 0xFFC2185B, "PinkLight" to 0xFFF06292,
-    "Purple" to 0xFF8E24AA, "PurpleDark" to 0xFF6A1B9A, "PurpleLight" to 0xFFBA68C8,
-    "DeepPurple" to 0xFF5E35B1, "Indigo" to 0xFF3949AB,
-    "Blue" to 0xFF1E88E5, "BlueDark" to 0xFF1565C0, "BlueLight" to 0xFF64B5F6,
-    "LightBlue" to 0xFF039BE5, "Cyan" to 0xFF00ACC1,
-    "Teal" to 0xFF00897B, "TealLight" to 0xFF26A69A,
-    "Green" to 0xFF43A047, "GreenDark" to 0xFF2E7D32, "GreenLight" to 0xFF66BB6A,
-    "LightGreen" to 0xFF7CB342, "Lime" to 0xFFC0CA33,
-    "Yellow" to 0xFFFDD835, "Amber" to 0xFFFFB300,
-    "Orange" to 0xFFFB8C00, "DeepOrange" to 0xFFF4511E,
-    "Brown" to 0xFF6D4C41, "BlueGrey" to 0xFF546E7A
-)
-
-private val MATERIAL_ROLES = listOf(
-    "primary","secondary","tertiary","error","surface",
-    "onPrimary","onSecondary","onTertiary","onSurface","onError"
+private val NAMED_COLORS = linkedMapOf(
+    "Red" to 0xFFE53935,
+    "Pink" to 0xFFD81B60,
+    "Purple" to 0xFF8E24AA,
+    "DeepPurple" to 0xFF5E35B1,
+    "Indigo" to 0xFF3949AB,
+    "Blue" to 0xFF1E88E5,
+    "LightBlue" to 0xFF039BE5,
+    "Cyan" to 0xFF00ACC1,
+    "Teal" to 0xFF00897B,
+    "Green" to 0xFF43A047,
+    "LightGreen" to 0xFF7CB342,
+    "Lime" to 0xFFC0CA33,
+    "Yellow" to 0xFFFDD835,
+    "Amber" to 0xFFFFB300,
+    "Orange" to 0xFFFB8C00,
+    "DeepOrange" to 0xFFF4511E,
+    "Brown" to 0xFF6D4C41,
+    "BlueGrey" to 0xFF546E7A
 )
 
 @Composable
-private fun NamedColorPickerPlus(
-    current: String,
+private fun NamedColorPicker(
+    currentHexOrEmpty: String,
     label: String,
-    allowRoles: Boolean = false,
-    onPick: (String) -> Unit
+    onPickHex: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val display = if (current.isBlank()) "(default)" else current
+    val display = if (currentHexOrEmpty.isBlank()) "(default)" else currentHexOrEmpty
 
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
         OutlinedTextField(
             value = display,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
+            label = {
+                Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current)
+            },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            if (allowRoles) {
-                val cs = MaterialTheme.colorScheme
-                fun roleColor(role: String): Color = when (role) {
-                    "primary","onPrimary"     -> cs.primary
-                    "secondary","onSecondary" -> cs.secondary
-                    "tertiary","onTertiary"   -> cs.tertiary
-                    "error","onError"         -> cs.error
-                    "surface","onSurface"     -> cs.surface
-                    else -> cs.primary
-                }
-                MATERIAL_ROLES.forEach { role ->
-                    val c = roleColor(role)
-                    DropdownMenuItem(
-                        leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
-                        text = { Text(role) },
-                        onClick = { onPick(role); expanded = false }
-                    )
-                }
-                Divider()
-            }
-            NAMED_SWATCHES.forEach { (name, argb) ->
+            NAMED_COLORS.forEach { (name, argb) ->
                 val c = Color(argb)
                 DropdownMenuItem(
-                    leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
+                    leadingIcon = {
+                        Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp)))
+                    },
                     text = { Text(name) },
                     onClick = {
                         val hex = "#%06X".format(0xFFFFFF and argb.toInt())
-                        onPick(hex); expanded = false
+                        onPickHex(hex); expanded = false
                     }
                 )
             }
-            DropdownMenuItem(text = { Text("(default)") }, onClick = { onPick(""); expanded = false })
+            DropdownMenuItem(text = { Text("(default)") }, onClick = { onPickHex(""); expanded = false })
         }
     }
 }
@@ -2076,7 +1725,9 @@ private fun collectMenus(root: JSONObject): Map<String, JSONArray> {
                 }
                 n.keys().forEachRemaining { key -> walk(n.opt(key)) }
             }
-            is JSONArray -> { for (i in 0 until n.length()) walk(n.opt(i)) }
+            is JSONArray -> {
+                for (i in 0 until n.length()) walk(n.opt(i))
+            }
         }
     }
     walk(root)
@@ -2233,11 +1884,11 @@ private fun removeAt(arr: JSONArray, index: Int) {
     tmp.forEach { arr.put(it) }
 }
 
-/* =========================
- * BLUEPRINTS
- * ========================= */
+/* ---- Blueprints ---- */
 
-private fun newSectionHeader() = JSONObject("""{"type":"SectionHeader","title":"Nuova sezione"}""")
+private fun newSectionHeader() = JSONObject(
+    """{"type":"SectionHeader","title":"Nuova sezione"}""".trimIndent()
+)
 
 private fun newButtonRow() = JSONObject(
     """
@@ -2249,8 +1900,11 @@ private fun newButtonRow() = JSONObject(
     """.trimIndent()
 )
 
-private fun newSpacer()   = JSONObject("""{"type":"Spacer","height":8}""")
-private fun newDividerV() = JSONObject("""{"type":"DividerV","thickness":1,"height":24}""")
+private fun newSpacer() = JSONObject("""{"type":"Spacer","height":8}""".trimIndent())
+
+private fun newDividerV() = JSONObject(
+    """{"type":"DividerV","thickness":1,"height":24}""".trimIndent()
+)
 
 private fun newCard() = JSONObject(
     """
@@ -2262,10 +1916,12 @@ private fun newCard() = JSONObject(
     """.trimIndent()
 )
 
-private fun newFab() = JSONObject("""{"type":"Fab","icon":"play_arrow","label":"Start","variant":"extended","actionId":"start_run"}""")
+private fun newFab() = JSONObject(
+    """{"type":"Fab","icon":"play_arrow","label":"Start","variant":"extended","actionId":"start_run"}""".trimIndent()
+)
 
 private fun newIconButton(menuId: String = "more_menu") =
-    JSONObject("""{"type":"IconButton","icon":"more_vert","openMenuId":"$menuId"}""")
+    JSONObject("""{"type":"IconButton","icon":"more_vert","openMenuId":"$menuId"}""".trimIndent())
 
 private fun newMenu(menuId: String = "more_menu") = JSONObject(
     """
@@ -2274,55 +1930,6 @@ private fun newMenu(menuId: String = "more_menu") = JSONObject(
        {"icon":"palette","label":"Theme Lab","actionId":"open_theme_lab"},
        {"icon":"settings","label":"Impostazioni","actionId":"nav:settings"}
     ]}
-    """.trimIndent()
-)
-
-private fun newProgress() = JSONObject("""{ "type":"Progress", "label":"Avanzamento", "value": 40, "color": "primary", "showPercent": true }""")
-private fun newAlert()    = JSONObject("""{ "type":"Alert", "severity":"info", "title":"Titolo avviso", "message":"Testo dell'avviso", "actionId": "" }""")
-private fun newImage()    = JSONObject("""{ "type":"Image", "source":"res:ic_launcher_foreground", "heightDp": 160, "corner": 12, "contentScale":"fit" }""")
-
-private fun newTabs() = JSONObject(
-    """
-    {"type":"Tabs","initialIndex":0,"tabs":[
-      {"label":"Tab 1","blocks":[{"type":"SectionHeader","title":"Tab 1","style":"titleSmall","align":"start"}]},
-      {"label":"Tab 2","blocks":[{"type":"SectionHeader","title":"Tab 2","style":"titleSmall","align":"start"}]}
-    ]}
-    """.trimIndent()
-)
-
-private fun newChipRow() = JSONObject(
-    """
-    {"type":"ChipRow","chips":[
-      {"label":"Easy","bind":"level","value":"easy"},
-      {"label":"Medium","bind":"level","value":"medium"},
-      {"label":"Hard","bind":"level","value":"hard"}
-    ], "textSizeSp":14}
-    """.trimIndent()
-)
-
-private fun newMetricsGrid() = JSONObject("""{"type":"MetricsGrid","columns":2,"tiles":[{"label":"Pace"},{"label":"Heart"}]}""")
-
-private fun newSlider() = JSONObject("""{"type":"Slider","label":"Pace","bind":"pace","min":3.0,"max":7.0,"step":0.1,"unit":" min/km"}""")
-
-private fun newToggle() = JSONObject("""{"type":"Toggle","label":"Attiva opzione","bind":"toggle_1"}""")
-
-private fun newList() = JSONObject(
-    """
-    {"type":"List","align":"start","items":[
-      {"title":"Voce 1","subtitle":"Sottotitolo 1","actionId":"list:1"},
-      {"title":"Voce 2","subtitle":"Sottotitolo 2","actionId":"list:2"}
-    ]}
-    """.trimIndent()
-)
-
-
-private fun newPage() = JSONObject(
-    """
-    {"type":"Page","title":"Nuova pagina","scrollable":true,
-     "content":[
-       {"type":"SectionHeader","title":"Pagina vuota","style":"titleSmall","align":"start"}
-     ]
-    }
     """.trimIndent()
 )
 
@@ -2351,10 +1958,250 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
         "serif" -> FontFamily.Serif
         "monospace" -> FontFamily.Monospace
         "cursive" -> FontFamily.Cursive
-        "sans" -> FontFamily.SansSerif
         else -> null
     }
     if (family != null) st = st.copy(fontFamily = family)
 
     return st
 }
+@Composable
+private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+    val buttons = working.optJSONArray("buttons") ?: JSONArray().also { working.put("buttons", it) }
+
+    Text("ButtonRow – Proprietà", style = MaterialTheme.typography.titleMedium)
+
+    var align by remember { mutableStateOf(working.optString("align", "center")) }
+    ExposedDropdown(
+        value = align,
+        label = "align",
+        options = listOf("start","center","end","space_between","space_around","space_evenly")
+    ) { sel ->
+        align = sel
+        working.put("align", sel)
+        onChange()
+    }
+
+    Divider()
+    Text("Bottoni", style = MaterialTheme.typography.titleMedium)
+
+    for (i in 0 until buttons.length()) {
+        val btn = buttons.getJSONObject(i)
+        ElevatedCard(
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surface // pannello opaco
+            )
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Bottone ${i + 1}", style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        IconButton(onClick = { moveInArray(buttons, i, -1); onChange() }) {
+                            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null)
+                        }
+                        IconButton(onClick = { moveInArray(buttons, i, +1); onChange() }) {
+                            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null)
+                        }
+                        IconButton(onClick = { removeAt(buttons, i); onChange() }) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+
+                val label = remember { mutableStateOf(btn.optString("label", "")) }
+                OutlinedTextField(
+                    value = label.value,
+                    onValueChange = {
+                        label.value = it
+                        btn.put("label", it)
+                        onChange()
+                    },
+                    label = { Text("label") }
+                )
+
+                val icon = remember { mutableStateOf(btn.optString("icon", "")) }
+                IconPickerField(icon, "icon") { sel ->
+                    icon.value = sel
+                    btn.put("icon", sel)
+                    onChange()
+                }
+
+                var style by remember { mutableStateOf(btn.optString("style", "primary")) }
+                ExposedDropdown(
+                    value = style,
+                    label = "style",
+                    options = listOf("primary","tonal","outlined","text")
+                ) {
+                    style = it
+                    btn.put("style", it)
+                    onChange()
+                }
+
+                var size by remember { mutableStateOf(btn.optString("size", "md")) }
+                ExposedDropdown(
+                    value = size,
+                    label = "size",
+                    options = listOf("xs","sm","md","lg","xl")
+                ) {
+                    size = it
+                    btn.put("size", it)
+                    onChange()
+                }
+
+                // Corner con step = 1.0
+                val cornerStr = remember { mutableStateOf(btn.optDouble("corner", 20.0).toString()) }
+                StepperField("corner (dp)", cornerStr, 1.0) { v ->
+                    btn.put("corner", v)
+                    onChange()
+                }
+
+                // Solo customColor con palette
+                val customColor = remember { mutableStateOf(btn.optString("customColor", "")) }
+                NamedColorPicker(
+                    currentHexOrEmpty = customColor.value,
+                    label = "customColor (palette)",
+                    onPickHex = { hex ->
+                        customColor.value = hex
+                        if (hex.isBlank()) btn.remove("customColor") else btn.put("customColor", hex)
+                        onChange()
+                    }
+                )
+
+                var press by remember {
+                    mutableStateOf(btn.optString("pressEffect", "none").let { if (it == "scale") "scale" else "none" })
+                }
+                ExposedDropdown(
+                    value = press,
+                    label = "pressEffect",
+                    options = listOf("none","scale","glow","tilt")
+                ) { sel ->
+                    press = sel
+                    btn.put("pressEffect", sel)
+                    onChange()
+                }
+
+                val action = remember { mutableStateOf(btn.optString("actionId", "")) }
+                OutlinedTextField(
+                    value = action.value,
+                    onValueChange = {
+                        action.value = it
+                        btn.put("actionId", it)
+                        onChange()
+                    },
+                    label = { Text("actionId (es. nav:settings)") }
+                )
+            }
+        }
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = {
+            buttons.put(JSONObject("{\"label\":\"Nuovo\",\"style\":\"text\",\"icon\":\"add\",\"actionId\":\"\"}"))
+            onChange()
+        }) { Text("+ Aggiungi bottone") }
+    }
+}
+
+@Composable
+private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+    Text("SectionHeader – Proprietà", style = MaterialTheme.typography.titleMedium)
+
+    val title = remember { mutableStateOf(working.optString("title","")) }
+    OutlinedTextField(
+        value = title.value,
+        onValueChange = {
+            title.value = it
+            working.put("title", it)
+            onChange()
+        },
+        label = { Text("Titolo") }
+    )
+
+    val subtitle = remember { mutableStateOf(working.optString("subtitle","")) }
+    OutlinedTextField(
+        value = subtitle.value,
+        onValueChange = {
+            subtitle.value = it
+            working.put("subtitle", it)
+            onChange()
+        },
+        label = { Text("Sottotitolo (opz.)") }
+    )
+
+    var style by remember { mutableStateOf(working.optString("style","titleMedium")) }
+    ExposedDropdown(
+        value = style,
+        label = "style",
+        options = listOf("displaySmall","headlineSmall","titleLarge","titleMedium","titleSmall","bodyLarge","bodyMedium")
+    ) {
+        style = it
+        working.put("style", it)
+        onChange()
+    }
+
+    var align by remember { mutableStateOf(working.optString("align","start")) }
+    ExposedDropdown(
+        value = align,
+        label = "align",
+        options = listOf("start","center","end")
+    ) {
+        align = it
+        working.put("align", it)
+        onChange()
+    }
+
+    // Text size solo da menu (stessa logica già usata altrove)
+    val textSize = remember {
+        mutableStateOf(
+            working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }
+        )
+    }
+    ExposedDropdown(
+        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
+        label = "textsize (sp)",
+        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24","28","32","36")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        textSize.value = v
+        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
+        onChange()
+    }
+}
+
+@Composable
+private fun PageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+    Text("Page – Proprietà", style = MaterialTheme.typography.titleMedium)
+
+    val scrollableState = remember { mutableStateOf(working.optBoolean("scrollable", true)) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(checked = scrollableState.value, onCheckedChange = {
+            scrollableState.value = it; working.put("scrollable", it); onChange()
+        })
+        Spacer(Modifier.width(8.dp)); Text("scrollable")
+    }
+
+    val pad = remember { mutableStateOf(working.optDouble("padding", 12.0).toString()) }
+    StepperField("padding (dp)", pad, 2.0) { v ->
+        working.put("padding", v.coerceAtLeast(0.0)); onChange()
+    }
+
+    val bg = remember { mutableStateOf(working.optString("background","")) }
+    NamedColorPickerPlus(current = bg.value, label = "background", allowRoles = true) { pick ->
+        bg.value = pick
+        if (pick.isBlank()) working.remove("background") else working.put("background", pick)
+        onChange()
+    }
+}
+
+private fun newPage() = JSONObject(
+    """
+    {"type":"Page","scrollable":true,"padding":12,"blocks":[]}
+    """.trimIndent()
+)
