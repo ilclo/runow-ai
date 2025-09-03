@@ -1030,7 +1030,6 @@ private fun BoxScope.DesignerOverlay(
                         "Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
                         "MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
                         "List"        -> ListInspectorPanel(working, onChange = bumpPreview)
-						"Page"        -> PageInspectorPanel(working, onChange = bumpPreview)
                         else          -> Text("Inspector non ancora implementato per ${working.optString("type")}")
                     }
                     Spacer(Modifier.height(8.dp))
