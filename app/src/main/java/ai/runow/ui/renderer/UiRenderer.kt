@@ -202,6 +202,23 @@ private fun RenderBlock(
     }
 
     when (block.optString("type")) {
+	
+		"Page" -> Wrapper {
+			val title = block.optString("title","")
+			if (title.isNotBlank()) {
+				Text(title, style = MaterialTheme.typography.titleLarge)
+				Spacer(Modifier.height(8.dp))
+			}
+			val inner = block.optJSONArray("blocks") ?: JSONArray()
+			Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+				for (i in 0 until inner.length()) {
+					val b = inner.optJSONObject(i) ?: continue
+					val p2 = "$path/blocks/$i"
+					RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+				}
+			}
+		}
+
         "AppBar" -> Wrapper {
             Text(block.optString("title", ""), style = MaterialTheme.typography.titleLarge)
             val actions = block.optJSONArray("actions") ?: JSONArray()
@@ -214,19 +231,6 @@ private fun RenderBlock(
                         }
                     }
                 }
-            }
-        }
-		
-        "Page" -> {
-            // In designerMode non lo incorniciamo con OutlinedCard;
-            // aggiungiamo solo un overlay clickabile per selezionarlo.
-            if (designerMode) {
-                Box {
-                    RenderPage(block, dispatch, uiState, designerMode, path, menus, onSelect)
-                    Box(Modifier.matchParentSize().clickable { onSelect(path) })
-                }
-            } else {
-                RenderPage(block, dispatch, uiState, designerMode, path, menus, onSelect)
             }
         }
 
@@ -576,6 +580,7 @@ private fun RenderBlock(
             }
         }
 
+
         "ChipRow" -> Wrapper {
             val chips = block.optJSONArray("chips") ?: JSONArray()
             val isSingle = (0 until chips.length()).any { chips.optJSONObject(it)?.has("value") == true }
@@ -914,6 +919,15 @@ private fun BoxScope.DesignerOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Palette:", style = MaterialTheme.typography.labelLarge)
+				
+				FilledTonalButton(onClick = {
+					val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
+					setSelectedPath(path); onLayoutChange()
+				}) { 
+					Icon(Icons.Filled.Widgets, null)
+					Spacer(Modifier.width(6.dp))
+					Text("Page")
+				}
 
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
@@ -2096,17 +2110,38 @@ private fun replaceAtPath(root: JSONObject, path: String, newNode: JSONObject) {
     p.first.put(p.second, JSONObject(newNode.toString()))
 }
 
-private fun insertBlockAndReturnPath(root: JSONObject, selectedPath: String?, block: JSONObject, position: String): String {
+private fun insertBlockAndReturnPath(
+    root: JSONObject,
+    selectedPath: String?,
+    block: JSONObject,
+    position: String
+): String {
     val parentArr: JSONArray
     val idx: Int
     val parentPath: String
 
     if (selectedPath != null) {
-        val pair = getParentAndIndex(root, selectedPath)
-        if (pair != null) {
-            parentArr = pair.first
-            idx = pair.second
-            parentPath = selectedPath.substringBeforeLast("/")
+        val selectedNode = jsonAtPath(root, selectedPath)
+        if (selectedNode is JSONObject) {
+            // Se il selezionato è un contenitore con "blocks", inserisco DENTRO
+            val container = selectedNode.optJSONArray("blocks")
+            if (container != null) {
+                parentArr = container
+                idx = parentArr.length() - 1
+                parentPath = "$selectedPath/blocks"
+            } else {
+                // fallback: prima/dopo rispetto al livello del selezionato
+                val pair = getParentAndIndex(root, selectedPath)
+                if (pair != null) {
+                    parentArr = pair.first
+                    idx = pair.second
+                    parentPath = selectedPath.substringBeforeLast("/")
+                } else {
+                    parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
+                    idx = parentArr.length() - 1
+                    parentPath = "/blocks"
+                }
+            }
         } else {
             parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
             idx = parentArr.length() - 1
@@ -2120,6 +2155,7 @@ private fun insertBlockAndReturnPath(root: JSONObject, selectedPath: String?, bl
 
     val insertIndex = when (position) { "before" -> idx; else -> idx + 1 }.coerceIn(0, parentArr.length())
 
+    // Ricostruisco l'array inserendo nel punto calcolato
     val tmp = mutableListOf<Any?>()
     for (i in 0 until parentArr.length()) {
         if (i == insertIndex) tmp.add(block)
@@ -2132,6 +2168,7 @@ private fun insertBlockAndReturnPath(root: JSONObject, selectedPath: String?, bl
 
     return "$parentPath/$insertIndex"
 }
+
 
 private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
     val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
