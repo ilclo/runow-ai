@@ -2239,32 +2239,6 @@ private fun jsonAtPath(root: JSONObject, path: String): Any? {
     return node
 }
 
-private fun ensureObject(parent: JSONObject, key: String): JSONObject =
-    parent.optJSONObject(key) ?: JSONObject().also { parent.put(key, it) }
-
-private fun ensureArray(parent: JSONObject, key: String): JSONArray =
-    parent.optJSONArray(key) ?: JSONArray().also { parent.put(key, it) }
-
-private fun addSmartScaffoldDefaults(page: JSONObject) {
-    val sc = ensureObject(page, "scaffold")
-    ensureObject(sc, "topAppBar").apply {
-        if (!has("enabled")) put("enabled", false)
-        if (!has("title")) put("title", "")
-    }
-    ensureObject(sc, "bottomBar").apply {
-        if (!has("enabled")) put("enabled", false)
-        ensureArray(this, "buttons")
-    }
-    ensureObject(sc, "fab").apply {
-        if (!has("enabled")) put("enabled", false)
-        if (!has("variant")) put("variant", "regular")
-        if (!has("icon")) put("icon", "add")
-        if (!has("label")) put("label", "")
-        if (!has("actionId")) put("actionId", "")
-    }
-}
-
-
 private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, Int>? {
     if (!path.startsWith("/")) return null
     val segs = path.trim('/').split('/')
