@@ -83,32 +83,50 @@ fun UiScreen(
     val overlayHeightDp = with(LocalDensity.current) { (overlayHeightPx / density).dp }
 
     Box(Modifier.fillMaxSize()) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(scaffoldPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(
-                    start = 16.dp,
-                    end = 16.dp,
-                    top = 16.dp,
-                    bottom = if (designerMode) overlayHeightDp + 32.dp else 16.dp
-                ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            val blocks = layout!!.optJSONArray("blocks") ?: JSONArray()
-            for (i in 0 until blocks.length()) {
-                val block = blocks.optJSONObject(i) ?: continue
-                val path = "/blocks/$i"
-                RenderBlock(
-                    block = block,
-                    dispatch = dispatch,
-                    uiState = uiState,
-                    designerMode = designerMode,
-                    path = path,
-                    menus = menus,
-                    onSelect = { p -> selectedPath = p }
-                )
+        // --- NUOVO: se il layout ha esattamente un blocco "Page", renderizzalo full-screen ---
+        val blocks = layout!!.optJSONArray("blocks") ?: JSONArray()
+        val isSingleRootPage = (blocks.length() == 1 && (blocks.optJSONObject(0)?.optString("type") == "Page"))
+
+        if (isSingleRootPage) {
+            val page = blocks.getJSONObject(0)
+            // Renderizza la Page direttamente, niente Column esterna
+            RenderBlock(
+                block = page,
+                dispatch = dispatch,
+                uiState = uiState,
+                designerMode = designerMode,
+                path = "/blocks/0",
+                menus = menus,
+                onSelect = { p -> selectedPath = p }
+            )
+        } else {
+            // fallback: lista blocchi standard (comportamento che già avevi)
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(scaffoldPadding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 16.dp,
+                        bottom = if (designerMode) overlayHeightDp + 32.dp else 16.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                for (i in 0 until blocks.length()) {
+                    val block = blocks.optJSONObject(i) ?: continue
+                    val path = "/blocks/$i"
+                    RenderBlock(
+                        block = block,
+                        dispatch = dispatch,
+                        uiState = uiState,
+                        designerMode = designerMode,
+                        path = path,
+                        menus = menus,
+                        onSelect = { p -> selectedPath = p }
+                    )
+                }
             }
         }
 
@@ -183,19 +201,7 @@ private fun RenderBlock(
         }
     }
 
-    
-when (block.optString("type")) {
-        "Page" -> Wrapper {
-            val inner = block.optJSONArray("blocks") ?: JSONArray()
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                for (i in 0 until inner.length()) {
-                    val b = inner.optJSONObject(i) ?: continue
-                    val p2 = "$path/blocks/$i"
-                    RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
-                }
-            }
-        }
-
+    when (block.optString("type")) {
         "AppBar" -> Wrapper {
             Text(block.optString("title", ""), style = MaterialTheme.typography.titleLarge)
             val actions = block.optJSONArray("actions") ?: JSONArray()
@@ -208,6 +214,19 @@ when (block.optString("type")) {
                         }
                     }
                 }
+            }
+        }
+		
+        "Page" -> {
+            // In designerMode non lo incorniciamo con OutlinedCard;
+            // aggiungiamo solo un overlay clickabile per selezionarlo.
+            if (designerMode) {
+                Box {
+                    RenderPage(block, dispatch, uiState, designerMode, path, menus, onSelect)
+                    Box(Modifier.matchParentSize().clickable { onSelect(path) })
+                }
+            } else {
+                RenderPage(block, dispatch, uiState, designerMode, path, menus, onSelect)
             }
         }
 
@@ -740,6 +759,91 @@ when (block.optString("type")) {
     }
 }
 
+@Composable
+private fun RenderPage(
+    page: JSONObject,
+    dispatch: (String) -> Unit,
+    uiState: MutableMap<String, Any>,
+    designerMode: Boolean,
+    path: String,
+    menus: Map<String, JSONArray>,
+    onSelect: (String) -> Unit
+) {
+    val title = page.optString("title", "")
+    val scroll = page.optBoolean("scroll", true)
+
+    // AppBar azioni (facoltative) – stesso schema dell’“AppBar” simple
+    val actions = page.optJSONArray("actions") ?: JSONArray()
+
+    Scaffold(
+        topBar = {
+            if (title.isNotBlank() || actions.length() > 0) {
+                TopAppBar(
+                    title = { Text(title) },
+                    actions = {
+                        for (i in 0 until actions.length()) {
+                            val a = actions.optJSONObject(i) ?: continue
+                            IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                                NamedIconEx(a.optString("icon", "more_vert"), null)
+                            }
+                        }
+                    }
+                )
+            }
+        },
+        bottomBar = {
+            val bottomButtons = page.optJSONArray("bottomButtons") ?: JSONArray()
+            if (bottomButtons.length() > 0) {
+                Surface(tonalElevation = 3.dp) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        for (i in 0 until bottomButtons.length()) {
+                            val btn = bottomButtons.optJSONObject(i) ?: continue
+                            val label = btn.optString("label", "Button")
+                            val action = btn.optString("actionId", "")
+                            TextButton(onClick = { dispatch(action) }) { Text(label) }
+                        }
+                    }
+                }
+            }
+        },
+        floatingActionButton = {
+            page.optJSONObject("fab")?.let { fab ->
+                FloatingActionButton(onClick = { dispatch(fab.optString("actionId", "")) }) {
+                    NamedIconEx(fab.optString("icon", "play_arrow"), null)
+                }
+            }
+        }
+    ) { innerPadding ->
+        val innerBlocks = page.optJSONArray("blocks") ?: JSONArray()
+        val base = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+
+        val content: @Composable () -> Unit = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                for (i in 0 until innerBlocks.length()) {
+                    val b = innerBlocks.optJSONObject(i) ?: continue
+                    val p2 = "$path/blocks/$i"
+                    RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                }
+            }
+        }
+
+        if (scroll) {
+            Column(base.verticalScroll(rememberScrollState())) { content() }
+        } else {
+            Column(base) { content() }
+        }
+    }
+}
+
 /* =========================
  * GRID
  * ========================= */
@@ -895,10 +999,6 @@ private fun BoxScope.DesignerOverlay(
                     val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
-								FilledTonalButton(onClick = {
-				val path = insertBlockAndReturnPath(layout, selectedPath, newPage(), "after")
-				setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Page") }
             }
         }
 
@@ -2214,9 +2314,17 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
 
     return st
 }
+
 /* ---- Page blueprint (contenitore semplice) ---- */
 private fun newPage() = JSONObject(
     """
-    {"type":"Page","title":"","blocks":[]}
+    {
+      "type":"Page",
+      "title":"",
+      "scroll": true,
+      "actions": [],
+      "bottomButtons": [],
+      "blocks":[]
+    }
     """.trimIndent()
 )
