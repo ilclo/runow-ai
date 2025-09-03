@@ -5,6 +5,7 @@ import org.json.JSONObject
 import java.io.File
 
 object UiLoader {
+    // --- IO helpers ---
     private fun readAssetText(ctx: Context, path: String): String? = try {
         ctx.assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) }
     } catch (_: Throwable) { null }
@@ -19,19 +20,44 @@ object UiLoader {
         true
     } catch (_: Throwable) { false }
 
-    fun loadLayout(ctx: Context, screen: String): JSONObject? {
-        // precedence: published (local) -> asset default
-        val pub = File(ctx.filesDir, "published/ui/$screen.json")
-        readFileText(pub)?.let { return JSONObject(it) }
-        val asset = readAssetText(ctx, "configs/ui/$screen.json") ?: return null
-        return JSONObject(asset)
-    }
+    // --- Defaults ---
+    /** Layout di fallback: pagina vuota (nessun blocco). */
+    fun defaultBlank(): JSONObject = JSONObject("""{"blocks":[]}""")
 
+    // --- Lettura stati ---
+    /** Bozza locale (modifiche non pubblicate). */
     fun loadDraft(ctx: Context, screen: String): JSONObject? {
         val d = File(ctx.filesDir, "drafts/ui/$screen.json")
         return readFileText(d)?.let { JSONObject(it) }
     }
 
+    /** Stato pubblicato (locale). */
+    fun loadPublished(ctx: Context, screen: String): JSONObject? {
+        val p = File(ctx.filesDir, "published/ui/$screen.json")
+        return readFileText(p)?.let { JSONObject(it) }
+    }
+
+    /**
+     * Layout “di progetto”: prima published, altrimenti asset (configs/ui/<screen>.json).
+     * Nota: NON è usata per lo startup, dove preferiamo partire vuoti (vedi loadInitial).
+     */
+    fun loadLayout(ctx: Context, screen: String): JSONObject? {
+        loadPublished(ctx, screen)?.let { return it }
+        val asset = readAssetText(ctx, "configs/ui/$screen.json") ?: return null
+        return JSONObject(asset)
+    }
+
+    /**
+     * Startup “pulito”: draft -> published -> blank.
+     * Niente asset di default, così non partiamo con schermate precompilate.
+     */
+    fun loadInitial(ctx: Context, screen: String): JSONObject {
+        loadDraft(ctx, screen)?.let { return it }
+        loadPublished(ctx, screen)?.let { return it }
+        return defaultBlank()
+    }
+
+    // --- Salvataggi ---
     fun saveDraft(ctx: Context, screen: String, json: JSONObject): Boolean {
         val d = File(ctx.filesDir, "drafts/ui/$screen.json")
         return writeFileText(d, json.toString(2))
@@ -49,5 +75,6 @@ object UiLoader {
         return if (p.exists()) p.delete() else true
     }
 
+    // Eventuale discovery (per ora statica)
     fun listScreens(): List<String> = listOf("run", "settings", "music")
 }
