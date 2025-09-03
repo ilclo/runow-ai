@@ -1184,12 +1184,38 @@ private fun PageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
                             IconButton(onClick = { removeAt(items, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
                         }
                     }
-                    val lbl = remember { mutableStateOf(it.optString("label","")) }
-                    OutlinedTextField(lbl.value, { lbl.value = it2 -> it.put("label", it2); onChange() }, label = { Text("label") })
-                    val icon = remember { mutableStateOf(it.optString("icon","")) }
-                    IconPickerField(icon, "icon") { sel -> icon.value = sel; it.put("icon", sel); onChange() }
-                    val act = remember { mutableStateOf(it.optString("actionId","")) }
-                    OutlinedTextField(act.value, { act.value = it2 -> it.put("actionId", it2); onChange() }, label = { Text("actionId") })
+
+					val lbl = remember { mutableStateOf(item.optString("label", "")) }
+					OutlinedTextField(
+						value = lbl.value,
+						onValueChange = { txt ->
+							lbl.value = txt
+							item.put("label", txt)
+							onChange()
+						},
+						label = { Text("label") }
+					)
+
+					// icon
+					val icon = remember { mutableStateOf(item.optString("icon", "")) }
+					IconPickerField(icon, "icon") { sel ->
+						icon.value = sel
+						item.put("icon", sel)
+						onChange()
+					}
+
+					// actionId
+					val act = remember { mutableStateOf(item.optString("actionId", "")) }
+					OutlinedTextField(
+						value = act.value,
+						onValueChange = { txt ->
+							act.value = txt
+							item.put("actionId", txt)
+							onChange()
+						},
+						label = { Text("actionId") }
+					)
+
                 }
             }
             Spacer(Modifier.height(8.dp))
