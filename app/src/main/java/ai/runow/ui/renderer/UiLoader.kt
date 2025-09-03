@@ -5,7 +5,7 @@ import org.json.JSONObject
 import java.io.File
 
 object UiLoader {
-    // --- IO helpers ---
+    // --- IO helper ---
     private fun readAssetText(ctx: Context, path: String): String? = try {
         ctx.assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) }
     } catch (_: Throwable) { null }
