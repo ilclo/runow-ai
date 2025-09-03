@@ -5,6 +5,10 @@ import org.json.JSONObject
 import java.io.File
 
 object UiLoader {
+    private fun readAssetText(ctx: Context, path: String): String? = try {
+        ctx.assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) }
+    } catch (_: Throwable) { null }
+
     private fun readFileText(file: File): String? = try {
         if (file.exists()) file.readText(Charsets.UTF_8) else null
     } catch (_: Throwable) { null }
@@ -15,16 +19,23 @@ object UiLoader {
         true
     } catch (_: Throwable) { false }
 
-    /** Carica il layout con precedenza: published -> draft -> VUOTO (niente asset). */
+    private fun blank(screen: String): JSONObject =
+        JSONObject("""{"screen":"$screen","blocks":[]}""")
+
+    /**
+     * Carica il layout pubblicato se presente; in caso contrario
+     * restituisce **sempre** un layout vuoto (niente fallback da asset).
+     * Così l'app parte da "foglio bianco".
+     */
     fun loadLayout(ctx: Context, screen: String): JSONObject {
         val pub = File(ctx.filesDir, "published/ui/$screen.json")
         readFileText(pub)?.let { return JSONObject(it) }
 
-        val draft = File(ctx.filesDir, "drafts/ui/$screen.json")
-        readFileText(draft)?.let { return JSONObject(it) }
+        // NIENTE fallback da assets: partiamo vuoti per il Designer.
+        // Se vuoi ripristinare un asset in futuro:
+        // readAssetText(ctx, "configs/ui/$screen.json")?.let { return JSONObject(it) }
 
-        // Avvio "pulito": nessun fallback all'asset per evitare run/settings/music.
-        return JSONObject("""{"blocks":[]}""")
+        return blank(screen)
     }
 
     fun loadDraft(ctx: Context, screen: String): JSONObject? {
@@ -49,22 +60,10 @@ object UiLoader {
         return if (p.exists()) p.delete() else true
     }
 
-    /** Restituisce la lista di schermate salvate localmente (pubblicate o in bozza). */
-    fun listScreens(ctx: Context): List<String> {
-        val names = linkedSetOf<String>()
-        val pubDir = File(ctx.filesDir, "published/ui")
-        val draDir = File(ctx.filesDir, "drafts/ui")
-
-        pubDir.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.forEach {
-            names += it.name.removeSuffix(".json")
-        }
-        draDir.listFiles { f -> f.isFile && f.name.endsWith(".json") }?.forEach {
-            names += it.name.removeSuffix(".json")
-        }
-        return names.toList().sorted()
-    }
-
-    /** Back-compat: evita di forzare run/settings/music. */
-    @Deprecated("Usa listScreens(ctx)")
+    /**
+     * Niente default "run/settings/music". Torna una lista vuota.
+     * (Se in futuro vuoi elencare i file esistenti su disco,
+     * cambia la firma accettando il Context e scandisci drafts/published.)
+     */
     fun listScreens(): List<String> = emptyList()
 }
