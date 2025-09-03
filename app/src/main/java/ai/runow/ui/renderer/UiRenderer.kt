@@ -2017,17 +2017,38 @@ private fun replaceAtPath(root: JSONObject, path: String, newNode: JSONObject) {
     p.first.put(p.second, JSONObject(newNode.toString()))
 }
 
-private fun insertBlockAndReturnPath(root: JSONObject, selectedPath: String?, block: JSONObject, position: String): String {
+private fun insertBlockAndReturnPath(
+    root: JSONObject,
+    selectedPath: String?,
+    block: JSONObject,
+    position: String
+): String {
     val parentArr: JSONArray
     val idx: Int
     val parentPath: String
 
     if (selectedPath != null) {
-        val pair = getParentAndIndex(root, selectedPath)
-        if (pair != null) {
-            parentArr = pair.first
-            idx = pair.second
-            parentPath = selectedPath.substringBeforeLast("/")
+        val selectedNode = jsonAtPath(root, selectedPath)
+        if (selectedNode is JSONObject) {
+            // Se il selezionato è un contenitore con "blocks", inserisco DENTRO
+            val container = selectedNode.optJSONArray("blocks")
+            if (container != null) {
+                parentArr = container
+                idx = parentArr.length() - 1
+                parentPath = "$selectedPath/blocks"
+            } else {
+                // fallback: prima/dopo rispetto al livello del selezionato
+                val pair = getParentAndIndex(root, selectedPath)
+                if (pair != null) {
+                    parentArr = pair.first
+                    idx = pair.second
+                    parentPath = selectedPath.substringBeforeLast("/")
+                } else {
+                    parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
+                    idx = parentArr.length() - 1
+                    parentPath = "/blocks"
+                }
+            }
         } else {
             parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
             idx = parentArr.length() - 1
@@ -2041,6 +2062,7 @@ private fun insertBlockAndReturnPath(root: JSONObject, selectedPath: String?, bl
 
     val insertIndex = when (position) { "before" -> idx; else -> idx + 1 }.coerceIn(0, parentArr.length())
 
+    // Ricostruisco l'array inserendo nel punto calcolato
     val tmp = mutableListOf<Any?>()
     for (i in 0 until parentArr.length()) {
         if (i == insertIndex) tmp.add(block)
@@ -2053,6 +2075,7 @@ private fun insertBlockAndReturnPath(root: JSONObject, selectedPath: String?, bl
 
     return "$parentPath/$insertIndex"
 }
+
 
 private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
     val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
