@@ -1,14 +1,11 @@
 package ai.runow.ui.renderer
 
 import android.content.Context
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
 object UiLoader {
-
-    /* ========== I/O di base ========== */
-
+    // --- IO helpers ---
     private fun readAssetText(ctx: Context, path: String): String? = try {
         ctx.assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) }
     } catch (_: Throwable) { null }
@@ -23,56 +20,47 @@ object UiLoader {
         true
     } catch (_: Throwable) { false }
 
-    /* ========== Helper struttura ========== */
+    // --- Defaults ---
+    /** Layout di fallback: pagina vuota (nessun blocco). */
+    fun defaultBlank(): JSONObject = JSONObject("""{"blocks":[]}""")
 
-    /**
-     * Garantisce che il JSON sia un root valido con almeno "blocks": []
-     */
-    private fun ensureSkeleton(json: JSONObject?): JSONObject {
-        val root = json ?: JSONObject()
-        if (!root.has("blocks")) root.put("blocks", JSONArray())
-        return root
-    }
-
-    /* ========== Caricamento / salvataggio ========== */
-
-    /**
-     * Precedenza:
-     *  1) published/ui/<screen>.json (se presente)
-     *  2) drafts/ui/<screen>.json (se presente)
-     *  3) SKELETON VUOTO {"blocks":[]}
-     *
-     * Non si fa più fallback su assets per evitare pagine precompilate all’avvio.
-     */
-    fun loadLayout(ctx: Context, screen: String): JSONObject? {
-        val published = File(ctx.filesDir, "published/ui/$screen.json")
-        readFileText(published)?.let { return ensureSkeleton(JSONObject(it)) }
-
-        val draft = File(ctx.filesDir, "drafts/ui/$screen.json")
-        readFileText(draft)?.let { return ensureSkeleton(JSONObject(it)) }
-
-        // Se vuoi mantenere gli asset per *alcune* schermate (es. "settings"),
-        // scommenta il blocco sotto e aggiungi i nomi allo set:
-        //
-        // val useAssetsFor = setOf("settings", "music")
-        // if (screen in useAssetsFor) {
-        //     readAssetText(ctx, "configs/ui/$screen.json")?.let {
-        //         return ensureSkeleton(JSONObject(it))
-        //     }
-        // }
-
-        // Default: root vuoto
-        return ensureSkeleton(null)
-    }
-
+    // --- Lettura stati ---
+    /** Bozza locale (modifiche non pubblicate). */
     fun loadDraft(ctx: Context, screen: String): JSONObject? {
         val d = File(ctx.filesDir, "drafts/ui/$screen.json")
-        return readFileText(d)?.let { ensureSkeleton(JSONObject(it)) }
+        return readFileText(d)?.let { JSONObject(it) }
     }
 
+    /** Stato pubblicato (locale). */
+    fun loadPublished(ctx: Context, screen: String): JSONObject? {
+        val p = File(ctx.filesDir, "published/ui/$screen.json")
+        return readFileText(p)?.let { JSONObject(it) }
+    }
+
+    /**
+     * Layout “di progetto”: prima published, altrimenti asset (configs/ui/<screen>.json).
+     * Nota: NON è usata per lo startup, dove preferiamo partire vuoti (vedi loadInitial).
+     */
+    fun loadLayout(ctx: Context, screen: String): JSONObject? {
+        loadPublished(ctx, screen)?.let { return it }
+        val asset = readAssetText(ctx, "configs/ui/$screen.json") ?: return null
+        return JSONObject(asset)
+    }
+
+    /**
+     * Startup “pulito”: draft -> published -> blank.
+     * Niente asset di default, così non partiamo con schermate precompilate.
+     */
+    fun loadInitial(ctx: Context, screen: String): JSONObject {
+        loadDraft(ctx, screen)?.let { return it }
+        loadPublished(ctx, screen)?.let { return it }
+        return defaultBlank()
+    }
+
+    // --- Salvataggi ---
     fun saveDraft(ctx: Context, screen: String, json: JSONObject): Boolean {
         val d = File(ctx.filesDir, "drafts/ui/$screen.json")
-        return writeFileText(d, ensureSkeleton(json).toString(2))
+        return writeFileText(d, json.toString(2))
     }
 
     fun publish(ctx: Context, screen: String): Boolean {
@@ -87,23 +75,6 @@ object UiLoader {
         return if (p.exists()) p.delete() else true
     }
 
-    /** Rimuove l’eventuale bozza locale. */
-    fun resetDraft(ctx: Context, screen: String): Boolean {
-        val d = File(ctx.filesDir, "drafts/ui/$screen.json")
-        return if (d.exists()) d.delete() else true
-    }
-
-    /** Comodo per ripartire da zero: cancella bozza + pubblicato. */
-    fun resetAll(ctx: Context, screen: String): Boolean {
-        val a = resetDraft(ctx, screen)
-        val b = resetPublished(ctx, screen)
-        return a && b
-    }
-
-    /**
-     * Elenco schermate “note” per l’app. Per ora lo lasciamo statico per
-     * mantenere compatibilità, ma in futuro possiamo farlo dinamico
-     * scansionando file locali.
-     */
+    // Eventuale discovery (per ora statica)
     fun listScreens(): List<String> = listOf("run", "settings", "music")
 }
