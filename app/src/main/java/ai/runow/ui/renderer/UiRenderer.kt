@@ -65,10 +65,15 @@ fun UiScreen(
     scaffoldPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val ctx = LocalContext.current
-    var layout by remember(screenName) { mutableStateOf<org.json.JSONObject?>(UiLoader.loadInitial(ctx, screenName)) }
+    var layout by remember(screenName) { mutableStateOf(UiLoader.loadLayout(ctx, screenName)) }
     var tick by remember { mutableStateOf(0) }
 
-    
+    if (layout == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Layout '$screenName' non trovato", style = MaterialTheme.typography.bodyLarge)
+        }
+        return
+    }
 
     // Ricompone anche al variare di tick (anteprima live)
     val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
@@ -123,7 +128,7 @@ fun UiScreen(
                 onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
                 onReset = {
                     UiLoader.resetPublished(ctx, screenName)
-                    layout = org.json.JSONObject("{\"blocks\":[]}")
+                    layout = UiLoader.loadLayout(ctx, screenName)
                     selectedPath = null
                     tick++
                 },
@@ -178,7 +183,19 @@ private fun RenderBlock(
         }
     }
 
-    when (block.optString("type")) {
+    
+when (block.optString("type")) {
+        "Page" -> Wrapper {
+            val inner = block.optJSONArray("blocks") ?: JSONArray()
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                for (i in 0 until inner.length()) {
+                    val b = inner.optJSONObject(i) ?: continue
+                    val p2 = "/blocks/"
+                    RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                }
+            }
+        }
+
         "AppBar" -> Wrapper {
             Text(block.optString("title", ""), style = MaterialTheme.typography.titleLarge)
             val actions = block.optJSONArray("actions") ?: JSONArray()
@@ -2193,3 +2210,9 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
 
     return st
 }
+/* ---- Page blueprint (contenitore semplice) ---- */
+private fun newPage() = JSONObject(
+    """
+    {"type":"Page","title":"","blocks":[]}
+    """.trimIndent()
+)
