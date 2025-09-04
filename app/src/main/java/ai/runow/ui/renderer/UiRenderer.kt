@@ -4,12 +4,12 @@ package ai.runow.ui.renderer
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,8 +38,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.round
 
 /* =========================
@@ -66,7 +64,10 @@ fun UiScreen(
     }
 
     val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
+
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
+    // stato per aprire l’Inspector
+    var inspectorPath by remember(screenName) { mutableStateOf<String?>(null) }
 
     var overlayHeightPx by remember { mutableStateOf(0) }
     val overlayHeightDp = with(LocalDensity.current) { (overlayHeightPx / density).dp }
@@ -94,7 +95,8 @@ fun UiScreen(
                     designerMode = designerMode,
                     path = path,
                     menus = menus,
-                    onSelect = { p -> selectedPath = p }
+                    onSelect = { p -> selectedPath = p },
+                    onOpenInspector = { p -> inspectorPath = p }
                 )
             }
         }
@@ -105,6 +107,8 @@ fun UiScreen(
                 layout = layout!!,
                 selectedPath = selectedPath,
                 setSelectedPath = { selectedPath = it },
+                inspectorPath = inspectorPath,
+                setInspectorPath = { inspectorPath = it },
                 onLiveChange = { tick++ },
                 onLayoutChange = {
                     UiLoader.saveDraft(ctx, screenName, layout!!)
@@ -117,6 +121,7 @@ fun UiScreen(
                     UiLoader.resetPublished(ctx, screenName)
                     layout = UiLoader.loadLayout(ctx, screenName)
                     selectedPath = null
+                    inspectorPath = null
                     tick++
                 },
                 onOverlayHeight = { overlayHeightPx = it }
@@ -137,9 +142,14 @@ private fun RenderBlock(
     designerMode: Boolean,
     path: String,
     menus: Map<String, JSONArray>,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    onOpenInspector: (String) -> Unit = {}
 ) {
     val borderSelected = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+    val type = block.optString("type","")
+
+    // contenitori che possono avere figli
+    val isContainer = type in setOf("Page","Card","Tabs")
 
     @Composable
     fun Wrapper(content: @Composable ()->Unit) {
@@ -152,7 +162,7 @@ private fun RenderBlock(
                 ) {
                     Column(Modifier.padding(12.dp)) {
                         Text(
-                            block.optString("type",""),
+                            type,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -160,15 +170,33 @@ private fun RenderBlock(
                         content()
                     }
                 }
-                // overlay che cattura la selezione senza interferire con i contenuti
-                Box(Modifier.matchParentSize().clickable { onSelect(path) })
+
+                // Badge piccolo in alto-sinistra per SELEZIONARE senza coprire i figli
+                IconButton(
+                    onClick = { onSelect(path) },
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .size(28.dp)
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                ) { Icon(Icons.Filled.Adjust, contentDescription = "Seleziona") }
+
+                // Ingranaggio in basso-destra SOLO per contenitori → apre inspector
+                if (isContainer) {
+                    IconButton(
+                        onClick = { onOpenInspector(path) },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(30.dp)
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                    ) { Icon(Icons.Filled.Settings, contentDescription = "Proprietà") }
+                }
             }
         } else {
             Box { content() }
         }
     }
 
-    when (block.optString("type")) {
+    when (type) {
 
         /* ---- PAGE: contenitore semplice (Column) ---- */
         "Page" -> Wrapper {
@@ -177,7 +205,7 @@ private fun RenderBlock(
                 for (i in 0 until inner.length()) {
                     val b = inner.optJSONObject(i) ?: continue
                     val p2 = "$path/blocks/$i"
-                    RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                    RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
                 }
             }
         }
@@ -328,7 +356,7 @@ private fun RenderBlock(
                     for (i in 0 until innerBlocks.length()) {
                         val b = innerBlocks.optJSONObject(i) ?: continue
                         val p2 = "$path/blocks/$i"
-                        RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                        RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
                     }
                 }
             }
@@ -360,13 +388,13 @@ private fun RenderBlock(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            val tab = tabs.optJSONObject(idx)
-            val blocks2 = tab?.optJSONArray("blocks") ?: JSONArray()
+            val tab = tabs.optJSONObject(idx) ?: JSONObject()
+            val blocks2 = tab.optJSONArray("blocks") ?: JSONArray()
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 for (k in 0 until blocks2.length()) {
                     val b = blocks2.optJSONObject(k) ?: continue
                     val p2 = "$path/tabs/$idx/blocks/$k"
-                    RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
+                    RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
                 }
             }
         }
@@ -424,7 +452,6 @@ private fun RenderBlock(
                     val label = btn.optString("label", "Button")
                     val styleKey = btn.optString("style","primary")
                     val action = btn.optString("actionId","")
-                    val confirm = btn.optBoolean("confirm", false)
                     val sizeKey = btn.optString("size","md")
                     val tintKey = btn.optString("tint","default")
                     val shapeKey = btn.optString("shape","rounded")
@@ -457,7 +484,7 @@ private fun RenderBlock(
                     }
                     when(styleKey){
                         "outlined" -> OutlinedButton(
-                            onClick = { if (!confirm) dispatch(action) else dispatch(action) },
+                            onClick = { dispatch(action) },
                             shape = shape,
                             border = BorderStroke(border, content),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = content),
@@ -543,7 +570,7 @@ private fun RenderBlock(
                 value = value,
                 onValueChange = {
                     value = it
-                    uiState[bind] = if (step >= 1f) round(it/step)*step else it
+                    uiState[bind] = if (step >= 1f) kotlin.math.round(it/step)*step else it
                 },
                 valueRange = min..max
             )
@@ -640,7 +667,7 @@ private fun RenderBlock(
 
         else -> {
             if (designerMode) {
-                Surface(tonalElevation = 1.dp) { Text("Blocco non supportato: ${block.optString("type")}", color = Color.Red) }
+                Surface(tonalElevation = 1.dp) { Text("Blocco non supportato: $type", color = Color.Red) }
             }
         }
     }
@@ -677,7 +704,7 @@ private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String,
 }
 
 /* =========================
- * DESIGNER OVERLAY (palette + controlli) – NO inspector per semplicità/robustezza
+ * DESIGNER OVERLAY (palette + azioni + inspector)
  * ========================= */
 
 @Composable
@@ -686,6 +713,8 @@ private fun BoxScope.DesignerOverlay(
     layout: JSONObject,
     selectedPath: String?,
     setSelectedPath: (String?) -> Unit,
+    inspectorPath: String?,
+    setInspectorPath: (String?) -> Unit,
     onLiveChange: () -> Unit,
     onLayoutChange: () -> Unit,
     onSaveDraft: () -> Unit,
@@ -740,7 +769,7 @@ private fun BoxScope.DesignerOverlay(
                 FilledTonalButton(onClick = { add(newTabs())     }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
                 FilledTonalButton(onClick = { add(newMetricsGrid()) }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
 
-                // >>> PAGE: nuova voce
+                // Page
                 FilledTonalButton(onClick = { add(newPage())     }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Page") }
             }
         }
@@ -782,7 +811,14 @@ private fun BoxScope.DesignerOverlay(
                         },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
-                    // Inspector volutamente non incluso per massima stabilità
+
+                    // >>> PROPRIETÀ ripristinato
+                    OutlinedButton(
+                        onClick = {
+                            if (selectedPath != null) setInspectorPath(selectedPath)
+                        },
+                        enabled = selectedPath != null
+                    ) { Icon(Icons.Filled.Settings, null); Spacer(Modifier.width(4.dp)); Text("Proprietà") }
                 }
 
                 Row(
@@ -798,11 +834,215 @@ private fun BoxScope.DesignerOverlay(
                 }
             }
         }
+
+        // Inspector panel (niente dimming)
+        if (inspectorPath != null) {
+            Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 10.dp) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("Proprietà", style = MaterialTheme.typography.titleMedium)
+                        IconButton(onClick = { setInspectorPath(null) }) { Icon(Icons.Filled.Close, null) }
+                    }
+                    Divider()
+                    InspectorPanel(layout, inspectorPath, onChange = onLayoutChange)
+                }
+            }
+        }
     }
 }
 
 /* =========================
- * HELPERS: mapping, pickers, utils
+ * INSPECTOR: dispatcher + singoli pannelli
+ * ========================= */
+
+@Composable
+private fun InspectorPanel(root: JSONObject, path: String, onChange: () -> Unit) {
+    val node = jsonAtPath(root, path) as? JSONObject ?: run {
+        Text("Nodo non trovato")
+        return
+    }
+    when (node.optString("type","")) {
+        "Page"        -> InspectPage(node, onChange)
+        "Card"        -> InspectCard(node, onChange)
+        "Tabs"        -> InspectTabs(node, onChange)
+        "ButtonRow"   -> InspectButtonRow(node, onChange)
+        "List"        -> InspectList(node, onChange)
+        "SectionHeader" -> InspectSectionHeader(node, onChange)
+        else -> Text("Nessuna proprietà disponibile per '${node.optString("type","")}'")
+    }
+}
+
+@Composable
+private fun InspectPage(node: JSONObject, onChange: () -> Unit) {
+    Text("Page", style = MaterialTheme.typography.titleSmall)
+    Text("Per aggiungere contenuti, usa la palette: i blocchi verranno inseriti dentro la Page selezionata.")
+}
+
+@Composable
+private fun InspectCard(node: JSONObject, onChange: () -> Unit) {
+    Text("Card", style = MaterialTheme.typography.titleSmall)
+    var variant by remember { mutableStateOf(node.optString("variant","elevated")) }
+    SimpleDropdown("variant", listOf("elevated","filled","outlined"), variant) {
+        variant = it; node.put("variant", it); onChange()
+    }
+    var action by remember { mutableStateOf(node.optString("clickActionId","")) }
+    OutlinedTextField(value = action, onValueChange = {
+        action = it; node.put("clickActionId", it); onChange()
+    }, label = { Text("clickActionId") })
+}
+
+@Composable
+private fun InspectTabs(node: JSONObject, onChange: () -> Unit) {
+    Text("Tabs", style = MaterialTheme.typography.titleSmall)
+    val tabs = ensureArray(node, "tabs")
+    for (i in 0 until tabs.length()) {
+        val t = tabs.getJSONObject(i)
+        ElevatedCard {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Tab ${i+1}", style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        IconButton(onClick = { moveInArray(tabs, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                        IconButton(onClick = { moveInArray(tabs, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                        IconButton(onClick = { removeAt(tabs, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
+                    }
+                }
+                var label by remember { mutableStateOf(t.optString("label","")) }
+                OutlinedTextField(value = label, onValueChange = {
+                    label = it; t.put("label", it); onChange()
+                }, label = { Text("label") })
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+    Button(onClick = { tabs.put(JSONObject("""{"label":"Nuova Tab","blocks":[]}""")); onChange() }) {
+        Text("+ Aggiungi Tab")
+    }
+    Spacer(Modifier.height(6.dp))
+    Text("Suggerimento: tocca la linguetta nell’anteprima per scegliere la Tab da visualizzare/modificare.", style = MaterialTheme.typography.labelMedium)
+}
+
+@Composable
+private fun InspectButtonRow(node: JSONObject, onChange: () -> Unit) {
+    Text("ButtonRow", style = MaterialTheme.typography.titleSmall)
+    var align by remember { mutableStateOf(node.optString("align","center")) }
+    SimpleDropdown("align", listOf("start","center","end","space_between","space_around","space_evenly"), align) {
+        align = it; node.put("align", it); onChange()
+    }
+
+    val items = ensureArray(node, "buttons")
+    for (i in 0 until items.length()) {
+        val it = items.getJSONObject(i)
+        ElevatedCard {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Bottone ${i+1}", style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        IconButton(onClick = { moveInArray(items, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                        IconButton(onClick = { moveInArray(items, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                        IconButton(onClick = { removeAt(items, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
+                    }
+                }
+                var lbl by remember { mutableStateOf(it.optString("label","")) }
+                OutlinedTextField(lbl, { v -> lbl = v; it.put("label", v); onChange() }, label = { Text("label") })
+                var icon by remember { mutableStateOf(it.optString("icon","")) }
+                OutlinedTextField(icon, { v -> icon = v; it.put("icon", v); onChange() }, label = { Text("icon (material/res:..)") })
+                var act by remember { mutableStateOf(it.optString("actionId","")) }
+                OutlinedTextField(act, { v -> act = v; it.put("actionId", v); onChange() }, label = { Text("actionId") })
+                var style by remember { mutableStateOf(it.optString("style","primary")) }
+                SimpleDropdown("style", listOf("primary","tonal","outlined","text"), style) { v ->
+                    style = v; it.put("style", v); onChange()
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+    Button(onClick = {
+        items.put(JSONObject("""{"label":"Nuovo","style":"text","icon":"add","actionId":""}""")); onChange()
+    }) { Text("+ Aggiungi bottone") }
+}
+
+@Composable
+private fun InspectList(node: JSONObject, onChange: () -> Unit) {
+    Text("List", style = MaterialTheme.typography.titleSmall)
+    var align by remember { mutableStateOf(node.optString("align","start")) }
+    SimpleDropdown("align", listOf("start","center","end"), align) {
+        align = it; node.put("align", it); onChange()
+    }
+    val items = ensureArray(node, "items")
+    for (i in 0 until items.length()) {
+        val it = items.getJSONObject(i)
+        ElevatedCard {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Item ${i+1}", style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        IconButton(onClick = { moveInArray(items, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                        IconButton(onClick = { moveInArray(items, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                        IconButton(onClick = { removeAt(items, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
+                    }
+                }
+                var title by remember { mutableStateOf(it.optString("title","")) }
+                OutlinedTextField(title, { v -> title = v; it.put("title", v); onChange() }, label = { Text("title") })
+                var sub by remember { mutableStateOf(it.optString("subtitle","")) }
+                OutlinedTextField(sub, { v -> sub = v; it.put("subtitle", v); onChange() }, label = { Text("subtitle") })
+                var act by remember { mutableStateOf(it.optString("actionId","")) }
+                OutlinedTextField(act, { v -> act = v; it.put("actionId", v); onChange() }, label = { Text("actionId") })
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+    Button(onClick = { items.put(JSONObject("""{"title":"Nuovo","subtitle":""}""")); onChange() }) {
+        Text("+ Aggiungi voce")
+    }
+}
+
+@Composable
+private fun InspectSectionHeader(node: JSONObject, onChange: () -> Unit) {
+    Text("SectionHeader", style = MaterialTheme.typography.titleSmall)
+    var title by remember { mutableStateOf(node.optString("title","")) }
+    OutlinedTextField(title, { v -> title = v; node.put("title", v); onChange() }, label = { Text("title") })
+    var sub by remember { mutableStateOf(node.optString("subtitle","")) }
+    OutlinedTextField(sub, { v -> sub = v; node.put("subtitle", v); onChange() }, label = { Text("subtitle") })
+    var style by remember { mutableStateOf(node.optString("style","titleMedium")) }
+    SimpleDropdown("style", listOf("displaySmall","headlineSmall","titleLarge","titleMedium","titleSmall","bodyLarge","bodyMedium"), style) {
+        style = it; node.put("style", it); onChange()
+    }
+    var align by remember { mutableStateOf(node.optString("align","start")) }
+    SimpleDropdown("align", listOf("start","center","end"), align) { v ->
+        align = v; node.put("align", v); onChange()
+    }
+}
+
+/* =========================
+ * HELPERS UI (dropdown)
+ * ========================= */
+
+@Composable
+private fun SimpleDropdown(label: String, options: List<String>, value: String, onSelect: (String)->Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { opt ->
+                DropdownMenuItem(
+                    onClick = { expanded = false; onSelect(opt) },
+                    text = { Text(opt) }
+                )
+            }
+        }
+    }
+}
+
+/* =========================
+ * HELPERS: mapping, colors, icons
  * ========================= */
 
 @Composable
@@ -895,6 +1135,8 @@ private fun NamedIconEx(name: String?, contentDescription: String?) {
         "tab" -> Icons.Filled.Tab
         "grid_on" -> Icons.Filled.GridOn
         "toggle_on" -> Icons.Filled.ToggleOn
+        "space_bar" -> Icons.Filled.SpaceBar
+        "horizontal_rule" -> Icons.Filled.HorizontalRule
         else -> null
     }
     if (image != null) Icon(image, contentDescription) else Text(".")
@@ -1094,16 +1336,14 @@ private fun removeAt(arr: JSONArray, index: Int) {
     if (index < 0 || index >= arr.length()) return
     val tmp = mutableListOf<Any?>()
     for (i in 0 until arr.length()) if (i != index) tmp.add(arr.get(i))
-    while (arr.length() > 0) arr.remove(arr.length()-1)
+    while (arr.length() > 0) arr.remove(arr.length() - 1)
     tmp.forEach { arr.put(it) }
 }
 
 /* ====== SMART INSERT (nidifica nei contenitori) ====== */
 
-// Tipi considerati "contenitori" per i blocks figli
 private val CONTAINER_TYPES = setOf("Page", "Card", "Tabs")
 
-// Risale finché trova un JSONObject di tipo contenitore
 private fun findAncestorContainerPath(root: JSONObject, startPath: String?): String? {
     var p = startPath ?: return null
     repeat(64) {
@@ -1128,7 +1368,6 @@ private fun ensureArray(parent: JSONObject, key: String): JSONArray {
     val a = JSONArray(); parent.put(key, a); return a
 }
 
-// Inserisce in obj[key] (creando l'array se serve) e ritorna il path del nuovo elemento
 private fun insertIntoChildArray(
     root: JSONObject,
     objPath: String,
@@ -1151,7 +1390,6 @@ private fun insertIntoChildArray(
     return "$objPath/$key/$idx"
 }
 
-// Inserimento “intelligente” dentro Page/Card/Tabs (prima tab) oppure come fratello
 private fun addSmartInsert(root: JSONObject, selectedPath: String?, newBlock: JSONObject): String {
     val containerPath = findAncestorContainerPath(root, selectedPath)
     val container = containerPath?.let { jsonAtPath(root, it) as? JSONObject }
@@ -1217,7 +1455,6 @@ private fun newMetricsGrid()= JSONObject("""{ "type":"MetricsGrid", "columns": 2
 private fun newSlider()     = JSONObject("""{ "type":"Slider", "label":"Pace", "bind":"pace", "min":3.0, "max":7.0, "step":0.1, "unit":" min/km" }""")
 private fun newToggle()     = JSONObject("""{ "type":"Toggle", "label":"Attiva opzione", "bind":"toggle_1" }""")
 private fun newList()       = JSONObject("""{ "type":"List", "align":"start", "items":[ {"title":"Voce 1","subtitle":"Sottotitolo 1","actionId":""} ] }""")
-/* Page (contenitore semplice) */
 private fun newPage()       = JSONObject("""{ "type":"Page", "title":"", "blocks": [] }""")
 
 /* =========================
