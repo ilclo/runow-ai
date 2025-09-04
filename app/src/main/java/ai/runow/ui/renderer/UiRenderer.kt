@@ -2,7 +2,6 @@
 
 package ai.runow.ui.renderer
 
-import android.content.Context
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -18,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.activity.compose.BackHandler
@@ -41,119 +42,19 @@ import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
-import android.annotation.SuppressLint
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
-
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContentColor
 
 /* =========================
- * ENTRYPOINT
+ * ENTRY: render di una schermata JSON
  * ========================= */
-@Composable
-fun ProjectGate(
-    ctx: Context,
-    onOpened: () -> Unit
-) {
-    val (showNew, setShowNew) = remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
-    val projects = remember { mutableStateOf(emptyList<String>()) }
-
-    LaunchedEffect(Unit) {
-        projects.value = UiLoader.listProjects(ctx)
-    }
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Scegli un progetto", style = MaterialTheme.typography.titleLarge)
-        Button(onClick = { setShowNew(true) }) { Text("Nuovo progetto") }
-
-        if (projects.value.isNotEmpty()) {
-            Text("Progetti esistenti", style = MaterialTheme.typography.titleMedium)
-            projects.value.forEach { p ->
-                OutlinedButton(onClick = {
-                    UiLoader.setActiveProject(ctx, p)
-                    onOpened()
-                }) { Text(p) }
-            }
-        } else {
-            Text("Nessun progetto salvato", style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-
-    if (showNew) {
-        AlertDialog(
-            onDismissRequest = { setShowNew(false) },
-            title = { Text("Nuovo progetto") },
-            text = {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Nome progetto") }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (name.isNotBlank()) {
-                        if (UiLoader.createProject(ctx, name)) {
-                            setShowNew(false)
-                            onOpened()
-                        }
-                    }
-                }) { Text("Crea") }
-            },
-            dismissButton = {
-                TextButton(onClick = { setShowNew(false) }) { Text("Annulla") }
-            }
-        )
-    }
-}
-
-@Composable
-fun DesignerRoot() {
-    val ctx = LocalContext.current
-    // stato UI condiviso dai blocchi (bind/valori temporanei)
-    val uiState = remember { mutableStateMapOf<String, Any>() }
-
-    // schermata corrente da visualizzare/modificare
-    var screen by remember { mutableStateOf("home") }
-    // modalità designer sempre attiva in questa root
-    val designerMode = true
-
-    // dispatcher minimale: gestisce solo nav:xyz
-    val dispatch: (String) -> Unit = { action ->
-        when {
-            action.startsWith("nav:") -> {
-                screen = action.removePrefix("nav:")
-            }
-            else -> {
-                // qui in futuro puoi gestire altre azioni (toast, ecc.)
-            }
-        }
-    }
-
-    // contenuto
-    Surface(modifier = Modifier.fillMaxSize()) {
-        UiScreen(
-            screenName = screen,
-            dispatch = dispatch,
-            uiState = uiState,
-            designerMode = designerMode
-        )
-    }
-}
-
-
-
 @Composable
 fun UiScreen(
     screenName: String,
@@ -173,62 +74,31 @@ fun UiScreen(
         return
     }
 
-    // Ricompone anche al variare di tick (anteprima live)
+    // Menù raccolti dal layout + selezione corrente
     val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
 
+    // Stato barra designer in basso (per lasciare spazio ai contenuti)
     var overlayHeightPx by remember { mutableStateOf(0) }
     val overlayHeightDp = with(LocalDensity.current) { (overlayHeightPx / density).dp }
 
+    // Modalità designer persistente per schermata
+    var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
+
     Box(Modifier.fillMaxSize()) {
-        // --- NUOVO: se il layout ha esattamente un blocco "Page", renderizzalo full-screen ---
-        val blocks = layout!!.optJSONArray("blocks") ?: JSONArray()
-        val isSingleRootPage = (blocks.length() == 1 && (blocks.optJSONObject(0)?.optString("type") == "Page"))
+        // ====== CONTENUTO con Scaffold di ROOT ======
+        RenderRootScaffold(
+            layout = layout!!,
+            dispatch = dispatch,
+            uiState = uiState,
+            designerMode = designMode,
+            menus = menus,
+            selectedPathSetter = { selectedPath = it },
+            extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+            scaffoldPadding = scaffoldPadding
+        )
 
-        if (isSingleRootPage) {
-            val page = blocks.getJSONObject(0)
-            // Renderizza la Page direttamente, niente Column esterna
-            RenderBlock(
-                block = page,
-                dispatch = dispatch,
-                uiState = uiState,
-                designerMode = designerMode,
-                path = "/blocks/0",
-                menus = menus,
-                onSelect = { p -> selectedPath = p }
-            )
-        } else {
-            // fallback: lista blocchi standard (comportamento che già avevi)
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(scaffoldPadding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 16.dp,
-                        bottom = if (designerMode) overlayHeightDp + 32.dp else 16.dp
-                    ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                for (i in 0 until blocks.length()) {
-                    val block = blocks.optJSONObject(i) ?: continue
-                    val path = "/blocks/$i"
-                    RenderBlock(
-                        block = block,
-                        dispatch = dispatch,
-                        uiState = uiState,
-                        designerMode = designerMode,
-                        path = path,
-                        menus = menus,
-                        onSelect = { p -> selectedPath = p }
-                    )
-                }
-            }
-        }
-
-        if (designerMode) {
+        if (designMode) {
             DesignerOverlay(
                 screenName = screenName,
                 layout = layout!!,
@@ -249,12 +119,473 @@ fun UiScreen(
                     tick++
                 },
                 topPadding = scaffoldPadding.calculateTopPadding(),
-                onOverlayHeight = { overlayHeightPx = it }
+                onOverlayHeight = { overlayHeightPx = it },
+                onOpenRootInspector = { /* handled in DesignerOverlay */ }
             )
+        }
+
+        // ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
+        DesignSwitchKnob(
+            isDesigner = designMode,
+            onToggle = { designMode = !designMode }
+        )
+    }
+}
+
+/* =========================
+ * KNOB laterale (trascinabile) per commutare Designer/Anteprima
+ * ========================= */
+@Composable
+private fun BoxScope.DesignSwitchKnob(
+    isDesigner: Boolean,
+    onToggle: () -> Unit
+) {
+    var offsetY by remember { mutableStateOf(0f) }
+    val maxDragPx = with(LocalDensity.current) { 220.dp.toPx() }
+
+    FloatingActionButton(
+        onClick = onToggle,
+        modifier = Modifier
+            .align(Alignment.CenterEnd)
+            .offset { IntOffset(0, offsetY.toInt()) }
+            .pointerInput(Unit) {
+                detectVerticalDragGestures { _, drag ->
+                    offsetY = (offsetY + drag).coerceIn(-maxDragPx, maxDragPx)
+                }
+            },
+        containerColor = if (isDesigner) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = if (isDesigner) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = CircleShape
+    ) {
+        Icon(if (isDesigner) Icons.Filled.Build else Icons.Filled.Visibility, contentDescription = "Designer toggle")
+    }
+}
+
+/* =========================
+ * ROOT SCAFFOLD
+ * ========================= */
+@Composable
+private fun RenderRootScaffold(
+    layout: JSONObject,
+    dispatch: (String) -> Unit,
+    uiState: MutableMap<String, Any>,
+    designerMode: Boolean,
+    menus: Map<String, JSONArray>,
+    selectedPathSetter: (String) -> Unit,
+    extraPaddingBottom: Dp,
+    scaffoldPadding: PaddingValues
+) {
+    val title = layout.optString("topTitle", "")
+    val topActions = layout.optJSONArray("topActions") ?: JSONArray()
+    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray()
+    val fab = layout.optJSONObject("fab")
+    val scroll = layout.optBoolean("scroll", true)
+
+    Scaffold(
+        topBar = {
+            if (title.isNotBlank() || topActions.length() > 0) {
+                TopAppBar(
+                    title = { Text(title) },
+                    actions = {
+                        for (i in 0 until topActions.length()) {
+                            val a = topActions.optJSONObject(i) ?: continue
+                            IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                                NamedIconEx(a.optString("icon", "more_vert"), null)
+                            }
+                        }
+                    }
+                )
+            }
+        },
+        bottomBar = {
+            if (bottomButtons.length() > 0) {
+                Surface(tonalElevation = 3.dp) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        for (i in 0 until bottomButtons.length()) {
+                            val btn = bottomButtons.optJSONObject(i) ?: continue
+                            val label = btn.optString("label", "Button")
+                            val action = btn.optString("actionId", "")
+                            TextButton(onClick = { dispatch(action) }) { Text(label) }
+                        }
+                    }
+                }
+            }
+        },
+        floatingActionButton = {
+            fab?.let {
+                FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
+                    NamedIconEx(it.optString("icon", "play_arrow"), null)
+                }
+            }
+        }
+    ) { innerPadding ->
+        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
+
+        val host = @Composable {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(scaffoldPadding)
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 16.dp,
+                        bottom = extraPaddingBottom
+                    ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                for (i in 0 until blocks.length()) {
+                    val block = blocks.optJSONObject(i) ?: continue
+                    val path = "/blocks/$i"
+                    RenderBlock(
+                        block = block,
+                        dispatch = dispatch,
+                        uiState = uiState,
+                        designerMode = designerMode,
+                        path = path,
+                        menus = menus,
+                        onSelect = { p -> selectedPathSetter(p) },
+                        onOpenInspector = { p -> selectedPathSetter(p) }
+                    )
+                }
+            }
+        }
+
+        if (scroll) {
+            Column(Modifier.verticalScroll(rememberScrollState())) { host() }
+        } else {
+            host()
         }
     }
 }
 
+/* =========================
+ * OVERLAY DESIGNER (palette + azioni + inspector)
+ * ========================= */
+
+@Composable
+private fun BoxScope.DesignerOverlay(
+    screenName: String,
+    layout: JSONObject,
+    selectedPath: String?,
+    setSelectedPath: (String?) -> Unit,
+    onLiveChange: () -> Unit,
+    onLayoutChange: () -> Unit,
+    onSaveDraft: () -> Unit,
+    onPublish: () -> Unit,
+    onReset: () -> Unit,
+    topPadding: Dp,
+    onOverlayHeight: (Int) -> Unit,
+    onOpenRootInspector: () -> Unit
+) {
+    var showInspector by remember { mutableStateOf(false) }
+    var showRootInspector by remember { mutableStateOf(false) }
+    val selectedBlock = selectedPath?.let { jsonAtPath(layout, it) as? JSONObject }
+
+    Column(
+        Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .padding(12.dp)
+            .onGloballyPositioned { onOverlayHeight(it.size.height) },
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // ===== PALETTE =====
+        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
+            Row(
+                Modifier.padding(10.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Palette:", style = MaterialTheme.typography.labelLarge)
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
+
+                FilledTonalButton(onClick = {
+                    val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
+                    setSelectedPath(iconPath); onLayoutChange()
+                }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
+
+                FilledTonalButton(onClick = {
+                    val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
+                    setSelectedPath(path); onLayoutChange()
+                }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
+            }
+        }
+
+        // ===== SELEZIONE + SALVATAGGIO =====
+        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
+            Column(
+                Modifier
+                    .padding(10.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Selezione:", style = MaterialTheme.typography.labelLarge)
+
+                    OutlinedButton(onClick = {
+                        selectedPath?.let {
+                            val newPath = moveAndReturnNewPath(layout, it, -1)
+                            setSelectedPath(newPath); onLayoutChange()
+                        }
+                    }) { Icon(Icons.Filled.KeyboardArrowUp, null); Spacer(Modifier.width(4.dp)); Text("Su") }
+
+                    OutlinedButton(onClick = {
+                        selectedPath?.let {
+                            val newPath = moveAndReturnNewPath(layout, it, +1)
+                            setSelectedPath(newPath); onLayoutChange()
+                        }
+                    }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giù") }
+
+                    OutlinedButton(onClick = {
+                        selectedPath?.let { duplicate(layout, it); onLayoutChange() }
+                    }) { Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica") }
+
+                    TextButton(
+                        onClick = {
+                            selectedPath?.let { remove(layout, it); setSelectedPath(null); onLayoutChange() }
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
+
+                    Button(onClick = { showInspector = true }, enabled = selectedBlock != null) {
+                        Icon(Icons.Filled.Settings, null); Spacer(Modifier.width(6.dp)); Text("Proprietà…")
+                    }
+
+                    OutlinedButton(onClick = { showRootInspector = true }) {
+                        Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Layout…")
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(onClick = onSaveDraft) { Text("Salva bozza") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = onPublish) { Text("Pubblica") }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = onReset) { Text("Reset") }
+                }
+            }
+        }
+    }
+
+    // ===== INSPECTOR BLOCCHI (full screen stile attuale) =====
+    if (showInspector && selectedBlock != null && selectedPath != null) {
+        val working = remember(selectedPath) { JSONObject(selectedBlock.toString()) }
+        var previewTick by remember { mutableStateOf(0) }
+        val bumpPreview: () -> Unit = { previewTick++ }
+
+        BackHandler(enabled = true) { showInspector = false }
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
+        ) {
+            // ANTEPRIMA
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(start = 12.dp, end = 12.dp, top = topPadding + 8.dp)
+                    .shadow(10.dp, RoundedCornerShape(16.dp))
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                tonalElevation = 6.dp
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Anteprima", style = MaterialTheme.typography.labelLarge)
+                    Spacer(Modifier.height(8.dp))
+                    key(previewTick) {
+                        RenderBlock(
+                            block = working,
+                            dispatch = { },
+                            uiState = mutableMapOf(),
+                            designerMode = false,
+                            path = selectedPath,
+                            menus = emptyMap(),
+                            onSelect = {}
+                        )
+                    }
+                }
+            }
+
+            // PANNELLO BASSO
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.6f),
+                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                tonalElevation = 8.dp
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    when (working.optString("type")) {
+                        "ButtonRow"     -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
+                        "SectionHeader" -> SectionHeaderInspectorPanel(working, onChange = bumpPreview)
+                        "Progress"      -> ProgressInspectorPanel(working, onChange = bumpPreview)
+                        "Alert"         -> AlertInspectorPanel(working, onChange = bumpPreview)
+                        "Image"         -> ImageInspectorPanel(working, onChange = bumpPreview)
+                        "ChipRow"       -> ChipRowInspectorPanel(working, onChange = bumpPreview)
+                        "Slider"        -> SliderInspectorPanel(working, onChange = bumpPreview)
+                        "Toggle"        -> ToggleInspectorPanel(working, onChange = bumpPreview)
+                        "Tabs"          -> TabsInspectorPanel(working, onChange = bumpPreview)
+                        "MetricsGrid"   -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
+                        "List"          -> ListInspectorPanel(working, onChange = bumpPreview)
+                        else            -> Text("Inspector non ancora implementato per ${working.optString("type")}")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { showInspector = false }) { Text("Annulla") }
+                        Spacer(Modifier.weight(1f))
+                        Button(onClick = {
+                            replaceAtPath(layout, selectedPath, working)
+                            showInspector = false
+                            onLayoutChange()
+                        }) { Text("OK") }
+                    }
+                }
+            }
+        }
+    }
+
+    // ===== ROOT LAYOUT INSPECTOR =====
+    if (showRootInspector) {
+        val working = remember { JSONObject(layout.toString()) }
+        var dummyTick by remember { mutableStateOf(0) }
+        val onChange = { dummyTick++ }
+
+        BackHandler(enabled = true) { showRootInspector = false }
+
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.6f),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                RootInspectorPanel(working, onChange)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { showRootInspector = false }) { Text("Annulla") }
+                    Spacer(Modifier.weight(1f))
+                    Button(onClick = {
+                        // Commit nel layout originale
+                        val keys = listOf("topTitle","topActions","bottomButtons","fab","scroll")
+                        keys.forEach { k -> layout.put(k, working.opt(k)) }
+                        showRootInspector = false
+                        onLayoutChange()
+                    }) { Text("OK") }
+                }
+            }
+        }
+    }
+}
+
+/* =========================
+ * OVERLAY INGRANAGGIO PER CONTENITORI
+ * ========================= */
 @Composable
 private fun ContainerOverlayGear(
     designerMode: Boolean,
@@ -268,13 +599,12 @@ private fun ContainerOverlayGear(
     }
     Box {
         content()
-        // Ingranaggio in basso-destra: apre l’Inspector del contenitore
         IconButton(
             onClick = { onOpenInspector(path) },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .size(30.dp)
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+            .size(30.dp)
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
         ) {
             Icon(Icons.Filled.Settings, contentDescription = "Proprietà contenitore")
         }
@@ -282,7 +612,7 @@ private fun ContainerOverlayGear(
 }
 
 /* =========================
- * RENDERER
+ * RENDERER BLOCCHI
  * ========================= */
 
 @Composable
@@ -294,11 +624,10 @@ private fun RenderBlock(
     path: String,
     menus: Map<String, JSONArray>,
     onSelect: (String) -> Unit,
-    onOpenInspector: (String) -> Unit = {}   // <— AGGIUNTO (default no-op)
+    onOpenInspector: (String) -> Unit = {}
 ) {
     val borderSelected = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
 
-    // wrapper con overlay selezione (in DesignerMode cattura il tap su tutta l'area)
     @Composable
     fun Wrapper(content: @Composable () -> Unit) {
         if (designerMode) {
@@ -318,7 +647,6 @@ private fun RenderBlock(
                         content()
                     }
                 }
-                // Overlay "trasparente" per selezionare sempre il blocco
                 Box(Modifier.matchParentSize().clickable(onClick = { onSelect(path) }))
             }
         } else {
@@ -339,19 +667,6 @@ private fun RenderBlock(
                         }
                     }
                 }
-            }
-        }
-		
-        "Page" -> {
-            // In designerMode non lo incorniciamo con OutlinedCard;
-            // aggiungiamo solo un overlay clickabile per selezionarlo.
-            if (designerMode) {
-                Box {
-                    RenderPage(block, dispatch, uiState, designerMode, path, menus, onSelect)
-                    Box(Modifier.matchParentSize().clickable { onSelect(path) })
-                }
-            } else {
-                RenderPage(block, dispatch, uiState, designerMode, path, menus, onSelect)
             }
         }
 
@@ -453,14 +768,12 @@ private fun RenderBlock(
                 else   -> ContentScale.Fit
             }
 
-            // Solo risorse locali: res:<nome>
             val resId = if (source.startsWith("res:"))
                 LocalContext.current.resources.getIdentifier(source.removePrefix("res:"), "drawable", LocalContext.current.packageName)
             else 0
 
             Surface(shape = RoundedCornerShape(corner), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
                 if (resId != 0) {
-                    // Material3 non include coil: mostriamo l’immagine di drawable
                     androidx.compose.foundation.Image(
                         painter = painterResource(resId),
                         contentDescription = null,
@@ -468,7 +781,6 @@ private fun RenderBlock(
                         contentScale = scale
                     )
                 } else {
-                    // Placeholder
                     Box(Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
                         Text("Image: ${if (source.isBlank()) "(not set)" else source}", style = MaterialTheme.typography.labelMedium)
                     }
@@ -479,8 +791,7 @@ private fun RenderBlock(
         "Card" -> {
             val variant = block.optString("variant","elevated")
             val clickAction = block.optString("clickActionId","")
-        
-            // Contenuto attuale della Card (figli)
+
             val innerContent: @Composable () -> Unit = {
                 val innerBlocks = block.optJSONArray("blocks") ?: JSONArray()
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -491,13 +802,11 @@ private fun RenderBlock(
                     }
                 }
             }
-        
-            // Modificatori base della Card (tocco azione se non in designer)
+
             val baseMod = Modifier
                 .fillMaxWidth()
                 .then(if (clickAction.isNotBlank() && !designerMode) Modifier.clickable { dispatch(clickAction) } else Modifier)
-        
-            // Overlay gear solo in designer
+
             ContainerOverlayGear(designerMode, path, onOpenInspector) {
                 when (variant) {
                     "outlined" -> OutlinedCard(baseMod) { Column(Modifier.padding(12.dp)) { innerContent() } }
@@ -515,13 +824,13 @@ private fun RenderBlock(
             val labels = (0 until count).map {
                 tabs.optJSONObject(it)?.optString("label", "Tab ${it+1}") ?: "Tab ${it+1}"
             }
-        
+
             ContainerOverlayGear(designerMode, path, onOpenInspector) {
                 TabRow(selectedTabIndex = idx) {
                     labels.forEachIndexed { i, label ->
                         Tab(
                             selected = i == idx,
-                            onClick = { idx = i },                 // <— TAP sulla Tab per scegliere cosa si modifica
+                            onClick = { idx = i },
                             text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                         )
                     }
@@ -890,91 +1199,6 @@ private fun RenderBlock(
     }
 }
 
-@Composable
-private fun RenderPage(
-    page: JSONObject,
-    dispatch: (String) -> Unit,
-    uiState: MutableMap<String, Any>,
-    designerMode: Boolean,
-    path: String,
-    menus: Map<String, JSONArray>,
-    onSelect: (String) -> Unit
-) {
-    val title = page.optString("title", "")
-    val scroll = page.optBoolean("scroll", true)
-
-    // AppBar azioni (facoltative) – stesso schema dell’“AppBar” simple
-    val actions = page.optJSONArray("actions") ?: JSONArray()
-
-    Scaffold(
-        topBar = {
-            if (title.isNotBlank() || actions.length() > 0) {
-                TopAppBar(
-                    title = { Text(title) },
-                    actions = {
-                        for (i in 0 until actions.length()) {
-                            val a = actions.optJSONObject(i) ?: continue
-                            IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-                                NamedIconEx(a.optString("icon", "more_vert"), null)
-                            }
-                        }
-                    }
-                )
-            }
-        },
-        bottomBar = {
-            val bottomButtons = page.optJSONArray("bottomButtons") ?: JSONArray()
-            if (bottomButtons.length() > 0) {
-                Surface(tonalElevation = 3.dp) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        for (i in 0 until bottomButtons.length()) {
-                            val btn = bottomButtons.optJSONObject(i) ?: continue
-                            val label = btn.optString("label", "Button")
-                            val action = btn.optString("actionId", "")
-                            TextButton(onClick = { dispatch(action) }) { Text(label) }
-                        }
-                    }
-                }
-            }
-        },
-        floatingActionButton = {
-            page.optJSONObject("fab")?.let { fab ->
-                FloatingActionButton(onClick = { dispatch(fab.optString("actionId", "")) }) {
-                    NamedIconEx(fab.optString("icon", "play_arrow"), null)
-                }
-            }
-        }
-    ) { innerPadding ->
-        val innerBlocks = page.optJSONArray("blocks") ?: JSONArray()
-        val base = Modifier
-            .fillMaxSize()
-            .padding(innerPadding)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-
-        val content: @Composable () -> Unit = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                for (i in 0 until innerBlocks.length()) {
-                    val b = innerBlocks.optJSONObject(i) ?: continue
-                    val p2 = "$path/blocks/$i"
-                    RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect)
-                }
-            }
-        }
-
-        if (scroll) {
-            Column(base.verticalScroll(rememberScrollState())) { content() }
-        } else {
-            Column(base) { content() }
-        }
-    }
-}
-
 /* =========================
  * GRID
  * ========================= */
@@ -1009,278 +1233,112 @@ private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String,
 }
 
 /* =========================
- * DESIGNER OVERLAY
+ * ROOT INSPECTOR PANEL
  * ========================= */
 
 @Composable
-private fun BoxScope.DesignerOverlay(
-    screenName: String,
-    layout: JSONObject,
-    selectedPath: String?,
-    setSelectedPath: (String?) -> Unit,
-    onLiveChange: () -> Unit,
-    onLayoutChange: () -> Unit,
-    onSaveDraft: () -> Unit,
-    onPublish: () -> Unit,
-    onReset: () -> Unit,
-    topPadding: Dp,
-    onOverlayHeight: (Int) -> Unit
-) {
-    var showInspector by remember { mutableStateOf(false) }
-    val selectedBlock = selectedPath?.let { jsonAtPath(layout, it) as? JSONObject }
+private fun RootInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+    Text("Layout (root) – Proprietà", style = MaterialTheme.typography.titleMedium)
 
-    Column(
-        Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .padding(12.dp)
-            .onGloballyPositioned { onOverlayHeight(it.size.height) },
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Palette
-        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
-            Row(
-                Modifier.padding(10.dp).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Palette:", style = MaterialTheme.typography.labelLarge)
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
-
-                FilledTonalButton(onClick = {
-                    val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
-                    setSelectedPath(iconPath); onLayoutChange()
-                }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
-            }
-        }
-
-        // Selezione + Azioni salvataggio
-        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
-            Column(
-                Modifier
-                    .padding(10.dp)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Selezione:", style = MaterialTheme.typography.labelLarge)
-
-                    OutlinedButton(onClick = {
-                        selectedPath?.let {
-                            val newPath = moveAndReturnNewPath(layout, it, -1)
-                            setSelectedPath(newPath); onLayoutChange()
-                        }
-                    }) { Icon(Icons.Filled.KeyboardArrowUp, null); Spacer(Modifier.width(4.dp)); Text("Su") }
-
-                    OutlinedButton(onClick = {
-                        selectedPath?.let {
-                            val newPath = moveAndReturnNewPath(layout, it, +1)
-                            setSelectedPath(newPath); onLayoutChange()
-                        }
-                    }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giù") }
-
-                    OutlinedButton(onClick = {
-                        selectedPath?.let { duplicate(layout, it); onLayoutChange() }
-                    }) { Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica") }
-
-                    TextButton(
-                        onClick = {
-                            selectedPath?.let { remove(layout, it); setSelectedPath(null); onLayoutChange() }
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
-
-                    Button(onClick = { showInspector = true }, enabled = selectedBlock != null) {
-                        Text("Proprietà…")
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedButton(onClick = onSaveDraft) { Text("Salva bozza") }
-                    Spacer(Modifier.width(8.dp))
-                    Button(onClick = onPublish) { Text("Pubblica") }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = onReset) { Text("Reset") }
-                }
-            }
-        }
+    // Scroll on/off
+    var scroll by remember { mutableStateOf(working.optBoolean("scroll", true)) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(checked = scroll, onCheckedChange = {
+            scroll = it; working.put("scroll", it); onChange()
+        })
+        Spacer(Modifier.width(8.dp)); Text("Contenuto scrollabile")
     }
 
-    // === FULL SCREEN INSPECTOR (no scrim, preview ancorata in alto) ===
-    if (showInspector && selectedBlock != null && selectedPath != null) {
-        val working = remember(selectedPath) { JSONObject(selectedBlock.toString()) }
-        var previewTick by remember { mutableStateOf(0) }
-        val bumpPreview: () -> Unit = { previewTick++ }
+    Divider(); Text("Top App Bar", style = MaterialTheme.typography.titleSmall)
+    val title = remember { mutableStateOf(working.optString("topTitle","")) }
+    OutlinedTextField(
+        value = title.value,
+        onValueChange = { title.value = it; working.put("topTitle", it); onChange() },
+        label = { Text("title") }
+    )
 
-        BackHandler(enabled = true) { showInspector = false }
-
-        Box(
-            Modifier
-                .fillMaxSize()
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
-        ) {
-            // ANTEPRIMA
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(start = 12.dp, end = 12.dp, top = topPadding + 8.dp)
-                    .shadow(10.dp, RoundedCornerShape(16.dp))
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 6.dp
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("Anteprima", style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.height(8.dp))
-                    key(previewTick) {
-                        RenderBlock(
-                            block = working,
-                            dispatch = { },
-                            uiState = mutableMapOf(),
-                            designerMode = false,
-                            path = selectedPath,
-                            menus = emptyMap(),
-                            onSelect = {}
-                        )
+    val actions = working.optJSONArray("topActions") ?: JSONArray().also { working.put("topActions", it) }
+    for (i in 0 until actions.length()) {
+        val itx = actions.getJSONObject(i)
+        ElevatedCard {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Action ${i+1}", style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        IconButton(onClick = { moveInArray(actions, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                        IconButton(onClick = { moveInArray(actions, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                        IconButton(onClick = { removeAt(actions, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
                     }
                 }
-            }
-
-            // PANNELLO BASSO
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.6f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-                tonalElevation = 8.dp
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    when (working.optString("type")) {
-                        "ButtonRow"   -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
-                        "SectionHeader" -> SectionHeaderInspectorPanel(working, onChange = bumpPreview)
-                        "Progress"    -> ProgressInspectorPanel(working, onChange = bumpPreview)
-                        "Alert"       -> AlertInspectorPanel(working, onChange = bumpPreview)
-                        "Image"       -> ImageInspectorPanel(working, onChange = bumpPreview)
-                        "ChipRow"     -> ChipRowInspectorPanel(working, onChange = bumpPreview)
-                        "Slider"      -> SliderInspectorPanel(working, onChange = bumpPreview)
-                        "Toggle"      -> ToggleInspectorPanel(working, onChange = bumpPreview)
-                        "Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
-                        "MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
-                        "List"        -> ListInspectorPanel(working, onChange = bumpPreview)
-                        else          -> Text("Inspector non ancora implementato per ${working.optString("type")}")
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { showInspector = false }) { Text("Annulla") }
-                        Spacer(Modifier.weight(1f))
-                        Button(onClick = {
-                            replaceAtPath(layout, selectedPath, working)
-                            showInspector = false
-                            onLayoutChange()
-                        }) { Text("OK") }
-                    }
-                }
+                val icon = remember { mutableStateOf(itx.optString("icon","more_vert")) }
+                IconPickerField(icon, "icon") { sel -> icon.value = sel; itx.put("icon", sel); onChange() }
+                val act = remember { mutableStateOf(itx.optString("actionId","")) }
+                OutlinedTextField(
+                    value = act.value,
+                    onValueChange = { act.value = it; itx.put("actionId", it); onChange() },
+                    label = { Text("actionId") }
+                )
             }
         }
+        Spacer(Modifier.height(8.dp))
+    }
+    Button(onClick = {
+        actions.put(JSONObject("""{"icon":"more_vert","actionId":""}""")); onChange()
+    }) { Text("+ Aggiungi action") }
+
+    Divider(); Text("Bottom Bar", style = MaterialTheme.typography.titleSmall)
+    val bottom = working.optJSONArray("bottomButtons") ?: JSONArray().also { working.put("bottomButtons", it) }
+    for (i in 0 until bottom.length()) {
+        val itx = bottom.getJSONObject(i)
+        ElevatedCard {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Button ${i+1}", style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        IconButton(onClick = { moveInArray(bottom, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                        IconButton(onClick = { moveInArray(bottom, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                        IconButton(onClick = { removeAt(bottom, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
+                    }
+                }
+                val lbl = remember { mutableStateOf(itx.optString("label","")) }
+                OutlinedTextField(lbl.value, { lbl.value = it; itx.put("label", it); onChange() }, label = { Text("label") })
+                val act = remember { mutableStateOf(itx.optString("actionId","")) }
+                OutlinedTextField(act.value, { act.value = it; itx.put("actionId", it); onChange() }, label = { Text("actionId") })
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+    Button(onClick = {
+        bottom.put(JSONObject("""{"label":"Azione","actionId":""}""")); onChange()
+    }) { Text("+ Aggiungi bottone") }
+
+    Divider(); Text("Floating Action Button", style = MaterialTheme.typography.titleSmall)
+    val fab = working.optJSONObject("fab") ?: JSONObject().also { working.put("fab", it) }
+    var fabEnabled by remember { mutableStateOf(fab.optBoolean("enabled", false)) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(checked = fabEnabled, onCheckedChange = {
+            fabEnabled = it
+            if (!it) working.remove("fab") else {
+                if (!fab.has("icon")) fab.put("icon","add")
+                fab.put("enabled", true)
+                working.put("fab", fab)
+            }
+            onChange()
+        })
+        Spacer(Modifier.width(8.dp)); Text("Abilita FAB")
+    }
+    if (fabEnabled) {
+        val icon = remember { mutableStateOf(fab.optString("icon","add")) }
+        IconPickerField(icon, "icon") { sel -> icon.value = sel; fab.put("icon", sel); onChange() }
+        val label = remember { mutableStateOf(fab.optString("label","")) }
+        OutlinedTextField(label.value, { label.value = it; fab.put("label", it); onChange() }, label = { Text("label (solo extended)") })
+        val action = remember { mutableStateOf(fab.optString("actionId","")) }
+        OutlinedTextField(action.value, { action.value = it; fab.put("actionId", it); onChange() }, label = { Text("actionId") })
     }
 }
 
 /* =========================
- * INSPECTOR PANELS
+ * INSPECTOR dei vari BLOCCHI (come in tua base)
  * ========================= */
 
 @Composable
@@ -1340,7 +1398,6 @@ private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
                     options = listOf("xs","sm","md","lg","xl")
                 ) { sel -> size = sel; btn.put("size", sel); onChange() }
 
-                // Height preset
                 var heightStr by remember {
                     mutableStateOf(btn.optDouble("heightDp", Double.NaN).let { if (it.isNaN()) "(auto)" else it.toInt().toString() })
                 }
@@ -1353,7 +1410,6 @@ private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
                     onChange()
                 }
 
-                // Width preset
                 var widthStr by remember {
                     mutableStateOf(btn.optDouble("widthDp", Double.NaN).let { if (it.isNaN()) "(auto)" else it.toInt().toString() })
                 }
@@ -1366,11 +1422,9 @@ private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
                     onChange()
                 }
 
-                // Corner con step = 1.0
                 val cornerStr = remember { mutableStateOf(btn.optDouble("corner", 20.0).toString()) }
                 StepperField("corner (dp)", cornerStr, 1.0) { v -> btn.put("corner", v); onChange() }
 
-                // Colore personalizzato (palette/ruoli)
                 val customColor = remember { mutableStateOf(btn.optString("customColor", "")) }
                 NamedColorPickerPlus(
                     current = customColor.value,
@@ -1489,7 +1543,6 @@ private fun ChipRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     }) { Text("+ Aggiungi chip") }
 
     Divider()
-    // Stile testo
     val textSize = remember {
         mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() })
     }
@@ -1739,7 +1792,7 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
     var fontWeight by remember { mutableStateOf(working.optString("fontWeight","")) }
     ExposedDropdown(
         value = if (fontWeight.isBlank()) "(default)" else fontWeight, label = "fontWeight",
-        options = listOf("(default)","w300","w400","w500","w600","w700")
+        options = listOf(""(default)"",""w300"",""w400"",""w500"",""w600"",""w700"")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontWeight = v
@@ -2047,7 +2100,6 @@ private fun parseColorOrRole(value: String?): Color? {
     if (value.isNullOrBlank()) return null
     val v = value.trim()
 
-    // Hex
     if (v.startsWith("#") && (v.length == 7 || v.length == 9)) {
         return try { Color(android.graphics.Color.parseColor(v)) } catch (_: Exception) { null }
     }
@@ -2069,15 +2121,12 @@ private fun parseColorOrRole(value: String?): Color? {
 }
 
 private val NAMED_SWATCHES = linkedMapOf(
-    // Neutri
     "White" to 0xFFFFFFFF, "Black" to 0xFF000000,
     "Gray50" to 0xFFFAFAFA, "Gray100" to 0xFFF5F5F5, "Gray200" to 0xFFEEEEEE,
     "Gray300" to 0xFFE0E0E0, "Gray400" to 0xFFBDBDBD, "Gray500" to 0xFF9E9E9E,
     "Gray600" to 0xFF757575, "Gray700" to 0xFF616161, "Gray800" to 0xFF424242, "Gray900" to 0xFF212121,
-
-    // Material-like
     "Red" to 0xFFE53935, "RedDark" to 0xFFC62828, "RedLight" to 0xFFEF5350,
-    "Pink" to 0xFFD81B60, "PinkDark" to 0xFFC2185B, "PinkLight" to 0xFFF06292,
+    "Pink" to 0xFFD81B60, "PinkDark" to 0x"C2185B", "PinkLight" to 0x"F06292",
     "Purple" to 0xFF8E24AA, "PurpleDark" to 0xFF6A1B9A, "PurpleLight" to 0xFFBA68C8,
     "DeepPurple" to 0xFF5E35B1, "Indigo" to 0xFF3949AB,
     "Blue" to 0xFF1E88E5, "BlueDark" to 0xFF1565C0, "BlueLight" to 0xFF64B5F6,
@@ -2152,7 +2201,6 @@ private fun NamedColorPickerPlus(
 }
 
 /* ---- Readability helper ---- */
-
 private fun bestOnColor(bg: Color): Color {
     val l = 0.2126f * bg.red + 0.7152f * bg.green + 0.0722f * bg.blue
     return if (l < 0.5f) Color.White else Color.Black
@@ -2445,17 +2493,3 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
 
     return st
 }
-
-/* ---- Page blueprint (contenitore semplice) ---- */
-private fun newPage() = JSONObject(
-    """
-    {
-      "type":"Page",
-      "title":"",
-      "scroll": true,
-      "actions": [],
-      "bottomButtons": [],
-      "blocks":[]
-    }
-    """.trimIndent()
-)
