@@ -2,25 +2,34 @@
 
 package ai.runow.ui.renderer
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -36,25 +45,32 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.activity.compose.BackHandler
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.platform.LocalContentColor
 
-/* =========================
- * ENTRY: render di una schermata JSON
- * ========================= */
+/* =========================================================
+ * ENTRY ROOT CHIAMATA DA MainActivity
+ * ========================================================= */
+@Composable
+fun DesignerRoot() {
+    val uiState = remember { mutableMapOf<String, Any>() }
+    val dispatch: (String) -> Unit = { /* TODO: instrada azioni app */ }
+    // Schermata unica "home": UiLoader farà fallback su {"blocks":[]}
+    UiScreen(
+        screenName = "home",
+        dispatch = dispatch,
+        uiState = uiState,
+        designerMode = true,                 // parte in designer, ma c'è la levetta
+        scaffoldPadding = PaddingValues(0.dp)
+    )
+}
+
+/* =========================================================
+ * RENDER DI UNA SCHERMATA JSON (con Scaffold di root e levetta)
+ * ========================================================= */
 @Composable
 fun UiScreen(
     screenName: String,
@@ -120,7 +136,7 @@ fun UiScreen(
                 },
                 topPadding = scaffoldPadding.calculateTopPadding(),
                 onOverlayHeight = { overlayHeightPx = it },
-                onOpenRootInspector = { /* handled in DesignerOverlay */ }
+                onOpenRootInspector = { /* gestito sotto */ }
             )
         }
 
@@ -132,9 +148,9 @@ fun UiScreen(
     }
 }
 
-/* =========================
+/* =========================================================
  * KNOB laterale (trascinabile) per commutare Designer/Anteprima
- * ========================= */
+ * ========================================================= */
 @Composable
 private fun BoxScope.DesignSwitchKnob(
     isDesigner: Boolean,
@@ -161,9 +177,9 @@ private fun BoxScope.DesignSwitchKnob(
     }
 }
 
-/* =========================
- * ROOT SCAFFOLD
- * ========================= */
+/* =========================================================
+ * ROOT SCAFFOLD (top bar, bottom bar, fab, scroll)
+ * ========================================================= */
 @Composable
 private fun RenderRootScaffold(
     layout: JSONObject,
@@ -266,9 +282,9 @@ private fun RenderRootScaffold(
     }
 }
 
-/* =========================
+/* =========================================================
  * OVERLAY DESIGNER (palette + azioni + inspector)
- * ========================= */
+ * ========================================================= */
 
 @Composable
 private fun BoxScope.DesignerOverlay(
@@ -457,7 +473,7 @@ private fun BoxScope.DesignerOverlay(
         }
     }
 
-    // ===== INSPECTOR BLOCCHI (full screen stile attuale) =====
+    // ===== INSPECTOR BLOCCHI =====
     if (showInspector && selectedBlock != null && selectedPath != null) {
         val working = remember(selectedPath) { JSONObject(selectedBlock.toString()) }
         var previewTick by remember { mutableStateOf(0) }
@@ -583,9 +599,9 @@ private fun BoxScope.DesignerOverlay(
     }
 }
 
-/* =========================
+/* =========================================================
  * OVERLAY INGRANAGGIO PER CONTENITORI
- * ========================= */
+ * ========================================================= */
 @Composable
 private fun ContainerOverlayGear(
     designerMode: Boolean,
@@ -603,17 +619,17 @@ private fun ContainerOverlayGear(
             onClick = { onOpenInspector(path) },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-            .size(30.dp)
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                .size(30.dp)
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
         ) {
             Icon(Icons.Filled.Settings, contentDescription = "Proprietà contenitore")
         }
     }
 }
 
-/* =========================
+/* =========================================================
  * RENDERER BLOCCHI
- * ========================= */
+ * ========================================================= */
 
 @Composable
 private fun RenderBlock(
@@ -719,7 +735,10 @@ private fun RenderBlock(
                     progress = { value / 100f },
                     trackColor = color.copy(alpha = 0.25f),
                     color = color,
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(8.dp))
                 )
                 if (showPercent) {
                     Spacer(Modifier.height(6.dp))
@@ -1199,9 +1218,9 @@ private fun RenderBlock(
     }
 }
 
-/* =========================
+/* =========================================================
  * GRID
- * ========================= */
+ * ========================================================= */
 
 @Composable
 private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String, Any>) {
@@ -1232,9 +1251,9 @@ private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String,
     }
 }
 
-/* =========================
+/* =========================================================
  * ROOT INSPECTOR PANEL
- * ========================= */
+ * ========================================================= */
 
 @Composable
 private fun RootInspectorPanel(working: JSONObject, onChange: () -> Unit) {
@@ -1337,9 +1356,9 @@ private fun RootInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     }
 }
 
-/* =========================
- * INSPECTOR dei vari BLOCCHI (come in tua base)
- * ========================= */
+/* =========================================================
+ * INSPECTOR dei vari BLOCCHI
+ * ========================================================= */
 
 @Composable
 private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
@@ -1767,7 +1786,11 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
     ExposedDropdown(
         value = style, label = "style",
         options = listOf("displaySmall","headlineSmall","titleLarge","titleMedium","titleSmall","bodyLarge","bodyMedium")
-    ) { sel -> style = sel; working.put("style", sel); onChange() }
+    ) { sel ->
+        style = sel
+        working.put("style", sel)
+        onChange()
+    }
 
     var align by remember { mutableStateOf(working.optString("align","start")) }
     ExposedDropdown(
@@ -1791,8 +1814,9 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
 
     var fontWeight by remember { mutableStateOf(working.optString("fontWeight","")) }
     ExposedDropdown(
-        value = if (fontWeight.isBlank()) "(default)" else fontWeight, label = "fontWeight",
-        options = listOf(""(default)"",""w300"",""w400"",""w500"",""w600"",""w700"")
+        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+        label = "fontWeight",
+        options = listOf("(default)","w300","w400","w500","w600","w700")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontWeight = v
@@ -1819,66 +1843,9 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
     }
 }
 
-@Composable
-private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("List – Proprietà testo", style = MaterialTheme.typography.titleMedium)
-
-    val textSize = remember { mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }) }
-    ExposedDropdown(
-        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
-        label = "textSize (sp)",
-        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        textSize.value = v
-        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
-        onChange()
-    }
-
-    var align by remember { mutableStateOf(working.optString("align","start")) }
-    ExposedDropdown(
-        value = align, label = "align",
-        options = listOf("start","center","end")
-    ) { sel -> align = sel; working.put("align", sel); onChange() }
-
-    var fontFamily by remember { mutableStateOf(working.optString("fontFamily", "")) }
-    ExposedDropdown(
-        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
-        label = "fontFamily",
-        options = listOf("(default)","sans","serif","monospace","cursive")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        fontFamily = v
-        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
-        onChange()
-    }
-
-    var fontWeight by remember { mutableStateOf(working.optString("fontWeight", "")) }
-    ExposedDropdown(
-        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
-        label = "fontWeight",
-        options = listOf("(default)","w300","w400","w500","w600","w700")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        fontWeight = v
-        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
-        onChange()
-    }
-
-    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
-    NamedColorPickerPlus(
-        current = textColor.value,
-        label = "textColor"
-    ) { hex ->
-        textColor.value = hex
-        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
-        onChange()
-    }
-}
-
-/* =========================
+/* =========================================================
  * HELPERS: mapping, pickers, utils
- * ========================= */
+ * ========================================================= */
 
 @Composable
 private fun mapTextStyle(key: String): TextStyle = when (key) {
@@ -2121,22 +2088,26 @@ private fun parseColorOrRole(value: String?): Color? {
 }
 
 private val NAMED_SWATCHES = linkedMapOf(
-    "White" to 0xFFFFFFFF, "Black" to 0xFF000000,
-    "Gray50" to 0xFFFAFAFA, "Gray100" to 0xFFF5F5F5, "Gray200" to 0xFFEEEEEE,
-    "Gray300" to 0xFFE0E0E0, "Gray400" to 0xFFBDBDBD, "Gray500" to 0xFF9E9E9E,
-    "Gray600" to 0xFF757575, "Gray700" to 0xFF616161, "Gray800" to 0xFF424242, "Gray900" to 0xFF212121,
-    "Red" to 0xFFE53935, "RedDark" to 0xFFC62828, "RedLight" to 0xFFEF5350,
-    "Pink" to 0xFFD81B60, "PinkDark" to 0x"C2185B", "PinkLight" to 0x"F06292",
-    "Purple" to 0xFF8E24AA, "PurpleDark" to 0xFF6A1B9A, "PurpleLight" to 0xFFBA68C8,
-    "DeepPurple" to 0xFF5E35B1, "Indigo" to 0xFF3949AB,
-    "Blue" to 0xFF1E88E5, "BlueDark" to 0xFF1565C0, "BlueLight" to 0xFF64B5F6,
-    "LightBlue" to 0xFF039BE5, "Cyan" to 0xFF00ACC1,
-    "Teal" to 0xFF00897B, "TealLight" to 0xFF26A69A,
-    "Green" to 0xFF43A047, "GreenDark" to 0xFF2E7D32, "GreenLight" to 0xFF66BB6A,
-    "LightGreen" to 0xFF7CB342, "Lime" to 0xFFC0CA33,
-    "Yellow" to 0xFFFDD835, "Amber" to 0xFFFFB300,
-    "Orange" to 0xFFFB8C00, "DeepOrange" to 0xFFF4511E,
-    "Brown" to 0xFF6D4C41, "BlueGrey" to 0xFF546E7A
+    // Neutri
+    "White" to 0xFFFFFFFF.toInt(),
+    "Black" to 0xFF000000.toInt(),
+    "Gray50" to 0xFFFAFAFA.toInt(), "Gray100" to 0xFFF5F5F5.toInt(), "Gray200" to 0xFFEEEEEE.toInt(),
+    "Gray300" to 0xFFE0E0E0.toInt(), "Gray400" to 0xFFBDBDBD.toInt(), "Gray500" to 0xFF9E9E9E.toInt(),
+    "Gray600" to 0xFF757575.toInt(), "Gray700" to 0xFF616161.toInt(), "Gray800" to 0xFF424242.toInt(), "Gray900" to 0xFF212121.toInt(),
+
+    // Material-like
+    "Red" to 0xFFE53935.toInt(), "RedDark" to 0xFFC62828.toInt(), "RedLight" to 0xFFEF5350.toInt(),
+    "Pink" to 0xFFD81B60.toInt(), "PinkDark" to 0xFFC2185B.toInt(), "PinkLight" to 0xFFF06292.toInt(),
+    "Purple" to 0xFF8E24AA.toInt(), "PurpleDark" to 0xFF6A1B9A.toInt(), "PurpleLight" to 0xFFBA68C8.toInt(),
+    "DeepPurple" to 0xFF5E35B1.toInt(), "Indigo" to 0xFF3949AB.toInt(),
+    "Blue" to 0xFF1E88E5.toInt(), "BlueDark" to 0xFF1565C0.toInt(), "BlueLight" to 0xFF64B5F6.toInt(),
+    "LightBlue" to 0xFF039BE5.toInt(), "Cyan" to 0xFF00ACC1.toInt(),
+    "Teal" to 0xFF00897B.toInt(), "TealLight" to 0xFF26A69A.toInt(),
+    "Green" to 0xFF43A047.toInt(), "GreenDark" to 0xFF2E7D32.toInt(), "GreenLight" to 0xFF66BB6A.toInt(),
+    "LightGreen" to 0xFF7CB342.toInt(), "Lime" to 0xFFC0CA33.toInt(),
+    "Yellow" to 0xFFFDD835.toInt(), "Amber" to 0xFFFFB300.toInt(),
+    "Orange" to 0xFFFB8C00.toInt(), "DeepOrange" to 0xFFF4511E.toInt(),
+    "Brown" to 0xFF6D4C41.toInt(), "BlueGrey" to 0xFF546E7A.toInt()
 )
 
 private val MATERIAL_ROLES = listOf(
@@ -2190,7 +2161,7 @@ private fun NamedColorPickerPlus(
                     leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
                     text = { Text(name) },
                     onClick = {
-                        val hex = "#%06X".format(0xFFFFFF and argb.toInt())
+                        val hex = "#%06X".format(argb and 0xFFFFFF)
                         onPick(hex); expanded = false
                     }
                 )
@@ -2206,9 +2177,9 @@ private fun bestOnColor(bg: Color): Color {
     return if (l < 0.5f) Color.White else Color.Black
 }
 
-/* =========================
+/* =========================================================
  * JSON utils
- * ========================= */
+ * ========================================================= */
 
 private fun collectMenus(root: JSONObject): Map<String, JSONArray> {
     val map = mutableMapOf<String, JSONArray>()
@@ -2379,9 +2350,9 @@ private fun removeAt(arr: JSONArray, index: Int) {
     tmp.forEach { arr.put(it) }
 }
 
-/* =========================
+/* =========================================================
  * BLUEPRINTS
- * ========================= */
+ * ========================================================= */
 
 private fun newSectionHeader() = JSONObject("""{"type":"SectionHeader","title":"Nuova sezione"}""")
 
@@ -2461,9 +2432,9 @@ private fun newList() = JSONObject(
     """.trimIndent()
 )
 
-/* =========================
+/* =========================================================
  * TEXT STYLE OVERRIDES
- * ========================= */
+ * ========================================================= */
 
 private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
     var st = base
