@@ -44,13 +44,6 @@ import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
-import android.annotation.SuppressLint
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.border
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.graphics.Brush
-import android.util.Log
 
 /* =========================
  * ENTRYPOINT
@@ -161,7 +154,9 @@ private fun RenderBlock(
         if (designerMode) {
             Box {
                 OutlinedCard(
-                    modifier = Modifier.fillMaxWidth().padding(0.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(0.dp),
                     border = borderSelected,
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -248,7 +243,10 @@ private fun RenderBlock(
                     progress = { value / 100f },
                     trackColor = color.copy(alpha = 0.25f),
                     color = color,
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(8.dp))
                 )
                 if (showPercent) {
                     Spacer(Modifier.height(6.dp))
@@ -299,7 +297,11 @@ private fun RenderBlock(
 
             // Solo risorse locali: res:<nome>
             val resId = if (source.startsWith("res:"))
-                LocalContext.current.resources.getIdentifier(source.removePrefix("res:"), "drawable", LocalContext.current.packageName)
+                LocalContext.current.resources.getIdentifier(
+                    source.removePrefix("res:"),
+                    "drawable",
+                    LocalContext.current.packageName
+                )
             else 0
 
             Surface(shape = RoundedCornerShape(corner), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
@@ -314,7 +316,10 @@ private fun RenderBlock(
                 } else {
                     // Placeholder
                     Box(Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
-                        Text("Image: ${if (source.isBlank()) "(not set)" else source}", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            "Image: ${if (source.isBlank()) "(not set)" else source}",
+                            style = MaterialTheme.typography.labelMedium
+                        )
                     }
                 }
             }
@@ -350,7 +355,9 @@ private fun RenderBlock(
 
         "Tabs" -> Wrapper {
             val tabs = block.optJSONArray("tabs") ?: JSONArray()
-            var idx by remember(path) { mutableStateOf(block.optInt("initialIndex", 0).coerceAtLeast(0)) }
+            var idx by remember(path) {
+                mutableStateOf(block.optInt("initialIndex", 0).coerceAtLeast(0))
+            }
             val count = tabs.length().coerceAtLeast(1)
             if (idx >= count) idx = 0
             val labels = (0 until count).map {
@@ -779,24 +786,19 @@ private fun BoxScope.DesignerOverlay(
     topPadding: Dp,
     onOverlayHeight: (Int) -> Unit
 ) {
+    // Helpers sicuri per evitare crash
+    fun tryInsert(block: JSONObject): String? =
+        runCatching { insertBlockAndReturnPath(layout, selectedPath, block, "after") }
+            .onFailure { it.printStackTrace() }
+            .getOrNull()
+
+    fun tryInsertIconMenu(): String? =
+        runCatching { insertIconMenuReturnIconPath(layout, selectedPath) }
+            .onFailure { it.printStackTrace() }
+            .getOrNull()
+
     var showInspector by remember { mutableStateOf(false) }
     val selectedBlock = selectedPath?.let { jsonAtPath(layout, it) as? JSONObject }
-
-    // --- NEW: gestione errori palette ---
-    var lastError by remember { mutableStateOf<String?>(null) }
-    fun addBlockAt(block: JSONObject) {
-        try {
-            // garantisco l'array /blocks
-            if (layout.optJSONArray("blocks") == null) layout.put("blocks", JSONArray())
-            val newPath = insertBlockAndReturnPath(layout, selectedPath, block, "after")
-            setSelectedPath(newPath)
-            onLayoutChange()
-            lastError = null
-        } catch (t: Throwable) {
-            Log.e("UiDesigner", "Palette add failed", t)
-            lastError = t.message ?: t.javaClass.simpleName
-        }
-    }
 
     Column(
         Modifier
@@ -809,98 +811,82 @@ private fun BoxScope.DesignerOverlay(
         // Palette
         Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
             Row(
-                Modifier.padding(10.dp).horizontalScroll(rememberScrollState()),
+                Modifier
+                    .padding(10.dp)
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Palette:", style = MaterialTheme.typography.labelLarge)
 
-                FilledTonalButton(onClick = { addBlockAt(newProgress()) }) {
-                    Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress")
-                }
-
-                FilledTonalButton(onClick = { addBlockAt(newAlert()) }) {
-                    Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert")
-                }
-
-                FilledTonalButton(onClick = { addBlockAt(newImage()) }) {
-                    Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image")
-                }
-
-                FilledTonalButton(onClick = { addBlockAt(newSectionHeader()) }) {
-                    Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader")
-                }
-
-                FilledTonalButton(onClick = { addBlockAt(newButtonRow()) }) {
-                    Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow")
-                }
-
-                FilledTonalButton(onClick = { addBlockAt(newList()) }) {
-                    Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List")
-                }
-
-                FilledTonalButton(onClick = { addBlockAt(newSpacer()) }) {
-                    Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer")
-                }
-
-                FilledTonalButton(onClick = { addBlockAt(JSONObject().put("type", "Divider")) }) {
-                    Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider")
-                }
-
-                FilledTonalButton(onClick = { addBlockAt(newDividerV()) }) {
-                    Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV")
-                }
+                FilledTonalButton(onClick = {
+                    tryInsert(newProgress())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
 
                 FilledTonalButton(onClick = {
-                    try {
-                        val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
-                        setSelectedPath(iconPath)
-                        onLayoutChange()
-                        lastError = null
-                    } catch (t: Throwable) {
-                        Log.e("UiDesigner", "Icon+Menu add failed", t)
-                        lastError = t.message ?: t.javaClass.simpleName
-                    }
+                    tryInsert(newAlert())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
+
+                FilledTonalButton(onClick = {
+                    tryInsert(newImage())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
+
+                FilledTonalButton(onClick = {
+                    tryInsert(newSectionHeader())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
+
+                FilledTonalButton(onClick = {
+                    tryInsert(newButtonRow())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
+
+                FilledTonalButton(onClick = {
+                    tryInsert(newList())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
+
+                FilledTonalButton(onClick = {
+                    tryInsert(newSpacer())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
+
+                FilledTonalButton(onClick = {
+                    tryInsert(JSONObject().put("type", "Divider"))?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
+
+                FilledTonalButton(onClick = {
+                    tryInsert(newDividerV())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
+
+                FilledTonalButton(onClick = {
+                    tryInsertIconMenu()?.let { iconPath -> setSelectedPath(iconPath); onLayoutChange() }
                 }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
 
-                FilledTonalButton(onClick = { addBlockAt(newCard()) }) {
-                    Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card")
-                }
+                FilledTonalButton(onClick = {
+                    tryInsert(newCard())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
 
-                FilledTonalButton(onClick = { addBlockAt(newFab()) }) {
-                    Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab")
-                }
+                FilledTonalButton(onClick = {
+                    tryInsert(newFab())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
 
-                FilledTonalButton(onClick = { addBlockAt(newChipRow()) }) {
-                    Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow")
-                }
+                FilledTonalButton(onClick = {
+                    tryInsert(newChipRow())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
 
-                FilledTonalButton(onClick = { addBlockAt(newSlider()) }) {
-                    Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider")
-                }
+                FilledTonalButton(onClick = {
+                    tryInsert(newSlider())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
 
-                FilledTonalButton(onClick = { addBlockAt(newToggle()) }) {
-                    Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle")
-                }
+                FilledTonalButton(onClick = {
+                    tryInsert(newToggle())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
 
-                FilledTonalButton(onClick = { addBlockAt(newTabs()) }) {
-                    Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs")
-                }
+                FilledTonalButton(onClick = {
+                    tryInsert(newTabs())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
 
-                FilledTonalButton(onClick = { addBlockAt(newMetricsGrid()) }) {
-                    Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid")
-                }
+                FilledTonalButton(onClick = {
+                    tryInsert(newMetricsGrid())?.let { path -> setSelectedPath(path); onLayoutChange() }
+                }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
             }
-        }
-
-        // eventuale messaggio errore palette
-        if (lastError != null) {
-            Text(
-                "Errore palette: $lastError",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp)
-            )
         }
 
         // Selezione + Azioni salvataggio
@@ -1020,18 +1006,18 @@ private fun BoxScope.DesignerOverlay(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     when (working.optString("type")) {
-                        "ButtonRow"   -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
+                        "ButtonRow"     -> ButtonRowInspectorPanel(working, onChange = bumpPreview)
                         "SectionHeader" -> SectionHeaderInspectorPanel(working, onChange = bumpPreview)
-                        "Progress"    -> ProgressInspectorPanel(working, onChange = bumpPreview)
-                        "Alert"       -> AlertInspectorPanel(working, onChange = bumpPreview)
-                        "Image"       -> ImageInspectorPanel(working, onChange = bumpPreview)
-                        "ChipRow"     -> ChipRowInspectorPanel(working, onChange = bumpPreview)
-                        "Slider"      -> SliderInspectorPanel(working, onChange = bumpPreview)
-                        "Toggle"      -> ToggleInspectorPanel(working, onChange = bumpPreview)
-                        "Tabs"        -> TabsInspectorPanel(working, onChange = bumpPreview)
-                        "MetricsGrid" -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
-                        "List"        -> ListInspectorPanel(working, onChange = bumpPreview)
-                        else          -> Text("Inspector non ancora implementato per ${working.optString("type")}")
+                        "Progress"      -> ProgressInspectorPanel(working, onChange = bumpPreview)
+                        "Alert"         -> AlertInspectorPanel(working, onChange = bumpPreview)
+                        "Image"         -> ImageInspectorPanel(working, onChange = bumpPreview)
+                        "ChipRow"       -> ChipRowInspectorPanel(working, onChange = bumpPreview)
+                        "Slider"        -> SliderInspectorPanel(working, onChange = bumpPreview)
+                        "Toggle"        -> ToggleInspectorPanel(working, onChange = bumpPreview)
+                        "Tabs"          -> TabsInspectorPanel(working, onChange = bumpPreview)
+                        "MetricsGrid"   -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
+                        "List"          -> ListInspectorPanel(working, onChange = bumpPreview)
+                        else            -> Text("Inspector non ancora implementato per ${working.optString("type")}")
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1212,8 +1198,7 @@ private fun SliderInspectorPanel(working: JSONObject, onChange: () -> Unit) {
 
     val unit = remember { mutableStateOf(working.optString("unit","")) }
     OutlinedTextField(value = unit.value, onValueChange = {
-        unit.value = it; working.put("unit", it); onChange()
-    }, label = { Text("unit (opz.)") })
+        unit.value = it; working.put("unit", it); onChange() }, label = { Text("unit (opz.)") })
 }
 
 @Composable
