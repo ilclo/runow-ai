@@ -121,125 +121,37 @@ fun ProjectGate(
 @Composable
 fun DesignerRoot() {
     val ctx = LocalContext.current
+    // stato UI condiviso dai blocchi (bind/valori temporanei)
+    val uiState = remember { mutableStateMapOf<String, Any>() }
 
-    // 1) Project gate
-    var activeProject by remember { mutableStateOf(UiLoader.getActiveProject(ctx)) }
-    if (activeProject == null) {
-        ProjectGate(ctx) { activeProject = UiLoader.getActiveProject(ctx) }
-        return
-    }
+    // schermata corrente da visualizzare/modificare
+    var screen by remember { mutableStateOf("home") }
+    // modalità designer sempre attiva in questa root
+    val designerMode = true
 
-    // 2) Lista screen del progetto attivo + screen correntemente aperto
-    var screens by remember(activeProject) { mutableStateOf(UiLoader.listScreens(ctx)) }
-    var currentScreen by remember(activeProject) { mutableStateOf(screens.firstOrNull() ?: "run") }
-
-    // Se cambia progetto o si creano nuovi screen, riallinea
-    LaunchedEffect(activeProject) {
-        screens = UiLoader.listScreens(ctx)
-        if (!screens.contains(currentScreen)) {
-            currentScreen = screens.firstOrNull() ?: "run"
-        }
-    }
-
-    // 3) Stato UI (bind per Toggle/Slider ecc.) e toggle designer
-    val uiState = remember(activeProject, currentScreen) { mutableStateMapOf<String, Any>() }
-    var designerMode by remember { mutableStateOf(true) }
-
-    // 4) Dispatcher per actionId (navigation semplice + placeholder)
+    // dispatcher minimale: gestisce solo nav:xyz
     val dispatch: (String) -> Unit = { action ->
         when {
             action.startsWith("nav:") -> {
-                val target = action.removePrefix("nav:")
-                // Se non esiste lo screen, creane uno vuoto e aggiorna la lista
-                if (!UiLoader.listScreens(ctx).contains(target)) {
-                    UiLoader.saveDraft(ctx, target, JSONObject("""{"type":"Column","blocks":[]}"""))
-                    screens = UiLoader.listScreens(ctx)
-                }
-                currentScreen = target
-            }
-            action == "open_layout_lab" -> {
-                // placeholder: in futuro apriremo un pannello dedicato
-            }
-            action == "open_theme_lab" -> {
-                // placeholder: in futuro apriremo un pannello dedicato
+                screen = action.removePrefix("nav:")
             }
             else -> {
-                // azioni custom; per ora nessuna side‑effect
+                // qui in futuro puoi gestire altre azioni (toast, ecc.)
             }
         }
     }
 
-    // 5) Shell con TopAppBar e picker screen
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(activeProject ?: "") },
-                actions = {
-                    // Toggle Designer / Preview
-                    AssistChip(
-                        onClick = { designerMode = !designerMode },
-                        label = { Text(if (designerMode) "Designer" else "Preview") },
-                        leadingIcon = {
-                            Icon(
-                                if (designerMode) Icons.Filled.Tune else Icons.Filled.Visibility,
-                                contentDescription = null
-                            )
-                        }
-                    )
-                    Spacer(Modifier.width(8.dp))
-
-                    // Picker screens (ExposedDropdown in actions)
-                    var expanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = !expanded }
-                    ) {
-                        OutlinedTextField(
-                            value = currentScreen,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Screen") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .widthIn(min = 140.dp)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            screens.forEach { scr ->
-                                DropdownMenuItem(
-                                    text = { Text(scr) },
-                                    onClick = {
-                                        currentScreen = scr
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    // Cambia progetto (torna al gate)
-                    IconButton(onClick = {
-                        UiLoader.clearActiveProject(ctx)
-                        activeProject = null
-                    }) { Icon(Icons.Filled.Logout, contentDescription = "Cambia progetto") }
-                }
-            )
-        }
-    ) { innerPadding ->
+    // contenuto
+    Surface(modifier = Modifier.fillMaxSize()) {
         UiScreen(
-            screenName = currentScreen,
+            screenName = screen,
             dispatch = dispatch,
             uiState = uiState,
-            designerMode = designerMode,
-            scaffoldPadding = innerPadding
+            designerMode = designerMode
         )
     }
 }
+
 
 
 @Composable
