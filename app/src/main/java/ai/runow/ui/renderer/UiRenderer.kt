@@ -379,70 +379,68 @@ private fun RenderBlock(
             }
         }
 
-		"Card" -> {
-			val variant = block.optString("variant","elevated")
-			val clickAction = block.optString("clickActionId","")
+        "Card" -> {
+            val variant = block.optString("variant","elevated")
+            val clickAction = block.optString("clickActionId","")
+        
+            // Contenuto attuale della Card (figli)
+            val innerContent: @Composable () -> Unit = {
+                val innerBlocks = block.optJSONArray("blocks") ?: JSONArray()
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (i in 0 until innerBlocks.length()) {
+                        val b = innerBlocks.optJSONObject(i) ?: continue
+                        val p2 = "$path/blocks/$i"
+                        RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
+                    }
+                }
+            }
+        
+            // Modificatori base della Card (tocco azione se non in designer)
+            val baseMod = Modifier
+                .fillMaxWidth()
+                .then(if (clickAction.isNotBlank() && !designerMode) Modifier.clickable { dispatch(clickAction) } else Modifier)
+        
+            // Overlay gear solo in designer
+            ContainerOverlayGear(designerMode, path, onOpenInspector) {
+                when (variant) {
+                    "outlined" -> OutlinedCard(baseMod) { Column(Modifier.padding(12.dp)) { innerContent() } }
+                    "filled"   -> Card(baseMod)        { Column(Modifier.padding(12.dp)) { innerContent() } }
+                    else       -> ElevatedCard(baseMod){ Column(Modifier.padding(12.dp)) { innerContent() } }
+                }
+            }
+        }
 
-			// Contenuto attuale della Card (figli)
-			val innerContent: @Composable () -> Unit = {
-				val innerBlocks = block.optJSONArray("blocks") ?: JSONArray()
-				Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-					for (i in 0 until innerBlocks.length()) {
-						val b = innerBlocks.optJSONObject(i) ?: continue
-						val p2 = "$path/blocks/$i"
-						RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
-					}
-				}
-			}
-
-			// Modificatori base della Card (tocco azione se non in designer)
-			val baseMod = Modifier
-				.fillMaxWidth()
-				.then(if (clickAction.isNotBlank() && !designerMode) Modifier.clickable { dispatch(clickAction) } else Modifier)
-
-			// Overlay gear solo in designer
-			ContainerOverlayGear(designerMode, path, onOpenInspector) {
-				when (variant) {
-					"outlined" -> OutlinedCard(baseMod) { Column(Modifier.padding(12.dp)) { innerContent() } }
-					"filled"   -> Card(baseMod)        { Column(Modifier.padding(12.dp)) { innerContent() } }
-					else       -> ElevatedCard(baseMod){ Column(Modifier.padding(12.dp)) { innerContent() } }
-				}
-			}
-		}
-
-
-		"Tabs" -> {
-			val tabs = block.optJSONArray("tabs") ?: JSONArray()
-			var idx by remember(path) { mutableStateOf(block.optInt("initialIndex", 0).coerceAtLeast(0)) }
-			val count = tabs.length().coerceAtLeast(1)
-			if (idx >= count) idx = 0
-			val labels = (0 until count).map {
-				tabs.optJSONObject(it)?.optString("label", "Tab ${it+1}") ?: "Tab ${it+1}"
-			}
-
-			ContainerOverlayGear(designerMode, path, onOpenInspector) {
-				TabRow(selectedTabIndex = idx) {
-					labels.forEachIndexed { i, label ->
-						Tab(
-							selected = i == idx,
-							onClick = { idx = i },                 // <— TAP sulla Tab per scegliere cosa si modifica
-							text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-						)
-					}
-				}
-				Spacer(Modifier.height(8.dp))
-				val tab = tabs.optJSONObject(idx) ?: JSONObject()
-				val blocks2 = tab.optJSONArray("blocks") ?: JSONArray()
-				Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-					for (k in 0 until blocks2.length()) {
-						val b = blocks2.optJSONObject(k) ?: continue
-						val p2 = "$path/tabs/$idx/blocks/$k"
-						RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
-					}
-				}
-			}
-		}
-
+        "Tabs" -> {
+            val tabs = block.optJSONArray("tabs") ?: JSONArray()
+            var idx by remember(path) { mutableStateOf(block.optInt("initialIndex", 0).coerceAtLeast(0)) }
+            val count = tabs.length().coerceAtLeast(1)
+            if (idx >= count) idx = 0
+            val labels = (0 until count).map {
+                tabs.optJSONObject(it)?.optString("label", "Tab ${it+1}") ?: "Tab ${it+1}"
+            }
+        
+            ContainerOverlayGear(designerMode, path, onOpenInspector) {
+                TabRow(selectedTabIndex = idx) {
+                    labels.forEachIndexed { i, label ->
+                        Tab(
+                            selected = i == idx,
+                            onClick = { idx = i },                 // <— TAP sulla Tab per scegliere cosa si modifica
+                            text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                val tab = tabs.optJSONObject(idx) ?: JSONObject()
+                val blocks2 = tab.optJSONArray("blocks") ?: JSONArray()
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    for (k in 0 until blocks2.length()) {
+                        val b = blocks2.optJSONObject(k) ?: continue
+                        val p2 = "$path/tabs/$idx/blocks/$k"
+                        RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
+                    }
+                }
+            }
+        }
 
         "SectionHeader" -> Wrapper {
             val style = mapTextStyle(block.optString("style", "titleMedium"))
@@ -2364,3 +2362,4 @@ private fun newPage() = JSONObject(
     }
     """.trimIndent()
 )
+
