@@ -1,6 +1,4 @@
 
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
 package ai.runow.ui.renderer
 
 import androidx.compose.ui.unit.TextUnit
@@ -85,7 +83,7 @@ fun UiScreen(
     scaffoldPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val ctx = LocalContext.current
-    var layout by remember(screenName) { mutableStateOf(UiLoader.loadLayout(ctx, screenName)) }
+    var layout by remember(screenName) { mutableStateOf<JSONObject?>(UiLoader.loadLayout(ctx, screenName))) }
     var tick by remember { mutableStateOf(0) }
 
     if (layout == null) {
@@ -101,7 +99,7 @@ fun UiScreen(
 
     // Stato barra designer in basso (per lasciare spazio ai contenuti)
     var overlayHeightPx by remember { mutableStateOf(0) }
-    val overlayHeightDp = with(LocalDensity.current) { (overlayHeightPx / density).dp }
+    val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
 
     // Modalità designer persistente per schermata
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
@@ -2001,6 +1999,7 @@ private val ICONS = listOf(
     "bolt", "local_fire_department", "sports_score", "toggle_on"
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun IconPickerField(
     value: MutableState<String>,
@@ -2182,6 +2181,7 @@ private val MATERIAL_ROLES = listOf(
     "onPrimary","onSecondary","onTertiary","onSurface","onError"
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NamedColorPickerPlus(
     current: String,
