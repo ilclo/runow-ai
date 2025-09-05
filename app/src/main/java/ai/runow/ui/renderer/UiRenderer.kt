@@ -12,6 +12,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -279,9 +281,11 @@ private fun BoxScope.DesignSwitchKnob(
             .align(Alignment.CenterEnd)
             .offset { IntOffset(0, offsetY.toInt()) }
             .pointerInput(Unit) {
-                detectVerticalDragGestures { _, dragAmount ->
-                    offsetY = (offsetY + dragAmount).coerceIn(-maxDragPx, maxDragPx)
-                }
+                detectVerticalDragGestures(
+                    onVerticalDrag = { _, dragAmount ->
+                        offsetY = (offsetY + dragAmount).coerceIn(-maxDragPx, maxDragPx)
+                    }
+                )
             },
         containerColor = if (isDesigner) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
         contentColor = if (isDesigner) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1779,7 +1783,7 @@ private fun ChipRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     var fontWeight by remember { mutableStateOf(working.optString("fontWeight","")) }
     ExposedDropdown(
         value = if (fontWeight.isBlank()) "(default)" else fontWeight, label = "fontWeight",
-        options = listOf("(default)","w300","w400","w500","w600","w700")
+        options = listOf("w300","w400","w500","w600","w700","(default)")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontWeight = v
@@ -1789,7 +1793,7 @@ private fun ChipRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) }
     ExposedDropdown(
         value = if (fontFamily.isBlank()) "(default)" else fontFamily, label = "fontFamily",
-        options = listOf("(default)","sans","serif","monospace","cursive")
+        options = listOf("sans","serif","monospace","cursive","(default)")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontFamily = v
@@ -2017,7 +2021,7 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
     ExposedDropdown(
         value = if (fontWeight.isBlank()) "(default)" else fontWeight,
         label = "fontWeight",
-        options = listOf("(default)","w300","w400","w500","w600","w700")
+        options = listOf("w300","w400","w500","w600","w700","(default)")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontWeight = v
@@ -2028,7 +2032,7 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
     var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) }
     ExposedDropdown(
         value = if (fontFamily.isBlank()) "(default)" else fontFamily, label = "fontFamily",
-        options = listOf("(default)","sans","serif","monospace","cursive")
+        options = listOf("sans","serif","monospace","cursive","(default)")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontFamily = v
@@ -2801,5 +2805,220 @@ private fun RenderBottomBar(
                 Spacer(Modifier.height(8.dp))
             }
         }
+    }
+}
+
+/* =========================================================
+ * LIST INSPECTOR (testo)
+ * ========================================================= */
+@Composable
+private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+    Text("List – Proprietà testo", style = MaterialTheme.typography.titleMedium)
+
+    val textSize = remember { mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }) }
+    ExposedDropdown(
+        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
+        label = "textSize (sp)",
+        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        textSize.value = v
+        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
+        onChange()
+    }
+
+    var align by remember { mutableStateOf(working.optString("align","start")) }
+    ExposedDropdown(
+        value = align, label = "align",
+        options = listOf("start","center","end")
+    ) { sel -> align = sel; working.put("align", sel); onChange() }
+
+    var fontFamily by remember { mutableStateOf(working.optString("fontFamily", "")) }
+    ExposedDropdown(
+        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+        label = "fontFamily",
+        options = listOf("sans","serif","monospace","cursive","(default)")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontFamily = v
+        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
+        onChange()
+    }
+
+    var fontWeight by remember { mutableStateOf(working.optString("fontWeight", "")) }
+    ExposedDropdown(
+        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+        label = "fontWeight",
+        options = listOf("w300","w400","w500","w600","w700","(default)")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontWeight = v
+        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
+        onChange()
+    }
+
+    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
+    NamedColorPickerPlus(
+        current = textColor.value,
+        label = "textColor"
+    ) { hex ->
+        textColor.value = hex
+        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
+        onChange()
+    }
+}
+
+/* =========================================================
+ * TOP BAR INSPECTOR
+ * ========================================================= */
+@Composable
+private fun TopBarInspectorPanel(topBar: JSONObject, onChange: () -> Unit) {
+    Spacer(Modifier.height(8.dp))
+
+    var variant by remember { mutableStateOf(topBar.optString("variant","small")) }
+    ExposedDropdown(
+        value = variant, label = "variant",
+        options = listOf("small","center","medium","large")
+    ) { sel -> variant = sel; topBar.put("variant", sel); onChange() }
+
+    val title = remember { mutableStateOf(topBar.optString("title","")) }
+    OutlinedTextField(
+        value = title.value,
+        onValueChange = { title.value = it; topBar.put("title", it); onChange() },
+        label = { Text("title") }
+    )
+
+    val subtitle = remember { mutableStateOf(topBar.optString("subtitle","")) }
+    OutlinedTextField(
+        value = subtitle.value,
+        onValueChange = { subtitle.value = it; if (it.isBlank()) topBar.remove("subtitle") else topBar.put("subtitle", it); onChange() },
+        label = { Text("subtitle (opz.)") }
+    )
+
+    var scroll by remember { mutableStateOf(topBar.optString("scroll","none")) }
+    ExposedDropdown(
+        value = scroll, label = "scroll",
+        options = listOf("none","pinned","enterAlways","exitUntilCollapsed")
+    ) { sel -> scroll = sel; if (sel=="none") topBar.remove("scroll") else topBar.put("scroll", sel); onChange() }
+
+    // --- Colori ---
+    val containerColor = remember { mutableStateOf(topBar.optString("containerColor","surface")) }
+    NamedColorPickerPlus(current = containerColor.value, label = "containerColor", allowRoles = true) { pick ->
+        containerColor.value = pick
+        if (pick.isBlank()) topBar.remove("containerColor") else topBar.put("containerColor", pick)
+        onChange()
+    }
+
+    val titleColor = remember { mutableStateOf(topBar.optString("titleColor","onSurface")) }
+    NamedColorPickerPlus(current = titleColor.value, label = "titleColor", allowRoles = true) { pick ->
+        titleColor.value = pick
+        if (pick.isBlank()) topBar.remove("titleColor") else topBar.put("titleColor", pick)
+        onChange()
+    }
+
+    val actionsColor = remember { mutableStateOf(topBar.optString("actionsColor", topBar.optString("titleColor","onSurface"))) }
+    NamedColorPickerPlus(current = actionsColor.value, label = "actionsColor", allowRoles = true) { pick ->
+        actionsColor.value = pick
+        if (pick.isBlank()) topBar.remove("actionsColor") else topBar.put("actionsColor", pick)
+        onChange()
+    }
+
+    // --- Gradient opzionale ---
+    Divider()
+    Text("Gradient (opz.)", style = MaterialTheme.typography.titleSmall)
+
+    var gradEnabled by remember { mutableStateOf(topBar.optJSONObject("gradient") != null) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(checked = gradEnabled, onCheckedChange = {
+            gradEnabled = it
+            if (it) {
+                val g = topBar.optJSONObject("gradient") ?: JSONObject().also { j ->
+                    j.put("colors", JSONArray().put("primary").put("tertiary"))
+                    j.put("direction", "vertical")
+                }
+                topBar.put("gradient", g)
+            } else {
+                topBar.remove("gradient")
+            }
+            onChange()
+        })
+        Spacer(Modifier.width(8.dp)); Text("Abilita gradient")
+    }
+
+    topBar.optJSONObject("gradient")?.let { g ->
+        val colorsArr = g.optJSONArray("colors") ?: JSONArray().also { g.put("colors", it) }
+        while (colorsArr.length() < 2) colorsArr.put("primary")
+        val c1 = remember { mutableStateOf(colorsArr.optString(0, "primary")) }
+        val c2 = remember { mutableStateOf(colorsArr.optString(1, "tertiary")) }
+
+        NamedColorPickerPlus(current = c1.value, label = "gradient color 1", allowRoles = true) { pick ->
+            c1.value = pick
+            colorsArr.put(0, pick)
+            onChange()
+        }
+        NamedColorPickerPlus(current = c2.value, label = "gradient color 2", allowRoles = true) { pick ->
+            c2.value = pick
+            colorsArr.put(1, pick)
+            onChange()
+        }
+
+        var dir by remember { mutableStateOf(g.optString("direction","vertical")) }
+        ExposedDropdown(
+            value = dir, label = "direction",
+            options = listOf("vertical","horizontal")
+        ) { sel -> dir = sel; g.put("direction", sel); onChange() }
+    }
+
+    // --- Corner ed elevazione (STEPper) ---
+    Divider()
+    val rbs = remember { mutableStateOf(topBar.optDouble("roundedBottomStart", 0.0).toString()) }
+    StepperField("roundedBottomStart (dp)", rbs, 1.0) { v -> topBar.put("roundedBottomStart", v.coerceAtLeast(0.0)); onChange() }
+
+    val rbe = remember { mutableStateOf(topBar.optDouble("roundedBottomEnd", 0.0).toString()) }
+    StepperField("roundedBottomEnd (dp)", rbe, 1.0) { v -> topBar.put("roundedBottomEnd", v.coerceAtLeast(0.0)); onChange() }
+
+    val elev = remember { mutableStateOf(topBar.optDouble("tonalElevation", 0.0).toString()) }
+    StepperField("tonalElevation (dp)", elev, 1.0) { v -> topBar.put("tonalElevation", v.coerceAtLeast(0.0)); onChange() }
+
+    // --- Divider ---
+    val divider = remember { mutableStateOf(topBar.optBoolean("divider", false)) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(checked = divider.value, onCheckedChange = {
+            divider.value = it
+            if (!it) topBar.remove("divider") else topBar.put("divider", true)
+            onChange()
+        })
+        Spacer(Modifier.width(8.dp)); Text("Divider inferiore")
+    }
+
+    // --- Actions della Top Bar ---
+    Divider(); Text("Actions", style = MaterialTheme.typography.titleSmall)
+    val actions = topBar.optJSONArray("actions") ?: JSONArray().also { topBar.put("actions", it) }
+    for (i in 0 until actions.length()) {
+        val itx = actions.getJSONObject(i)
+        ElevatedCard {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Action ${i+1}", style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        IconButton(onClick = { moveInArray(actions, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                        IconButton(onClick = { moveInArray(actions, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                        IconButton(onClick = { removeAt(actions, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
+                    }
+                }
+                val icon = remember { mutableStateOf(itx.optString("icon","more_vert")) }
+                IconPickerField(icon, "icon") { sel -> icon.value = sel; itx.put("icon", sel); onChange() }
+                val act = remember { mutableStateOf(itx.optString("actionId","")) }
+                OutlinedTextField(
+                    value = act.value,
+                    onValueChange = { act.value = it; itx.put("actionId", it); onChange() },
+                    label = { Text("actionId") }
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+    Button(onClick = { actions.put(JSONObject("""{"icon":"more_vert","actionId":""}""")); onChange() }) {
+        Text("+ Aggiungi action")
     }
 }
