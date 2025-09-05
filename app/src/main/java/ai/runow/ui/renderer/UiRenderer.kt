@@ -785,8 +785,8 @@ private fun RenderBlock(
 
         "Image" -> Wrapper {
             val source = block.optString("source","")
-            val height = block.optDouble("heightDp", 160.0).toFloat().dp
-            val corner = block.optDouble("corner", 12.0).toFloat().dp
+            val height = Dp(block.optDouble("heightDp", 160.0).toFloat())
+            val corner = Dp(block.optDouble("corner", 12.0).toFloat())
             val scale = when (block.optString("contentScale","fit")) {
                 "crop" -> ContentScale.Crop
                 else   -> ContentScale.Fit
@@ -936,7 +936,7 @@ private fun RenderBlock(
                     val sizeKey = btn.optString("size", "md")
                     val tintKey = btn.optString("tint", "default")
                     val shapeKey = btn.optString("shape", "rounded")
-                    val corner = btn.optDouble("corner", 20.0).toFloat().dp
+                    val corner = Dp(btn.optDouble("corner", 20.0).toFloat())
                     val pressKey = btn.optString("pressEffect", "none")
                     val icon = btn.optString("icon", "")
 
@@ -973,12 +973,12 @@ private fun RenderBlock(
 
                     val heightMod =
                         if (!btn.optDouble("heightDp", Double.NaN).isNaN())
-                            Modifier.height(btn.optDouble("heightDp", Double.NaN).toFloat().dp)
+                            Modifier.height(Dp(btn.optDouble("heightDp", Double.NaN).toFloat()))
                         else sizeModifier(sizeKey)
 
                     val widthMod =
                         if (!btn.optDouble("widthDp", Double.NaN).isNaN())
-                            Modifier.width(btn.optDouble("widthDp", Double.NaN).toFloat().dp)
+                            Modifier.width(Dp(btn.optDouble("widthDp", Double.NaN).toFloat()))
                         else Modifier
 
                     val baseMod = Modifier
@@ -1186,20 +1186,20 @@ private fun RenderBlock(
         }
 
         "Divider" -> {
-            val thick = block.optDouble("thickness", 1.0).toFloat().dp
-            val padStart = block.optDouble("padStart", 0.0).toFloat().dp
-            val padEnd = block.optDouble("padEnd", 0.0).toFloat().dp
+            val thick = Dp(block.optDouble("thickness", 1.0).toFloat())
+            val padStart = Dp(block.optDouble("padStart", 0.0).toFloat())
+            val padEnd = Dp(block.optDouble("padEnd", 0.0).toFloat())
             Divider(modifier = Modifier.padding(start = padStart, end = padEnd), thickness = thick)
         }
 
         "DividerV" -> {
-            val thickness = block.optDouble("thickness", 1.0).toFloat().dp
-            val height = block.optDouble("height", 24.0).toFloat().dp
+            val thickness = Dp(block.optDouble("thickness", 1.0).toFloat())
+            val height = Dp(block.optDouble("height", 24.0).toFloat())
             VerticalDivider(modifier = Modifier.height(height), thickness = thickness)
         }
 
         "Spacer" -> {
-            Spacer(Modifier.height((block.optDouble("height", 8.0)).toFloat().dp))
+            Spacer(Modifier.height(Dp(block.optDouble("height", 8.0).toFloat())))
         }
 
         "Menu" -> {
