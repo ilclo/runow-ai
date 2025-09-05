@@ -5,6 +5,8 @@
 
 package ai.runow.ui.renderer
 
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.TextUnit
@@ -81,7 +83,8 @@ fun DesignerRoot() {
  * RENDER DI UNA SCHERMATA JSON (con Scaffold di root e levetta)
  * ========================================================= */
 
- @Composable
+
+@Composable
 private fun RenderTopBar(
     cfg: JSONObject,
     dispatch: (String) -> Unit,
@@ -94,29 +97,31 @@ private fun RenderTopBar(
     val rounded = RoundedCornerShape(
         topStart = 0.dp, topEnd = 0.dp,
         bottomStart = Dp(cfg.optDouble("roundedBottomStart", 0.0).toFloat()),
-        bottomEnd = Dp(cfg.optDouble("roundedBottomEnd", 0.0).toFloat())
+        bottomEnd   = Dp(cfg.optDouble("roundedBottomEnd",   0.0).toFloat())
     )
     val tonalElevation = Dp(cfg.optDouble("tonalElevation", 0.0).toFloat())
 
     val containerColor = parseColorOrRole(cfg.optString("containerColor", "")) ?: MaterialTheme.colorScheme.surface
-    val titleColor = parseColorOrRole(cfg.optString("titleColor", "")) ?: MaterialTheme.colorScheme.onSurface
-    val actionsColor = parseColorOrRole(cfg.optString("actionsColor", "")) ?: titleColor
+    val titleColor     = parseColorOrRole(cfg.optString("titleColor", ""))     ?: MaterialTheme.colorScheme.onSurface
+    val actionsColor   = parseColorOrRole(cfg.optString("actionsColor", ""))   ?: titleColor
 
-    // Gradient opzionale
+    // Gradient opzionale (se presente ha priorità su containerColor)
     val brush: Brush? = cfg.optJSONObject("gradient")?.let { g ->
         val cols = g.optJSONArray("colors")?.let { arr ->
             (0 until arr.length()).mapNotNull { idx -> parseColorOrRole(arr.optString(idx)) }
         } ?: emptyList()
         if (cols.size >= 2) {
-            val dir = g.optString("direction", "vertical")
-            if (dir == "horizontal") Brush.horizontalGradient(cols) else Brush.verticalGradient(cols)
+            if (g.optString("direction", "vertical") == "horizontal")
+                Brush.horizontalGradient(cols)
+            else
+                Brush.verticalGradient(cols)
         } else null
     }
 
     val actions = cfg.optJSONArray("actions") ?: JSONArray()
 
     val colors = TopAppBarDefaults.topAppBarColors(
-        containerColor = Color.Transparent,        // vediamo il bg del Box
+        containerColor = Color.Transparent,      // lo sfondo lo gestiamo con Surface+Box
         titleContentColor = titleColor,
         actionIconContentColor = actionsColor,
         navigationIconContentColor = actionsColor
@@ -135,7 +140,6 @@ private fun RenderTopBar(
                     }
                 }
             }
-
             val actionsSlot: @Composable RowScope.() -> Unit = {
                 for (i in 0 until actions.length()) {
                     val a = actions.optJSONObject(i) ?: continue
@@ -308,14 +312,15 @@ private fun RenderRootScaffold(
     val fab = layout.optJSONObject("fab")
     val scroll = layout.optBoolean("scroll", true)
 	val topBarConf = layout.optJSONObject("topBar")
-
-// Scroll behavior per TopAppBar
+	
+	// Scroll behavior della TopAppBar (solo se definito in topBar)
 	val topScrollBehavior = when (topBarConf?.optString("scroll", "none")) {
 	    "pinned" -> TopAppBarDefaults.pinnedScrollBehavior()
 	    "enterAlways" -> TopAppBarDefaults.enterAlwaysScrollBehavior()
 	    "exitUntilCollapsed" -> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 	    else -> null
 	}
+
 		Scaffold(
 		    modifier = if (topScrollBehavior != null)
 		        Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
@@ -324,7 +329,7 @@ private fun RenderRootScaffold(
 		        if (topBarConf != null) {
 		            RenderTopBar(topBarConf, dispatch, topScrollBehavior)
 		        } else {
-		            // fallback vecchio comportamento
+		            // Fallback legacy: topTitle/topActions
 		            if (title.isNotBlank() || topActions.length() > 0) {
 		                TopAppBar(
 		                    title = { Text(title) },
@@ -717,7 +722,7 @@ private fun BoxScope.DesignerOverlay(
                     Spacer(Modifier.weight(1f))
                     Button(onClick = {
                         // Commit nel layout originale
-                        val keys = listOf("topTitle","topActions","bottomButtons","fab","scroll")
+                        val keys = listOf("topBar","topTitle","topActions","bottomButtons","fab","scroll")
                         keys.forEach { k -> layout.put(k, working.opt(k)) }
                         showRootInspector = false
                         onLayoutChange()
@@ -1398,13 +1403,49 @@ private fun RootInspectorPanel(working: JSONObject, onChange: () -> Unit) {
         Spacer(Modifier.width(8.dp)); Text("Contenuto scrollabile")
     }
 
-    Divider(); Text("Top App Bar", style = MaterialTheme.typography.titleSmall)
-    val title = remember { mutableStateOf(working.optString("topTitle","")) }
-    OutlinedTextField(
-        value = title.value,
-        onValueChange = { title.value = it; working.put("topTitle", it); onChange() },
-        label = { Text("title") }
-    )
+	Divider(); Text("Top Bar (estetica)", style = MaterialTheme.typography.titleSmall)
+	
+	var topBarEnabled by remember { mutableStateOf(working.optJSONObject("topBar") != null) }
+	Row(verticalAlignment = Alignment.CenterVertically) {
+	    Switch(
+	        checked = topBarEnabled,
+	        onCheckedChange = {
+	            topBarEnabled = it
+	            if (it) {
+	                if (!working.has("topBar")) {
+	                    working.put("topBar", JSONObject().apply {
+	                        put("variant", "small")
+	                        put("title", working.optString("topTitle", ""))
+	                        put("containerColor", "surface")
+	                        put("titleColor", "onSurface")
+	                        put("actionsColor", "onSurface")
+	                        put("roundedBottomStart", 0)
+	                        put("roundedBottomEnd", 0)
+	                        put("tonalElevation", 0)
+	                        put("divider", false)
+	                    })
+	                }
+	            } else {
+	                working.remove("topBar")
+	            }
+	            onChange()
+	        }
+	    )
+	    Spacer(Modifier.width(8.dp))
+	    Text("Usa topBar estetico (consigliato)")
+	}
+	
+	if (topBarEnabled) {
+	    val tb = working.optJSONObject("topBar")!!
+	    TopBarInspectorPanel(tb, onChange)
+	    Spacer(Modifier.height(8.dp))
+	    Text(
+	        "Nota: con topBar attivo, i campi legacy ‘Top App Bar’ qui sotto vengono ignorati.",
+	        style = MaterialTheme.typography.labelSmall,
+	        color = LocalContentColor.current.copy(alpha = 0.7f)
+	    )
+	}
+
 
     val actions = working.optJSONArray("topActions") ?: JSONArray().also { working.put("topActions", it) }
     for (i in 0 until actions.length()) {
@@ -1970,6 +2011,159 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
         textColor.value = hex
         if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
         onChange()
+    }
+}
+
+@Composable
+private fun TopBarInspectorPanel(topBar: JSONObject, onChange: () -> Unit) {
+    Spacer(Modifier.height(8.dp))
+
+    var variant by remember { mutableStateOf(topBar.optString("variant","small")) }
+    ExposedDropdown(
+        value = variant, label = "variant",
+        options = listOf("small","center","medium","large")
+    ) { sel -> variant = sel; topBar.put("variant", sel); onChange() }
+
+    val title = remember { mutableStateOf(topBar.optString("title","")) }
+    OutlinedTextField(
+        value = title.value,
+        onValueChange = { title.value = it; topBar.put("title", it); onChange() },
+        label = { Text("title") }
+    )
+
+    val subtitle = remember { mutableStateOf(topBar.optString("subtitle","")) }
+    OutlinedTextField(
+        value = subtitle.value,
+        onValueChange = { subtitle.value = it; if (it.isBlank()) topBar.remove("subtitle") else topBar.put("subtitle", it); onChange() },
+        label = { Text("subtitle (opz.)") }
+    )
+
+    var scroll by remember { mutableStateOf(topBar.optString("scroll","none")) }
+    ExposedDropdown(
+        value = scroll, label = "scroll",
+        options = listOf("none","pinned","enterAlways","exitUntilCollapsed")
+    ) { sel -> scroll = sel; if (sel=="none") topBar.remove("scroll") else topBar.put("scroll", sel); onChange() }
+
+    // --- Colori ---
+    val containerColor = remember { mutableStateOf(topBar.optString("containerColor","surface")) }
+    NamedColorPickerPlus(current = containerColor.value, label = "containerColor", allowRoles = true) { pick ->
+        containerColor.value = pick
+        if (pick.isBlank()) topBar.remove("containerColor") else topBar.put("containerColor", pick)
+        onChange()
+    }
+
+    val titleColor = remember { mutableStateOf(topBar.optString("titleColor","onSurface")) }
+    NamedColorPickerPlus(current = titleColor.value, label = "titleColor", allowRoles = true) { pick ->
+        titleColor.value = pick
+        if (pick.isBlank()) topBar.remove("titleColor") else topBar.put("titleColor", pick)
+        onChange()
+    }
+
+    val actionsColor = remember { mutableStateOf(topBar.optString("actionsColor", topBar.optString("titleColor","onSurface"))) }
+    NamedColorPickerPlus(current = actionsColor.value, label = "actionsColor", allowRoles = true) { pick ->
+        actionsColor.value = pick
+        if (pick.isBlank()) topBar.remove("actionsColor") else topBar.put("actionsColor", pick)
+        onChange()
+    }
+
+    // --- Gradient opzionale ---
+    Divider()
+    Text("Gradient (opz.)", style = MaterialTheme.typography.titleSmall)
+
+    var gradEnabled by remember { mutableStateOf(topBar.optJSONObject("gradient") != null) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(checked = gradEnabled, onCheckedChange = {
+            gradEnabled = it
+            if (it) {
+                val g = topBar.optJSONObject("gradient") ?: JSONObject().also { j ->
+                    // default primario -> terziario
+                    j.put("colors", JSONArray().put("primary").put("tertiary"))
+                    j.put("direction", "vertical")
+                }
+                topBar.put("gradient", g)
+            } else {
+                topBar.remove("gradient")
+            }
+            onChange()
+        })
+        Spacer(Modifier.width(8.dp)); Text("Abilita gradient")
+    }
+
+    topBar.optJSONObject("gradient")?.let { g ->
+        val colorsArr = g.optJSONArray("colors") ?: JSONArray().also { g.put("colors", it) }
+        while (colorsArr.length() < 2) colorsArr.put("primary")
+        val c1 = remember { mutableStateOf(colorsArr.optString(0, "primary")) }
+        val c2 = remember { mutableStateOf(colorsArr.optString(1, "tertiary")) }
+
+        NamedColorPickerPlus(current = c1.value, label = "gradient color 1", allowRoles = true) { pick ->
+            c1.value = pick
+            colorsArr.put(0, pick)
+            onChange()
+        }
+        NamedColorPickerPlus(current = c2.value, label = "gradient color 2", allowRoles = true) { pick ->
+            c2.value = pick
+            colorsArr.put(1, pick)
+            onChange()
+        }
+
+        var dir by remember { mutableStateOf(g.optString("direction","vertical")) }
+        ExposedDropdown(
+            value = dir, label = "direction",
+            options = listOf("vertical","horizontal")
+        ) { sel -> dir = sel; g.put("direction", sel); onChange() }
+    }
+
+    // --- Corner ed elevazione (STEPper) ---
+    Divider()
+    val rbs = remember { mutableStateOf(topBar.optDouble("roundedBottomStart", 0.0).toString()) }
+    StepperField("roundedBottomStart (dp)", rbs, 1.0) { v -> topBar.put("roundedBottomStart", v.coerceAtLeast(0.0)); onChange() }
+
+    val rbe = remember { mutableStateOf(topBar.optDouble("roundedBottomEnd", 0.0).toString()) }
+    StepperField("roundedBottomEnd (dp)", rbe, 1.0) { v -> topBar.put("roundedBottomEnd", v.coerceAtLeast(0.0)); onChange() }
+
+    val elev = remember { mutableStateOf(topBar.optDouble("tonalElevation", 0.0).toString()) }
+    StepperField("tonalElevation (dp)", elev, 1.0) { v -> topBar.put("tonalElevation", v.coerceAtLeast(0.0)); onChange() }
+
+    // --- Divider ---
+    val divider = remember { mutableStateOf(topBar.optBoolean("divider", false)) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(checked = divider.value, onCheckedChange = {
+            divider.value = it
+            if (!it) topBar.remove("divider") else topBar.put("divider", true)
+            onChange()
+        })
+        Spacer(Modifier.width(8.dp)); Text("Divider inferiore")
+    }
+
+    // --- Actions della Top Bar ---
+    Divider(); Text("Actions", style = MaterialTheme.typography.titleSmall)
+    val actions = topBar.optJSONArray("actions") ?: JSONArray().also { topBar.put("actions", it) }
+    for (i in 0 until actions.length()) {
+        val itx = actions.getJSONObject(i)
+        ElevatedCard {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Action ${i+1}", style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        IconButton(onClick = { moveInArray(actions, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                        IconButton(onClick = { moveInArray(actions, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                        IconButton(onClick = { removeAt(actions, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
+                    }
+                }
+                val icon = remember { mutableStateOf(itx.optString("icon","more_vert")) }
+                IconPickerField(icon, "icon") { sel -> icon.value = sel; itx.put("icon", sel); onChange() }
+                val act = remember { mutableStateOf(itx.optString("actionId","")) }
+                OutlinedTextField(
+                    value = act.value,
+                    onValueChange = { act.value = it; itx.put("actionId", it); onChange() },
+                    label = { Text("actionId") }
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+    Button(onClick = { actions.put(JSONObject("""{"icon":"more_vert","actionId":""}""")); onChange() }) {
+        Text("+ Aggiungi action")
     }
 }
 
