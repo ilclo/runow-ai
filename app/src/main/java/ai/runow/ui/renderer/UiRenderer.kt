@@ -248,7 +248,7 @@ private fun RenderRootScaffold(
     ) { innerPadding ->
         val blocks = layout.optJSONArray("blocks") ?: JSONArray()
 
-        val host = @Composable {
+        val host: @Composable () -> Unit = {
             Column(
                 Modifier
                     .fillMaxSize()
@@ -491,7 +491,7 @@ private fun BoxScope.DesignerOverlay(
                 .fillMaxSize()
                 .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
         ) {
-            // ANTEPRIMA
+			// ANTEPRIMA
 			val previewTopPad = topPadding + 8.dp
 			Surface(
 			    modifier = Modifier
@@ -501,29 +501,24 @@ private fun BoxScope.DesignerOverlay(
 			        .fillMaxWidth(),
 			    shape = RoundedCornerShape(16.dp),
 			    tonalElevation = 6.dp
-			) { /* … */ }
+			) {
+			    Column(Modifier.padding(12.dp)) {
+			        Text("Anteprima", style = MaterialTheme.typography.labelLarge)
+			        Spacer(Modifier.height(8.dp))
+			        key(previewTick) {
+			            RenderBlock(
+			                block = working,
+			                dispatch = { },
+			                uiState = mutableMapOf(),
+			                designerMode = false,
+			                path = selectedPath,
+			                menus = emptyMap(),
+			                onSelect = {}
+			            )
+			        }
+			    }
+			}
 
-                    .shadow(10.dp, RoundedCornerShape(16.dp))
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 6.dp
-            ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("Anteprima", style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.height(8.dp))
-                    key(previewTick) {
-                        RenderBlock(
-                            block = working,
-                            dispatch = { },
-                            uiState = mutableMapOf(),
-                            designerMode = false,
-                            path = selectedPath,
-                            menus = emptyMap(),
-                            onSelect = {}
-                        )
-                    }
-                }
-            }
 
             // PANNELLO BASSO
             Surface(
@@ -591,7 +586,7 @@ private fun BoxScope.DesignerOverlay(
 					.fillMaxSize()
 					.verticalScroll(rememberScrollState())
 					.padding(16.dp),
-				verticalArrangement = Arrangement.spacedBy(Dp(12f))
+				verticalArrangement = Arrangement.spacedBy(12.dp)
 			) {
 				RootInspectorPanel(working, onChange)
 				Spacer(Modifier.height(8.dp))
