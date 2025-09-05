@@ -1,4 +1,4 @@
-
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package ai.runow.ui.renderer
 
 import androidx.compose.ui.unit.TextUnit
@@ -492,14 +492,17 @@ private fun BoxScope.DesignerOverlay(
                 .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
         ) {
             // ANTEPRIMA
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-					.padding(
-						start = 12.dp,
-						end   = 12.dp,
-						top   = topPadding + Dp(8f)
-					)
+			val previewTopPad = topPadding + 8.dp
+			Surface(
+			    modifier = Modifier
+			        .align(Alignment.TopCenter)
+			        .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
+			        .shadow(10.dp, RoundedCornerShape(16.dp))
+			        .fillMaxWidth(),
+			    shape = RoundedCornerShape(16.dp),
+			    tonalElevation = 6.dp
+			) { /* … */ }
+
                     .shadow(10.dp, RoundedCornerShape(16.dp))
                     .fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -580,18 +583,18 @@ private fun BoxScope.DesignerOverlay(
 				.align(Alignment.BottomCenter)
 				.fillMaxWidth()
 				.fillMaxHeight(0.6f),
-			shape = RoundedCornerShape(topStart = Dp(16f), topEnd = Dp(16f)),
+			shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
 			tonalElevation = 8.dp
 		) {
 			Column(
 				Modifier
 					.fillMaxSize()
 					.verticalScroll(rememberScrollState())
-					.padding(Dp(16f)),
+					.padding(16.dp),
 				verticalArrangement = Arrangement.spacedBy(Dp(12f))
 			) {
 				RootInspectorPanel(working, onChange)
-				Spacer(Modifier.height(Dp(8f)))
+				Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { showRootInspector = false }) { Text("Annulla") }
                     Spacer(Modifier.weight(1f))
