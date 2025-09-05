@@ -2014,3 +2014,691 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
         onChange()
     }
 }
+
+@Composable
+private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+    Text("List – Proprietà testo", style = MaterialTheme.typography.titleMedium)
+
+    val textSize = remember { mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }) }
+    ExposedDropdown(
+        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
+        label = "textSize (sp)",
+        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        textSize.value = v
+        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
+        onChange()
+    }
+
+    var align by remember { mutableStateOf(working.optString("align","start")) }
+    ExposedDropdown(
+        value = align, label = "align",
+        options = listOf("start","center","end")
+    ) { sel -> align = sel; working.put("align", sel); onChange() }
+
+    var fontFamily by remember { mutableStateOf(working.optString("fontFamily", "")) }
+    ExposedDropdown(
+        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+        label = "fontFamily",
+        options = listOf("(default)","sans","serif","monospace","cursive")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontFamily = v
+        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
+        onChange()
+    }
+
+    var fontWeight by remember { mutableStateOf(working.optString("fontWeight", "")) }
+    ExposedDropdown(
+        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+        label = "fontWeight",
+        options = listOf("(default)","w300","w400","w500","w600","w700")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontWeight = v
+        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
+        onChange()
+    }
+
+    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
+    NamedColorPickerPlus(
+        current = textColor.value,
+        label = "textColor"
+    ) { hex ->
+        textColor.value = hex
+        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
+        onChange()
+    }
+}
+
+/* =========================================================
+ * HELPERS: mapping, pickers, utils
+ * ========================================================= */
+
+@Composable
+private fun mapTextStyle(key: String): TextStyle = when (key) {
+    "displaySmall" -> MaterialTheme.typography.displaySmall
+    "headlineSmall" -> MaterialTheme.typography.headlineSmall
+    "titleLarge" -> MaterialTheme.typography.titleLarge
+    "titleSmall" -> MaterialTheme.typography.titleSmall
+    "bodyLarge" -> MaterialTheme.typography.bodyLarge
+    "bodyMedium" -> MaterialTheme.typography.bodyMedium
+    else -> MaterialTheme.typography.titleMedium
+}
+
+@Composable
+private fun mapTextAlign(key: String): TextAlign = when (key) {
+    "center" -> TextAlign.Center
+    "end" -> TextAlign.End
+    else -> TextAlign.Start
+}
+
+private fun sizeModifier(size: String): Modifier = when (size) {
+    "xs" -> Modifier.height(32.dp)
+    "sm" -> Modifier.height(36.dp)
+    "lg" -> Modifier.height(52.dp)
+    "xl" -> Modifier.height(56.dp)
+    else -> Modifier.height(40.dp)
+}
+
+@Composable
+private fun IconText(label: String, icon: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        NamedIconEx(icon, null)
+        Text(label)
+    }
+}
+
+@Composable
+private fun mapButtonColors(style: String, tint: String): Triple<Color, Color, Dp> {
+    val cs = MaterialTheme.colorScheme
+
+    val (baseContainer, baseContent) = when (tint) {
+        "success" -> Pair(cs.tertiary, cs.onTertiary)
+        "warning" -> Pair(Color(0xFFFFD54F), Color(0xFF3E2723))
+        "error"   -> Pair(cs.errorContainer, cs.onErrorContainer)
+        else      -> Pair(cs.primary, cs.onPrimary)
+    }
+
+    return when (style) {
+        "outlined" -> Triple(
+            Color.Transparent,
+            when (tint) {
+                "success" -> cs.tertiary
+                "warning" -> Color(0xFF8D6E63)
+                "error"   -> cs.error
+                else      -> cs.primary
+            },
+            1.dp
+        )
+        "text" -> Triple(
+            Color.Transparent,
+            when (tint) {
+                "success" -> cs.tertiary
+                "warning" -> Color(0xFF8D6E63)
+                "error"   -> cs.error
+                else      -> cs.primary
+            },
+            0.dp
+        )
+        "tonal" -> Triple(cs.secondaryContainer, cs.onSecondaryContainer, 0.dp)
+        else -> Triple(baseContainer, baseContent, 0.dp)
+    }
+}
+
+/* ---- Pickers ---- */
+
+private val ICONS = listOf(
+    "settings", "more_vert", "tune",
+    "play_arrow", "pause", "stop", "add",
+    "flag", "queue_music", "widgets", "palette",
+    "home", "menu", "close", "more_horiz", "list", "tab", "grid_on",
+    "directions_run", "directions_walk", "directions_bike",
+    "fitness_center", "timer", "timer_off", "watch_later",
+    "map", "my_location", "place", "speed",
+    "bolt", "local_fire_department", "sports_score", "toggle_on"
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IconPickerField(
+    value: MutableState<String>,
+    label: String,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = value.value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            leadingIcon = { if (value.value.isNotBlank()) NamedIconEx(value.value, null) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ICONS.forEach { name ->
+                DropdownMenuItem(
+                    text = { Text(name) },
+                    leadingIcon = { NamedIconEx(name, null) },
+                    onClick = { onSelected(name); expanded = false }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExposedDropdown(
+    value: String,
+    label: String,
+    options: List<String>,
+    onSelect: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { opt ->
+                DropdownMenuItem(text = { Text(opt) }, onClick = { onSelect(opt); expanded = false })
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepperField(
+    label: String,
+    state: MutableState<String>,
+    step: Double = 1.0,
+    onChangeValue: (Double) -> Unit
+) {
+    fun current(): Double = state.value.toDoubleOrNull() ?: 0.0
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = {
+                val v = current() - step
+                state.value = "%.2f".format(max(v, -10000.0))
+                onChangeValue(current())
+            }) { Text("-") }
+
+            OutlinedTextField(
+                value = state.value,
+                onValueChange = {
+                    state.value = it
+                    val num = it.toDoubleOrNull()
+                    if (num != null) onChangeValue(num)
+                },
+                singleLine = true,
+                modifier = Modifier.width(120.dp)
+            )
+
+            OutlinedButton(onClick = {
+                val v = current() + step
+                state.value = "%.2f".format(min(v, 10000.0))
+                onChangeValue(current())
+            }) { Text("+") }
+        }
+    }
+}
+
+/* ---- Icon helper ---- */
+
+@Composable
+private fun NamedIconEx(name: String?, contentDescription: String?) {
+    val __ctx = LocalContext.current
+    if (name?.startsWith("res:") == true) {
+        val resName = name.removePrefix("res:")
+        val id = __ctx.resources.getIdentifier(resName, "drawable", __ctx.packageName)
+        if (id != 0) { Icon(painterResource(id), contentDescription); return }
+    }
+    val image = when (name) {
+        "settings" -> Icons.Filled.Settings
+        "more_vert" -> Icons.Filled.MoreVert
+        "tune" -> Icons.Filled.Tune
+        "play_arrow" -> Icons.Filled.PlayArrow
+        "pause" -> Icons.Filled.Pause
+        "stop" -> Icons.Filled.Stop
+        "add" -> Icons.Filled.Add
+        "flag" -> Icons.Filled.Flag
+        "queue_music" -> Icons.Filled.QueueMusic
+        "widgets" -> Icons.Filled.Widgets
+        "palette" -> Icons.Filled.Palette
+        "home" -> Icons.Filled.Home
+        "menu" -> Icons.Filled.Menu
+        "close" -> Icons.Filled.Close
+        "more_horiz" -> Icons.Filled.MoreHoriz
+        "list" -> Icons.Filled.List
+        "tab" -> Icons.Filled.Tab
+        "grid_on" -> Icons.Filled.GridOn
+        "toggle_on" -> Icons.Filled.ToggleOn
+        else -> null
+    }
+    if (image != null) Icon(image, contentDescription) else Text(".")
+}
+
+/* ---- Color parsing / pickers ---- */
+
+@Composable
+private fun parseColorOrRole(value: String?): Color? {
+    if (value.isNullOrBlank()) return null
+    val v = value.trim()
+
+    if (v.startsWith("#") && (v.length == 7 || v.length == 9)) {
+        return try { Color(android.graphics.Color.parseColor(v)) } catch (_: Exception) { null }
+    }
+
+    val cs = MaterialTheme.colorScheme
+    return when (v) {
+        "primary" -> cs.primary
+        "onPrimary" -> cs.onPrimary
+        "secondary" -> cs.secondary
+        "onSecondary" -> cs.onSecondary
+        "tertiary" -> cs.tertiary
+        "onTertiary" -> cs.onTertiary
+        "error" -> cs.error
+        "onError" -> cs.onError
+        "surface" -> cs.surface
+        "onSurface" -> cs.onSurface
+        else -> null
+    }
+}
+
+private val NAMED_SWATCHES = linkedMapOf(
+    // Neutri
+    "White" to 0xFFFFFFFF.toInt(),
+    "Black" to 0xFF000000.toInt(),
+    "Gray50" to 0xFFFAFAFA.toInt(), "Gray100" to 0xFFF5F5F5.toInt(), "Gray200" to 0xFFEEEEEE.toInt(),
+    "Gray300" to 0xFFE0E0E0.toInt(), "Gray400" to 0xFFBDBDBD.toInt(), "Gray500" to 0xFF9E9E9E.toInt(),
+    "Gray600" to 0xFF757575.toInt(), "Gray700" to 0xFF616161.toInt(), "Gray800" to 0xFF424242.toInt(), "Gray900" to 0xFF212121.toInt(),
+
+    // Material-like
+    "Red" to 0xFFE53935.toInt(), "RedDark" to 0xFFC62828.toInt(), "RedLight" to 0xFFEF5350.toInt(),
+    "Pink" to 0xFFD81B60.toInt(), "PinkDark" to 0xFFC2185B.toInt(), "PinkLight" to 0xFFF06292.toInt(),
+    "Purple" to 0xFF8E24AA.toInt(), "PurpleDark" to 0xFF6A1B9A.toInt(), "PurpleLight" to 0xFFBA68C8.toInt(),
+    "DeepPurple" to 0xFF5E35B1.toInt(), "Indigo" to 0xFF3949AB.toInt(),
+    "Blue" to 0xFF1E88E5.toInt(), "BlueDark" to 0xFF1565C0.toInt(), "BlueLight" to 0xFF64B5F6.toInt(),
+    "LightBlue" to 0xFF039BE5.toInt(), "Cyan" to 0xFF00ACC1.toInt(),
+    "Teal" to 0xFF00897B.toInt(), "TealLight" to 0xFF26A69A.toInt(),
+    "Green" to 0xFF43A047.toInt(), "GreenDark" to 0xFF2E7D32.toInt(), "GreenLight" to 0xFF66BB6A.toInt(),
+    "LightGreen" to 0xFF7CB342.toInt(), "Lime" to 0xFFC0CA33.toInt(),
+    "Yellow" to 0xFFFDD835.toInt(), "Amber" to 0xFFFFB300.toInt(),
+    "Orange" to 0xFFFB8C00.toInt(), "DeepOrange" to 0xFFF4511E.toInt(),
+    "Brown" to 0xFF6D4C41.toInt(), "BlueGrey" to 0xFF546E7A.toInt()
+)
+
+private val MATERIAL_ROLES = listOf(
+    "primary","secondary","tertiary","error","surface",
+    "onPrimary","onSecondary","onTertiary","onSurface","onError"
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NamedColorPickerPlus(
+    current: String,
+    label: String,
+    allowRoles: Boolean = false,
+    onPick: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val display = if (current.isBlank()) "(default)" else current
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = display,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (allowRoles) {
+                val cs = MaterialTheme.colorScheme
+                fun roleColor(role: String): Color = when (role) {
+                    "primary","onPrimary"     -> cs.primary
+                    "secondary","onSecondary" -> cs.secondary
+                    "tertiary","onTertiary"   -> cs.tertiary
+                    "error","onError"         -> cs.error
+                    "surface","onSurface"     -> cs.surface
+                    else -> cs.primary
+                }
+                MATERIAL_ROLES.forEach { role ->
+                    val c = roleColor(role)
+                    DropdownMenuItem(
+                        leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
+                        text = { Text(role) },
+                        onClick = { onPick(role); expanded = false }
+                    )
+                }
+                Divider()
+            }
+            NAMED_SWATCHES.forEach { (name, argb) ->
+                val c = Color(argb)
+                DropdownMenuItem(
+                    leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
+                    text = { Text(name) },
+                    onClick = {
+                        val hex = "#%06X".format(argb and 0xFFFFFF)
+                        onPick(hex); expanded = false
+                    }
+                )
+            }
+            DropdownMenuItem(text = { Text("(default)") }, onClick = { onPick(""); expanded = false })
+        }
+    }
+}
+
+/* ---- Readability helper ---- */
+private fun bestOnColor(bg: Color): Color {
+    val l = 0.2126f * bg.red + 0.7152f * bg.green + 0.0722f * bg.blue
+    return if (l < 0.5f) Color.White else Color.Black
+}
+
+/* =========================================================
+ * JSON utils
+ * ========================================================= */
+
+private fun collectMenus(root: JSONObject): Map<String, JSONArray> {
+    val map = mutableMapOf<String, JSONArray>()
+    fun walk(n: Any?) {
+        when (n) {
+            is JSONObject -> {
+                if (n.optString("type") == "Menu") {
+                    val id = n.optString("id", "")
+                    val items = n.optJSONArray("items") ?: JSONArray()
+                    if (id.isNotBlank()) map[id] = items
+                }
+                n.keys().forEachRemaining { key -> walk(n.opt(key)) }
+            }
+            is JSONArray -> { for (i in 0 until n.length()) walk(n.opt(i)) }
+        }
+    }
+    walk(root)
+    return map
+}
+
+private fun jsonAtPath(root: JSONObject, path: String): Any? {
+    if (!path.startsWith("/")) return null
+    val segs = path.trim('/').split('/')
+    var node: Any = root
+    var i = 0
+    while (i < segs.size) {
+        when (node) {
+            is JSONObject -> { node = (node as JSONObject).opt(segs[i]) ?: return null; i++ }
+            is JSONArray  -> {
+                val idx = segs[i].toIntOrNull() ?: return null
+                node = (node as JSONArray).opt(idx) ?: return null; i++
+            }
+            else -> return null
+        }
+    }
+    return node
+}
+
+private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, Int>? {
+    if (!path.startsWith("/")) return null
+    val segs = path.trim('/').split('/')
+    var node: Any = root
+    var parentArr: JSONArray? = null
+    var index = -1
+    var i = 0
+    while (i < segs.size) {
+        val s = segs[i]
+        when (node) {
+            is JSONObject -> { node = (node as JSONObject).opt(s) ?: return null; i++ }
+            is JSONArray  -> {
+                val idx = s.toIntOrNull() ?: return null
+                parentArr = node as JSONArray
+                index = idx
+                node = parentArr.opt(idx) ?: return null
+                i++
+            }
+        }
+    }
+    return if (parentArr != null && index >= 0) parentArr!! to index else null
+}
+
+private fun replaceAtPath(root: JSONObject, path: String, newNode: JSONObject) {
+    val p = getParentAndIndex(root, path) ?: return
+    p.first.put(p.second, JSONObject(newNode.toString()))
+}
+
+private fun insertBlockAndReturnPath(root: JSONObject, selectedPath: String?, block: JSONObject, position: String): String {
+    val parentArr: JSONArray
+    val idx: Int
+    val parentPath: String
+
+    if (selectedPath != null) {
+        val pair = getParentAndIndex(root, selectedPath)
+        if (pair != null) {
+            parentArr = pair.first
+            idx = pair.second
+            parentPath = selectedPath.substringBeforeLast("/")
+        } else {
+            parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
+            idx = parentArr.length() - 1
+            parentPath = "/blocks"
+        }
+    } else {
+        parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
+        idx = parentArr.length() - 1
+        parentPath = "/blocks"
+    }
+
+    val insertIndex = when (position) { "before" -> idx; else -> idx + 1 }.coerceIn(0, parentArr.length())
+
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until parentArr.length()) {
+        if (i == insertIndex) tmp.add(block)
+        tmp.add(parentArr.get(i))
+    }
+    if (insertIndex == parentArr.length()) tmp.add(block)
+
+    while (parentArr.length() > 0) parentArr.remove(parentArr.length() - 1)
+    tmp.forEach { parentArr.put(it) }
+
+    return "$parentPath/$insertIndex"
+}
+
+private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
+    val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
+    val iconPath = insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
+    insertBlockAndReturnPath(root, iconPath, newMenu(id), "after")
+    return iconPath
+}
+
+private fun moveAndReturnNewPath(root: JSONObject, path: String, delta: Int): String {
+    val p = getParentAndIndex(root, path) ?: return path
+    val (arr, idx) = p
+    val newIdx = (idx + delta).coerceIn(0, arr.length() - 1)
+    if (newIdx == idx) return path
+
+    val items = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) items.add(arr.get(i))
+    val item = items.removeAt(idx)
+    items.add(newIdx, item)
+
+    while (arr.length() > 0) arr.remove(arr.length() - 1)
+    items.forEach { arr.put(it) }
+
+    val parentPath = path.substringBeforeLast("/")
+    return "$parentPath/$newIdx"
+}
+
+private fun moveInArray(arr: JSONArray, index: Int, delta: Int) {
+    if (index < 0 || index >= arr.length()) return
+    val newIdx = (index + delta).coerceIn(0, arr.length() - 1)
+    if (newIdx == index) return
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) tmp.add(arr.get(i))
+    val it = tmp.removeAt(index)
+    tmp.add(newIdx, it)
+    while (arr.length() > 0) arr.remove(arr.length() - 1)
+    tmp.forEach { arr.put(it) }
+}
+
+private fun duplicate(root: JSONObject, path: String) {
+    val p = getParentAndIndex(root, path) ?: return
+    val (arr, idx) = p
+    val clone = JSONObject(arr.getJSONObject(idx).toString())
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) {
+        tmp.add(arr.get(i))
+        if (i == idx) tmp.add(clone)
+    }
+    while (arr.length() > 0) arr.remove(arr.length() - 1)
+    tmp.forEach { arr.put(it) }
+}
+
+private fun remove(root: JSONObject, path: String) {
+    val p = getParentAndIndex(root, path) ?: return
+    val (arr, idx) = p
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) if (i != idx) tmp.add(arr.get(i))
+    while (arr.length() > 0) arr.remove(arr.length() - 1)
+    tmp.forEach { arr.put(it) }
+}
+
+private fun removeAt(arr: JSONArray, index: Int) {
+    if (index < 0 || index >= arr.length()) return
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) if (i != index) tmp.add(arr.get(i))
+    while (arr.length() > 0) arr.remove(arr.length() - 1)
+    tmp.forEach { arr.put(it) }
+}
+
+/* =========================================================
+ * BLUEPRINTS
+ * ========================================================= */
+
+private fun newSectionHeader() = JSONObject("""{"type":"SectionHeader","title":"Nuova sezione"}""")
+
+private fun newButtonRow() = JSONObject(
+    """
+    {"type":"ButtonRow","align":"center","buttons":[
+      {"label":"Start","style":"primary","icon":"play_arrow","size":"md","tint":"default","shape":"rounded","corner":20,"pressEffect":"scale","actionId":"start_run"},
+      {"label":"Pausa","style":"tonal","icon":"pause","size":"md","tint":"default","shape":"rounded","corner":20,"actionId":"pause_run"},
+      {"label":"Stop","style":"outlined","icon":"stop","size":"md","tint":"error","shape":"rounded","corner":20,"actionId":"stop_run","confirm":true}
+    ]}
+    """.trimIndent()
+)
+
+private fun newSpacer()   = JSONObject("""{"type":"Spacer","height":8}""")
+private fun newDividerV() = JSONObject("""{"type":"DividerV","thickness":1,"height":24}""")
+
+private fun newCard() = JSONObject(
+    """
+    {"type":"Card","variant":"elevated","clickActionId":"nav:run",
+     "blocks":[
+       {"type":"SectionHeader","title":"Card esempio","style":"titleSmall","align":"start"},
+       {"type":"Divider"}
+     ]}
+    """.trimIndent()
+)
+
+private fun newFab() = JSONObject("""{"type":"Fab","icon":"play_arrow","label":"Start","variant":"extended","actionId":"start_run"}""")
+
+private fun newIconButton(menuId: String = "more_menu") =
+    JSONObject("""{"type":"IconButton","icon":"more_vert","openMenuId":"$menuId"}""")
+
+private fun newMenu(menuId: String = "more_menu") = JSONObject(
+    """
+    {"type":"Menu","id":"$menuId","items":[
+       {"icon":"tune","label":"Layout Lab","actionId":"open_layout_lab"},
+       {"icon":"palette","label":"Theme Lab","actionId":"open_theme_lab"},
+       {"icon":"settings","label":"Impostazioni","actionId":"nav:settings"}
+    ]}
+    """.trimIndent()
+)
+
+private fun newProgress() = JSONObject("""{ "type":"Progress", "label":"Avanzamento", "value": 40, "color": "primary", "showPercent": true }""")
+private fun newAlert()    = JSONObject("""{ "type":"Alert", "severity":"info", "title":"Titolo avviso", "message":"Testo dell'avviso", "actionId": "" }""")
+private fun newImage()    = JSONObject("""{ "type":"Image", "source":"res:ic_launcher_foreground", "heightDp": 160, "corner": 12, "contentScale":"fit" }""")
+
+private fun newTabs() = JSONObject(
+    """
+    {"type":"Tabs","initialIndex":0,"tabs":[
+      {"label":"Tab 1","blocks":[{"type":"SectionHeader","title":"Tab 1","style":"titleSmall","align":"start"}]},
+      {"label":"Tab 2","blocks":[{"type":"SectionHeader","title":"Tab 2","style":"titleSmall","align":"start"}]}
+    ]}
+    """.trimIndent()
+)
+
+private fun newChipRow() = JSONObject(
+    """
+    {"type":"ChipRow","chips":[
+      {"label":"Easy","bind":"level","value":"easy"},
+      {"label":"Medium","bind":"level","value":"medium"},
+      {"label":"Hard","bind":"level","value":"hard"}
+    ], "textSizeSp":14}
+    """.trimIndent()
+)
+
+private fun newMetricsGrid() = JSONObject("""{"type":"MetricsGrid","columns":2,"tiles":[{"label":"Pace"},{"label":"Heart"}]}""")
+
+private fun newSlider() = JSONObject("""{"type":"Slider","label":"Pace","bind":"pace","min":3.0,"max":7.0,"step":0.1,"unit":" min/km"}""")
+
+private fun newToggle() = JSONObject("""{"type":"Toggle","label":"Attiva opzione","bind":"toggle_1"}""")
+
+private fun newList() = JSONObject(
+    """
+    {"type":"List","align":"start","items":[
+      {"title":"Voce 1","subtitle":"Sottotitolo 1","actionId":"list:1"},
+      {"title":"Voce 2","subtitle":"Sottotitolo 2","actionId":"list:2"}
+    ]}
+    """.trimIndent()
+)
+
+/* =========================================================
+ * TEXT STYLE OVERRIDES
+ * ========================================================= */
+
+private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
+    var st = base
+
+    // dimensione testo: costruttore stabile (niente .sp)
+    val size = node.optDouble("textSizeSp", Double.NaN)
+    if (!size.isNaN()) {
+        st = st.copy(fontSize = TextUnit(size.toFloat(), TextUnitType.Sp))
+    }
+
+    // peso
+    val weightKey = node.optString("fontWeight", "")
+    val weight = when (weightKey) {
+        "w300" -> FontWeight.Light
+        "w400" -> FontWeight.Normal
+        "w500" -> FontWeight.Medium
+        "w600" -> FontWeight.SemiBold
+        "w700" -> FontWeight.Bold
+        else -> null
+    }
+    if (weight != null) st = st.copy(fontWeight = weight)
+
+    // famiglia
+    val familyKey = node.optString("fontFamily", "")
+    val family = when (familyKey) {
+        "serif" -> FontFamily.Serif
+        "monospace" -> FontFamily.Monospace
+        "cursive" -> FontFamily.Cursive
+        "sans" -> FontFamily.SansSerif
+        else -> null
+    }
+    if (family != null) st = st.copy(fontFamily = family)
+
+    return st
+}
