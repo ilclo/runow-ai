@@ -2,6 +2,8 @@
 
 package ai.runow.ui.renderer
 
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
@@ -735,7 +737,7 @@ private fun RenderBlock(
                 if (label.isNotBlank()) Text(label, style = MaterialTheme.typography.bodyMedium)
                 // Compatibile con versioni Material3 dove 'progress' è Float (non lambda)
                 LinearProgressIndicator(
-                    progress = value / 100f,
+                    progress = value / 100f,   // ✅ Float, non { value / 100f }
                     trackColor = color.copy(alpha = 0.25f),
                     color = color,
                     modifier = Modifier
@@ -2498,9 +2500,14 @@ private fun newList() = JSONObject(
 
 private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
     var st = base
-    val size = node.optDouble("textSizeSp", Double.NaN)
-    if (!size.isNaN()) st = st.copy(fontSize = size.sp)
 
+    // dimensione testo (usa costruttore stabile, niente API sperimentali)
+    val size = node.optDouble("textSizeSp", Double.NaN)
+    if (!size.isNaN()) {
+        st = st.copy(fontSize = TextUnit(size.toFloat(), TextUnitType.Sp))
+    }
+
+    // peso
     val weightKey = node.optString("fontWeight", "")
     val weight = when (weightKey) {
         "w300" -> FontWeight.Light
@@ -2512,6 +2519,7 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
     }
     if (weight != null) st = st.copy(fontWeight = weight)
 
+    // famiglia
     val familyKey = node.optString("fontFamily", "")
     val family = when (familyKey) {
         "serif" -> FontFamily.Serif
