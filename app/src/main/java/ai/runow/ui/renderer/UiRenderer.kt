@@ -1,4 +1,3 @@
-
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package ai.runow.ui.renderer
@@ -32,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -59,6 +59,7 @@ import kotlin.math.round
 fun DesignerRoot() {
     val uiState = remember { mutableMapOf<String, Any>() }
     val dispatch: (String) -> Unit = { /* TODO: instrada azioni app */ }
+
     // Schermata unica "home": UiLoader farà fallback su {"blocks":[]}
     UiScreen(
         screenName = "home",
@@ -166,8 +167,8 @@ private fun BoxScope.DesignSwitchKnob(
             .align(Alignment.CenterEnd)
             .offset { IntOffset(0, offsetY.toInt()) }
             .pointerInput(Unit) {
-                detectVerticalDragGestures { _, drag ->
-                    offsetY = (offsetY + drag).coerceIn(-maxDragPx, maxDragPx)
+                detectVerticalDragGestures { _, dragAmount ->
+                    offsetY = (offsetY + dragAmount).coerceIn(-maxDragPx, maxDragPx)
                 }
             },
         containerColor = if (isDesigner) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
@@ -732,8 +733,9 @@ private fun RenderBlock(
 
             Column {
                 if (label.isNotBlank()) Text(label, style = MaterialTheme.typography.bodyMedium)
+                // Compatibile con versioni Material3 dove 'progress' è Float (non lambda)
                 LinearProgressIndicator(
-                    progress = { value / 100f },
+                    progress = value / 100f,
                     trackColor = color.copy(alpha = 0.25f),
                     color = color,
                     modifier = Modifier
@@ -1838,6 +1840,63 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
 
     val textColor = remember { mutableStateOf(working.optString("textColor","")) }
     NamedColorPickerPlus(current = textColor.value, label = "textColor") { hex ->
+        textColor.value = hex
+        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
+        onChange()
+    }
+}
+
+@Composable
+private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+    Text("List – Proprietà testo", style = MaterialTheme.typography.titleMedium)
+
+    val textSize = remember { mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }) }
+    ExposedDropdown(
+        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
+        label = "textSize (sp)",
+        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        textSize.value = v
+        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
+        onChange()
+    }
+
+    var align by remember { mutableStateOf(working.optString("align","start")) }
+    ExposedDropdown(
+        value = align, label = "align",
+        options = listOf("start","center","end")
+    ) { sel -> align = sel; working.put("align", sel); onChange() }
+
+    var fontFamily by remember { mutableStateOf(working.optString("fontFamily", "")) }
+    ExposedDropdown(
+        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+        label = "fontFamily",
+        options = listOf("(default)","sans","serif","monospace","cursive")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontFamily = v
+        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
+        onChange()
+    }
+
+    var fontWeight by remember { mutableStateOf(working.optString("fontWeight", "")) }
+    ExposedDropdown(
+        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+        label = "fontWeight",
+        options = listOf("(default)","w300","w400","w500","w600","w700")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontWeight = v
+        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
+        onChange()
+    }
+
+    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
+    NamedColorPickerPlus(
+        current = textColor.value,
+        label = "textColor"
+    ) { hex ->
         textColor.value = hex
         if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
         onChange()
