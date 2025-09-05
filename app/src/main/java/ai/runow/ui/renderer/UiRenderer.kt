@@ -1,4 +1,8 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.ui.unit.ExperimentalUnitApi::class
+)
+
 package ai.runow.ui.renderer
 
 import androidx.compose.ui.unit.TextUnit
@@ -569,7 +573,7 @@ private fun BoxScope.DesignerOverlay(
     if (showRootInspector) {
         val working = remember { JSONObject(layout.toString()) }
         var dummyTick by remember { mutableStateOf(0) }
-        val onChange = { dummyTick++ }
+        val onChange: () -> Unit = { dummyTick++ }
 
         BackHandler(enabled = true) { showRootInspector = false }
 
