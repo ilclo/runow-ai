@@ -570,23 +570,23 @@ private fun BoxScope.DesignerOverlay(
 
         BackHandler(enabled = true) { showRootInspector = false }
 
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.6f),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-            tonalElevation = 8.dp
-        ) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                RootInspectorPanel(working, onChange)
-                Spacer(Modifier.height(8.dp))
+		Surface(
+			modifier = Modifier
+				.align(Alignment.BottomCenter)
+				.fillMaxWidth()
+				.fillMaxHeight(0.6f),
+			shape = RoundedCornerShape(topStart = Dp(16f), topEnd = Dp(16f)),
+			tonalElevation = 8.dp
+		) {
+			Column(
+				Modifier
+					.fillMaxSize()
+					.verticalScroll(rememberScrollState())
+					.padding(Dp(16f)),
+				verticalArrangement = Arrangement.spacedBy(Dp(12f))
+			) {
+				RootInspectorPanel(working, onChange)
+				Spacer(Modifier.height(Dp(8f)))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { showRootInspector = false }) { Text("Annulla") }
                     Spacer(Modifier.weight(1f))
