@@ -1,9 +1,4 @@
 
-Ancora stesso problema. Togliere import androidx.compose.ui.unit.sp può aiutare?
-
-e: file:///home/runner/work/runow-ai/runow-ai/app/src/main/java/ai/runow/ui/renderer/UiRenderer.kt:588:33 The feature "unit conversions on arbitrary expressions" is experimental and should be enabled explicitly. You can also change the original type of this expression to (...) -> Unit
-
-
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package ai.runow.ui.renderer
