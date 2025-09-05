@@ -83,7 +83,9 @@ fun UiScreen(
     scaffoldPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val ctx = LocalContext.current
-    var layout by remember(screenName) { mutableStateOf<JSONObject?>(UiLoader.loadLayout(ctx, screenName))) }
+    var layout: JSONObject? by remember(screenName) {
+	    mutableStateOf(UiLoader.loadLayout(ctx, screenName))
+	}
     var tick by remember { mutableStateOf(0) }
 
     if (layout == null) {
@@ -2029,6 +2031,7 @@ private fun IconPickerField(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ExposedDropdown(
     value: String,
