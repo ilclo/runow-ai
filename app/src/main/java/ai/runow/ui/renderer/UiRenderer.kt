@@ -2501,7 +2501,7 @@ private fun newList() = JSONObject(
 private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
     var st = base
 
-    // dimensione testo (usa costruttore stabile, niente API sperimentali)
+    // dimensione testo: costruttore stabile (niente .sp)
     val size = node.optDouble("textSizeSp", Double.NaN)
     if (!size.isNaN()) {
         st = st.copy(fontSize = TextUnit(size.toFloat(), TextUnitType.Sp))
