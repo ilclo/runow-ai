@@ -5,6 +5,8 @@
 
 package ai.runow.ui.renderer
 
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.activity.compose.BackHandler
@@ -78,6 +80,106 @@ fun DesignerRoot() {
 /* =========================================================
  * RENDER DI UNA SCHERMATA JSON (con Scaffold di root e levetta)
  * ========================================================= */
+
+ @Composable
+private fun RenderTopBar(
+    cfg: JSONObject,
+    dispatch: (String) -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior? = null
+) {
+    val variant = cfg.optString("variant", "small")
+    val title = cfg.optString("title", "")
+    val subtitle = cfg.optString("subtitle", "")
+
+    val rounded = RoundedCornerShape(
+        topStart = 0.dp, topEnd = 0.dp,
+        bottomStart = Dp(cfg.optDouble("roundedBottomStart", 0.0).toFloat()),
+        bottomEnd = Dp(cfg.optDouble("roundedBottomEnd", 0.0).toFloat())
+    )
+    val tonalElevation = Dp(cfg.optDouble("tonalElevation", 0.0).toFloat())
+
+    val containerColor = parseColorOrRole(cfg.optString("containerColor", "")) ?: MaterialTheme.colorScheme.surface
+    val titleColor = parseColorOrRole(cfg.optString("titleColor", "")) ?: MaterialTheme.colorScheme.onSurface
+    val actionsColor = parseColorOrRole(cfg.optString("actionsColor", "")) ?: titleColor
+
+    // Gradient opzionale
+    val brush: Brush? = cfg.optJSONObject("gradient")?.let { g ->
+        val cols = g.optJSONArray("colors")?.let { arr ->
+            (0 until arr.length()).mapNotNull { idx -> parseColorOrRole(arr.optString(idx)) }
+        } ?: emptyList()
+        if (cols.size >= 2) {
+            val dir = g.optString("direction", "vertical")
+            if (dir == "horizontal") Brush.horizontalGradient(cols) else Brush.verticalGradient(cols)
+        } else null
+    }
+
+    val actions = cfg.optJSONArray("actions") ?: JSONArray()
+
+    val colors = TopAppBarDefaults.topAppBarColors(
+        containerColor = Color.Transparent,        // vediamo il bg del Box
+        titleContentColor = titleColor,
+        actionIconContentColor = actionsColor,
+        navigationIconContentColor = actionsColor
+    )
+
+    Surface(tonalElevation = tonalElevation, shape = rounded) {
+        val bgMod = if (brush != null) Modifier.background(brush) else Modifier.background(containerColor)
+        Box(bgMod) {
+            val titleSlot: @Composable () -> Unit = {
+                if (subtitle.isBlank()) {
+                    Text(title)
+                } else {
+                    Column {
+                        Text(title, style = MaterialTheme.typography.titleLarge)
+                        Text(subtitle, style = MaterialTheme.typography.labelMedium, color = titleColor.copy(alpha = 0.8f))
+                    }
+                }
+            }
+
+            val actionsSlot: @Composable RowScope.() -> Unit = {
+                for (i in 0 until actions.length()) {
+                    val a = actions.optJSONObject(i) ?: continue
+                    IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                        NamedIconEx(a.optString("icon", "more_vert"), null)
+                    }
+                }
+            }
+
+            when (variant) {
+                "center" -> CenterAlignedTopAppBar(
+                    title = { titleSlot() },
+                    actions = actionsSlot,
+                    colors = colors,
+                    scrollBehavior = scrollBehavior
+                )
+                "medium" -> MediumTopAppBar(
+                    title = { titleSlot() },
+                    actions = actionsSlot,
+                    colors = colors,
+                    scrollBehavior = scrollBehavior
+                )
+                "large" -> LargeTopAppBar(
+                    title = { titleSlot() },
+                    actions = actionsSlot,
+                    colors = colors,
+                    scrollBehavior = scrollBehavior
+                )
+                else -> TopAppBar(
+                    title = { titleSlot() },
+                    actions = actionsSlot,
+                    colors = colors,
+                    scrollBehavior = scrollBehavior
+                )
+            }
+
+            if (cfg.optBoolean("divider", false)) {
+                Divider(Modifier.align(Alignment.BottomCenter))
+            }
+        }
+    }
+}
+
+
 @Composable
 fun UiScreen(
     screenName: String,
@@ -205,23 +307,39 @@ private fun RenderRootScaffold(
     val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray()
     val fab = layout.optJSONObject("fab")
     val scroll = layout.optBoolean("scroll", true)
+	val topBarConf = layout.optJSONObject("topBar")
 
-    Scaffold(
-        topBar = {
-            if (title.isNotBlank() || topActions.length() > 0) {
-                TopAppBar(
-                    title = { Text(title) },
-                    actions = {
-                        for (i in 0 until topActions.length()) {
-                            val a = topActions.optJSONObject(i) ?: continue
-                            IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-                                NamedIconEx(a.optString("icon", "more_vert"), null)
-                            }
-                        }
-                    }
-                )
-            }
-        },
+// Scroll behavior per TopAppBar
+	val topScrollBehavior = when (topBarConf?.optString("scroll", "none")) {
+	    "pinned" -> TopAppBarDefaults.pinnedScrollBehavior()
+	    "enterAlways" -> TopAppBarDefaults.enterAlwaysScrollBehavior()
+	    "exitUntilCollapsed" -> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+	    else -> null
+	}
+		Scaffold(
+		    modifier = if (topScrollBehavior != null)
+		        Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
+		    else Modifier,
+		    topBar = {
+		        if (topBarConf != null) {
+		            RenderTopBar(topBarConf, dispatch, topScrollBehavior)
+		        } else {
+		            // fallback vecchio comportamento
+		            if (title.isNotBlank() || topActions.length() > 0) {
+		                TopAppBar(
+		                    title = { Text(title) },
+		                    actions = {
+		                        for (i in 0 until topActions.length()) {
+		                            val a = topActions.optJSONObject(i) ?: continue
+		                            IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+		                                NamedIconEx(a.optString("icon", "more_vert"), null)
+		                            }
+		                        }
+		                    }
+		                )
+		            }
+		        }
+		    },
         bottomBar = {
             if (bottomButtons.length() > 0) {
                 Surface(tonalElevation = 3.dp) {
