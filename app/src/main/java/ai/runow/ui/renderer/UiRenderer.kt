@@ -422,7 +422,9 @@ private fun resolveContainer(
     }
 
     val borderColor = parseColorOrRole(cfg?.optString("borderColor","")) ?: contentColor
-    val borderThickness = Dp(cfg?.optDouble("borderThicknessDp", borderW.value.toDouble())?.toFloat() ?: borderW)
+    val borderThickness = Dp(
+        cfg?.optDouble("borderThicknessDp", borderW.value.toDouble())?.toFloat() ?: borderW.value
+    )
     val border = when (style) {
         "outlined" -> BorderStroke(borderThickness, borderColor)
         else -> null
@@ -530,7 +532,7 @@ private fun RenderRootScaffold(
                     StyledSurface(
                         cfg = bottomBarStyle,
                         defaultShape = RoundedCornerShape(0.dp), // bar rettangolare
-                        fallbackStyle = "surface" // se assente, usa container pieno (come prima)
+                        fallbackStyle = "surface" // se assente, usa colore di surface (comportamento precedente)
                     ) {
                         Row(
                             Modifier
@@ -2289,9 +2291,10 @@ private fun ImageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     ) { v -> working.put("corner", (v ?: 12.0).coerceAtLeast(0.0)); onChange() }
 
     var scale by remember { mutableStateOf(working.optString("contentScale","fit")) }
-    ExposedDropdown(value = scale, label = "contentScale", options = listOf("fit","crop")) {
-        sel -> scale = sel; working.put("contentScale", sel); onChange()
-    }
+    ExposedDropdown(
+        value = scale, label = "contentScale",
+        options = listOf("fit","crop")
+    ) { sel -> scale = sel; working.put("contentScale", sel); onChange() }
 
     Divider()
     ContainerStyleEditorForNode(working, nodeKey = "container", onChange = onChange)
@@ -2777,6 +2780,7 @@ private fun mapContainerColors(style: String, tint: String, custom: Color?): Tri
     }
 
     return when (style) {
+        "surface" -> Triple(cs.surface, cs.onSurface, 0.dp)
         "outlined" -> Triple(Color.Transparent, when (tint) {
             "success" -> cs.tertiary
             "warning" -> Color(0xFF8D6E63)
@@ -3537,4 +3541,3 @@ private fun newList() = JSONObject(
     ]}
     """.trimIndent()
 )
-
