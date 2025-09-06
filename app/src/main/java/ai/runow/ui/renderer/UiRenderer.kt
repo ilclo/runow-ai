@@ -154,6 +154,12 @@ fun UiScreen(
     // Modalità designer persistente per schermata
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
 
+    // Altezze misurate per non sovrapporre il pannello centrale a Top/Bottom bar
+    var topBarHeightPx by remember { mutableStateOf(0) }
+    var bottomBarHeightPx by remember { mutableStateOf(0) }
+    val topBarHeightDp = with(LocalDensity.current) { topBarHeightPx.toDp() }
+    val bottomBarHeightDp = with(LocalDensity.current) { bottomBarHeightPx.toDp() }
+
     // ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
     var previewRoot: JSONObject? by remember { mutableStateOf(null) }
     fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
@@ -183,7 +189,9 @@ fun UiScreen(
             extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
             scaffoldPadding = scaffoldPadding,
             topBarOverride = liveTopBarOverride,
-            bottomBarOverride = liveBottomBarOverride
+            bottomBarOverride = liveBottomBarOverride,
+            onTopBarHeight = { topBarHeightPx = it },
+            onBottomBarHeight = { bottomBarHeightPx = it }
         )
 
         if (designMode) {
@@ -206,10 +214,12 @@ fun UiScreen(
                     selectedPath = null
                     tick++
                 },
-                topPadding = scaffoldPadding.calculateTopPadding(),
+                avoidTop = topBarHeightDp,
+                avoidBottom = bottomBarHeightDp,
                 onOverlayHeight = { overlayHeightPx = it },
                 onOpenRootInspector = { /* gestito sotto */ },
-                onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
+                onRootLivePreview = { previewRoot = it },
+                dispatch = dispatch   // per anteprima BottomBar dentro inspector
             )
         }
 
@@ -531,7 +541,9 @@ private fun RenderRootScaffold(
     extraPaddingBottom: Dp,
     scaffoldPadding: PaddingValues,
     topBarOverride: JSONObject? = null,
-    bottomBarOverride: JSONObject? = null
+    bottomBarOverride: JSONObject? = null,
+    onTopBarHeight: (Int) -> Unit = {},
+    onBottomBarHeight: (Int) -> Unit = {}
 ) {
     val title = layout.optString("topTitle", "")
     val topActions = layout.optJSONArray("topActions") ?: JSONArray() // legacy
@@ -557,7 +569,9 @@ private fun RenderRootScaffold(
         else Modifier,
         topBar = {
             if (topBarConf != null) {
-                RenderTopBar(topBarConf, dispatch, topScrollBehavior)
+                Box(Modifier.onGloballyPositioned { onTopBarHeight(it.size.height) }) {
+                    RenderTopBar(topBarConf, dispatch, topScrollBehavior)
+                }
             } else {
                 // Fallback legacy: topTitle/topActions
                 if (title.isNotBlank() || topActions.length() > 0) {
@@ -573,6 +587,8 @@ private fun RenderRootScaffold(
                         }
                     )
                 }
+            } else {
+                LaunchedEffect(Unit) { onBottomBarHeight(0) }
             }
         },
         bottomBar = {
@@ -594,7 +610,8 @@ private fun RenderRootScaffold(
             if (items != null && items.length() > 0) {
                 StyledContainer(
                     cfg = bottomBarCfg, // se null -> surface di default
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.onGloballyPositioned { onBottomBarHeight(it.size.height) }
                 ) {
                     Row(
                         Modifier.fillMaxWidth(),
@@ -604,6 +621,8 @@ private fun RenderRootScaffold(
                         RenderBarItemsRow(items, dispatch)
                     }
                 }
+            } else {
+                LaunchedEffect(Unit) { onBottomBarHeight(0) }
             }
         },
         floatingActionButton = {
@@ -611,6 +630,8 @@ private fun RenderRootScaffold(
                 FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
                     NamedIconEx(it.optString("icon", "play_arrow"), null)
                 }
+            } else {
+                LaunchedEffect(Unit) { onBottomBarHeight(0) }
             }
         },
         containerColor = Color.Transparent // per vedere sfondo/gradient dietro le top bar "text/outlined"
@@ -824,10 +845,12 @@ private fun BoxScope.DesignerOverlay(
     onSaveDraft: () -> Unit,
     onPublish: () -> Unit,
     onReset: () -> Unit,
-    topPadding: Dp,
+    avoidTop: Dp,
+    avoidBottom: Dp,
     onOverlayHeight: (Int) -> Unit,
     onOpenRootInspector: () -> Unit,
-    onRootLivePreview: (JSONObject?) -> Unit
+    onRootLivePreview: (JSONObject?) -> Unit,
+    dispatch: (String) -> Unit
 ) {
     var showInspector by remember { mutableStateOf(false) }
     var showRootInspector by remember { mutableStateOf(false) }
@@ -1015,7 +1038,7 @@ private fun BoxScope.DesignerOverlay(
                 .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
         ) {
             // ANTEPRIMA
-            val previewTopPad = topPadding + 8.dp
+            val previewTopPad = avoidTop + 8.dp
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -1109,16 +1132,16 @@ private fun BoxScope.DesignerOverlay(
             showRootInspector = false
         }
     
-        // Pannello centrato, scrollabile, semi-trasparente
+        // Pannello centrato, scrollabile, semi-trasparente, non sovrapposto a Top/Bottom bar
         Surface(
             modifier = Modifier
                 .align(Alignment.Center)
+                .padding(top = avoidTop + 12.dp, bottom = avoidBottom + 12.dp)
                 .fillMaxWidth(0.92f)
-                .fillMaxHeight(0.78f)
-                .graphicsLayer(alpha = 0.93f),
+                .fillMaxHeight(0.78f),
             shape = RoundedCornerShape(18.dp),
             tonalElevation = 8.dp,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
             Column(
@@ -1198,6 +1221,10 @@ private fun BoxScope.DesignerOverlay(
                     Text("Abilita stile custom per Bottom Bar")
                 }
                 working.optJSONObject("bottomBar")?.let { bb ->
+                    // Anteprima inline della Bottom Bar
+                    Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelMedium)
+                    BottomBarInlinePreview(bb, dispatch)
+                    Spacer(Modifier.height(8.dp))
                     ContainerEditorSection(bb, key = "container", title = "BottomBar – Contenitore", onChange = onChange)
                 }
     
@@ -1253,6 +1280,26 @@ private fun BoxScope.DesignerOverlay(
         }
     }
 
+
+
+@Composable
+private fun BottomBarInlinePreview(bb: JSONObject, dispatch: (String) -> Unit) {
+    val items = bb.optJSONArray("items") ?: JSONArray()
+    val container = bb.optJSONObject("container")
+    StyledContainer(
+        cfg = container,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RenderBarItemsRow(items, dispatch)
+        }
+    }
+}
 
 /* =========================================================
  * OVERLAY INGRANAGGIO PER CONTENITORI
