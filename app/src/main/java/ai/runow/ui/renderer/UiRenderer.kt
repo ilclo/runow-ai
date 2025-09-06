@@ -59,6 +59,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -2207,14 +2208,16 @@ private fun ChipRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     }
     var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) }
     ExposedDropdown(
-        value = if (fontFamily.isBlank()) "(default)" else fontFamily, label = "fontFamily",
-        options = listOf("sans","serif","monospace","cursive","(default)")
+        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+        label = "fontFamily",
+        options = FontCatalog.FONT_FAMILY_OPTIONS
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontFamily = v
         if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
         onChange()
     }
+
     val textColor = remember { mutableStateOf(working.optString("textColor","")) }
     NamedColorPickerPlus(current = textColor.value, label = "textColor") { hex ->
         textColor.value = hex
@@ -2447,16 +2450,17 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
         onChange()
     }
 
-    var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) }
     ExposedDropdown(
-        value = if (fontFamily.isBlank()) "(default)" else fontFamily, label = "fontFamily",
-        options = listOf("sans","serif","monospace","cursive","(default)")
+        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+        label = "fontFamily",
+        options = FontCatalog.FONT_FAMILY_OPTIONS
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontFamily = v
         if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
         onChange()
     }
+
 
     // Font via risorsa opzionale (res:font_name)
     val fontRes = remember { mutableStateOf(working.optString("fontRes","")) }
@@ -3515,52 +3519,56 @@ private fun newList() = JSONObject(
  * TEXT STYLE OVERRIDES (ora supporta anche fontRes)
  * ========================================================= */
 
-@Composable
+// sostituisci interamente la funzione esistente con questa:
 private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
     var st = base
 
-    // dimensione testo: costruttore stabile (niente .sp)
+    // dimensione (sp)
     val size = node.optDouble("textSizeSp", Double.NaN)
     if (!size.isNaN()) {
         st = st.copy(fontSize = TextUnit(size.toFloat(), TextUnitType.Sp))
     }
 
-    // peso
-    val weightKey = node.optString("fontWeight", "")
-    val weight = when (weightKey) {
-        "w300" -> FontWeight.Light
-        "w400" -> FontWeight.Normal
-        "w500" -> FontWeight.Medium
-        "w600" -> FontWeight.SemiBold
-        "w700" -> FontWeight.Bold
-        else -> null
+    // peso (estendiamo i valori supportati)
+    when (node.optString("fontWeight", "")) {
+        "w100" -> st = st.copy(fontWeight = FontWeight.Thin)
+        "w200" -> st = st.copy(fontWeight = FontWeight.ExtraLight)
+        "w300" -> st = st.copy(fontWeight = FontWeight.Light)
+        "w400" -> st = st.copy(fontWeight = FontWeight.Normal)
+        "w500" -> st = st.copy(fontWeight = FontWeight.Medium)
+        "w600" -> st = st.copy(fontWeight = FontWeight.SemiBold)
+        "w700" -> st = st.copy(fontWeight = FontWeight.Bold)
+        "w800" -> st = st.copy(fontWeight = FontWeight.ExtraBold)
+        "w900" -> st = st.copy(fontWeight = FontWeight.Black)
     }
-    if (weight != null) st = st.copy(fontWeight = weight)
 
-    // famiglia rapida
+    // stile (italic opzionale, retro‑compatibile)
+    val styleKey = node.optString("fontStyle", "")
+    val italicFlag = node.optBoolean("italic", false)
+    if (styleKey.equals("italic", ignoreCase = true) || italicFlag) {
+        st = st.copy(fontStyle = FontStyle.Italic)
+    } else if (styleKey.equals("normal", ignoreCase = true)) {
+        st = st.copy(fontStyle = FontStyle.Normal)
+    }
+
+    // famiglia: prima i ruoli base, poi le famiglie custom dal FontCatalog
     val familyKey = node.optString("fontFamily", "")
-    val familyQuick = when (familyKey) {
-        "serif" -> FontFamily.Serif
+    val family = when (familyKey) {
+        "serif"     -> FontFamily.Serif
         "monospace" -> FontFamily.Monospace
-        "cursive" -> FontFamily.Cursive
-        "sans" -> FontFamily.SansSerif
-        else -> null
+        "cursive"   -> FontFamily.Cursive
+        "sans"      -> FontFamily.SansSerif
+        ""          -> null
+        else        -> FontCatalog.resolveFontFamily(familyKey) // usa i TTF in res/font
     }
-    if (familyQuick != null) st = st.copy(fontFamily = familyQuick)
+    if (family != null) st = st.copy(fontFamily = family)
 
-    // font da risorsa (res:font_name) – se presente, sovrascrive
-    val fontRes = node.optString("fontRes","")
-    if (fontRes.startsWith("res:")) {
-        val ctx = LocalContext.current
-        val id = ctx.resources.getIdentifier(fontRes.removePrefix("res:"), "font", ctx.packageName)
-        if (id != 0) {
-            try {
-                ResourcesCompat.getFont(ctx, id)?.let { tf ->
-                    st = st.copy(fontFamily = FontFamily(tf))
-                }
-            } catch (_: Exception) { /* fallback silenzioso */ }
-        }
-    }
+    // spaziatura lettere (sp) e interlinea (sp) opzionali
+    val letterSp = node.optDouble("letterSpacingSp", Double.NaN)
+    if (!letterSp.isNaN()) st = st.copy(letterSpacing = TextUnit(letterSp.toFloat(), TextUnitType.Sp))
+
+    val lineH = node.optDouble("lineHeightSp", Double.NaN)
+    if (!lineH.isNaN()) st = st.copy(lineHeight = TextUnit(lineH.toFloat(), TextUnitType.Sp))
 
     return st
 }
