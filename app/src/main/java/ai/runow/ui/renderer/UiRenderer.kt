@@ -5,6 +5,12 @@
 
 package ai.runow.ui.renderer
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.layout.RowScope
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
@@ -58,6 +64,32 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
+
+@Composable
+private fun parseColorOrRole(value: String?): Color? {
+    if (value.isNullOrBlank()) return null
+    val v = value.trim()
+    if (v.equals("transparent", ignoreCase = true)) return Color.Transparent
+    if (v.startsWith("#") && (v.length == 7 || v.length == 9)) {
+        return try { Color(android.graphics.Color.parseColor(v)) } catch (_: Exception) { null }
+    }
+    val cs = MaterialTheme.colorScheme
+    return when (v) {
+        "primary"        -> cs.primary
+        "onPrimary"      -> cs.onPrimary
+        "secondary"      -> cs.secondary
+        "onSecondary"    -> cs.onSecondary
+        "tertiary"       -> cs.tertiary
+        "onTertiary"     -> cs.onTertiary
+        "error"          -> cs.error
+        "onError"        -> cs.onError
+        "surface"        -> cs.surface
+        "surfaceVariant" -> cs.surfaceVariant
+        "onSurface"      -> cs.onSurface
+        "outline"        -> cs.outline
+        else             -> null
+    }
+}
 /* =========================================================
  * ENTRY ROOT CHIAMATA DA MainActivity
  * ========================================================= */
@@ -85,139 +117,136 @@ private fun RenderTopBar(
     dispatch: (String) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
-    val variant = cfg.optString("variant", "small")
-    val title = cfg.optString("title", "")
-    val subtitle = cfg.optString("subtitle", "")
+    val variant   = cfg.optString("variant", "small")
+    val title     = cfg.optString("title", "")
+    val subtitle  = cfg.optString("subtitle", "")
+    val actions   = cfg.optJSONArray("actions") ?: JSONArray()
 
     val rounded = RoundedCornerShape(
         topStart = 0.dp, topEnd = 0.dp,
         bottomStart = Dp(cfg.optDouble("roundedBottomStart", 0.0).toFloat()),
         bottomEnd   = Dp(cfg.optDouble("roundedBottomEnd",   0.0).toFloat())
     )
-    val tonalElevation = Dp(cfg.optDouble("tonalElevation", 0.0).toFloat())
 
-    // --- Colors / style ---
-    val styleKey = cfg.optString("style", "")
-    val tintKey  = cfg.optString("tint", "default")
-    val customC  = parseColorOrRole(cfg.optString("customColor", ""))
+    // --- Costruzione container unificato con fallback dai campi legacy ---
+    val containerFromCfg = cfg.optJSONObject("container")?.let { JSONObject(it.toString()) } ?: JSONObject()
 
-    val containerColorBase = parseColorOrRole(cfg.optString("containerColor", "")) ?: MaterialTheme.colorScheme.surface
-    val titleColor     = parseColorOrRole(cfg.optString("titleColor", ""))     ?: MaterialTheme.colorScheme.onSurface
-    val subtitleColor  = parseColorOrRole(cfg.optString("subtitleColor", ""))  ?: titleColor.copy(alpha = 0.8f)
-    val actionsColor   = parseColorOrRole(cfg.optString("actionsColor", ""))   ?: titleColor
-
-    // Gradient opzionale (se presente ha priorità sul containerColor, ma viene ignorato se style=text)
-    var brush: Brush? = cfg.optJSONObject("gradient")?.let { brushFromJson(it) }
-
-    // Outline / Trasparenza legacy (compat)
-    var transparent = cfg.optBoolean("transparent", false)
-    var outlineObj = cfg.optJSONObject("outline")
-
-    // Se presente "style" uniforme, calcoliamo container/border coerenti e diamo priorità
-    if (styleKey.isNotBlank()) {
-        val (cont, _, borderW) = mapContainerColors(styleKey, tintKey, customC)
-        // style=text => trasparente, senza border. style=outlined => trasparente + border
-        transparent = styleKey == "text"
-        brush = if (transparent) null else brush // su 'text' disattiviamo il gradient
-        outlineObj = if (styleKey == "outlined") {
-            (outlineObj ?: JSONObject()).apply {
-                if (!has("color")) put("color", "outline")
-                if (!has("thickness")) put("thickness", borderW.value.toDouble())
-            }
-        } else null
-
-        // se non è text/outlined impostiamo container uniforme
-        if (!transparent && styleKey != "outlined") {
-            cfg.put("containerColor", toColorKey(cont))
-        }
+    // Legacy: gradient al livello topBar
+    cfg.optJSONObject("gradient")?.let { g ->
+        if (!containerFromCfg.has("gradient")) containerFromCfg.put("gradient", JSONObject(g.toString()))
+    }
+    // Legacy: containerColor al livello topBar
+    cfg.optString("containerColor","").takeIf { it.isNotBlank() }?.let { col ->
+        if (!containerFromCfg.has("customColor")) containerFromCfg.put("customColor", col)
+        if (!containerFromCfg.has("style")) containerFromCfg.put("style", "surface")
     }
 
-    // Dopo eventuale override 'style'
-    val containerColor = parseColorOrRole(cfg.optString("containerColor", "")) ?: containerColorBase
-    val hasOutline = outlineObj != null
-    val outlineColor = parseColorOrRole(outlineObj?.optString("color")) ?: MaterialTheme.colorScheme.outline
-    val outlineThickness = Dp(outlineObj?.optDouble("thickness", 1.0)?.toFloat() ?: 1f)
+    // Risolvi ora il contenitore (per colori contenuto default)
+    val resolved = resolveContainer(containerFromCfg)
 
-    val actions = cfg.optJSONArray("actions") ?: JSONArray()
+    // Colori testo/icone (con override espliciti se presenti)
+    val titleColor   = parseColorOrRole(cfg.optString("titleColor", "")) ?: resolved.contentColor
+    val actionsColor = parseColorOrRole(cfg.optString("actionsColor", "")) ?: titleColor
 
     val colors = TopAppBarDefaults.topAppBarColors(
-        containerColor = Color.Transparent,
+        containerColor = Color.Transparent, // sfondo gestito da StyledContainer
         titleContentColor = titleColor,
         actionIconContentColor = actionsColor,
         navigationIconContentColor = actionsColor
     )
 
-    val titleStyleBase = when (variant) {
-        "large" -> MaterialTheme.typography.headlineSmall
-        "medium" -> MaterialTheme.typography.titleLarge
-        else -> MaterialTheme.typography.titleMedium
-    }
-    val titleStyle = applyTextStyleOverridesPrefixed(cfg, "title", titleStyleBase)
-    val subtitleStyle = applyTextStyleOverridesPrefixed(cfg, "subtitle", MaterialTheme.typography.labelMedium)
-
-    Surface(tonalElevation = tonalElevation, shape = rounded) {
-        val bgBase = when {
-            cfg.optString("style","").equals("text", ignoreCase = true) -> Modifier
-            cfg.optBoolean("transparent", false) -> Modifier
-            brush != null -> Modifier.background(brush!!)
-            else -> Modifier.background(containerColor)
+    StyledContainer(
+        cfg = containerFromCfg,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(0.dp)
+    ) {
+        when (variant) {
+            "center" -> CenterAlignedTopAppBar(
+                title = {
+                    if (subtitle.isBlank()) Text(title)
+                    else Column {
+                        Text(title, style = MaterialTheme.typography.titleLarge)
+                        Text(subtitle, style = MaterialTheme.typography.labelMedium, color = titleColor.copy(alpha = 0.8f))
+                    }
+                },
+                actions = {
+                    for (i in 0 until actions.length()) {
+                        val a = actions.optJSONObject(i) ?: continue
+                        IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                            NamedIconEx(a.optString("icon", "more_vert"), null)
+                        }
+                    }
+                },
+                colors = colors,
+                scrollBehavior = scrollBehavior
+            )
+            "medium" -> MediumTopAppBar(
+                title = {
+                    if (subtitle.isBlank()) Text(title)
+                    else Column {
+                        Text(title, style = MaterialTheme.typography.titleLarge)
+                        Text(subtitle, style = MaterialTheme.typography.labelMedium, color = titleColor.copy(alpha = 0.8f))
+                    }
+                },
+                actions = {
+                    for (i in 0 until actions.length()) {
+                        val a = actions.optJSONObject(i) ?: continue
+                        IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                            NamedIconEx(a.optString("icon", "more_vert"), null)
+                        }
+                    }
+                },
+                colors = colors,
+                scrollBehavior = scrollBehavior
+            )
+            "large" -> LargeTopAppBar(
+                title = {
+                    if (subtitle.isBlank()) Text(title)
+                    else Column {
+                        Text(title, style = MaterialTheme.typography.titleLarge)
+                        Text(subtitle, style = MaterialTheme.typography.labelMedium, color = titleColor.copy(alpha = 0.8f))
+                    }
+                },
+                actions = {
+                    for (i in 0 until actions.length()) {
+                        val a = actions.optJSONObject(i) ?: continue
+                        IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                            NamedIconEx(a.optString("icon", "more_vert"), null)
+                        }
+                    }
+                },
+                colors = colors,
+                scrollBehavior = scrollBehavior
+            )
+            else -> TopAppBar(
+                title = {
+                    if (subtitle.isBlank()) Text(title)
+                    else Column {
+                        Text(title, style = MaterialTheme.typography.titleLarge)
+                        Text(subtitle, style = MaterialTheme.typography.labelMedium, color = titleColor.copy(alpha = 0.8f))
+                    }
+                },
+                actions = {
+                    for (i in 0 until actions.length()) {
+                        val a = actions.optJSONObject(i) ?: continue
+                        IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                            NamedIconEx(a.optString("icon", "more_vert"), null)
+                        }
+                    }
+                },
+                colors = colors,
+                scrollBehavior = scrollBehavior
+            )
         }
-        val withBorder = if (hasOutline) bgBase.border(BorderStroke(outlineThickness, outlineColor), rounded) else bgBase
 
-        Box(withBorder) {
-            val titleSlot: @Composable () -> Unit = {
-                if (subtitle.isBlank()) {
-                    Text(title, style = titleStyle, color = titleColor)
-                } else {
-                    Column {
-                        Text(title, style = titleStyle, color = titleColor)
-                        Text(subtitle, style = subtitleStyle, color = subtitleColor)
-                    }
-                }
-            }
-
-            val actionsSlot: @Composable RowScope.() -> Unit = {
-                for (i in 0 until actions.length()) {
-                    val a = actions.optJSONObject(i) ?: continue
-                    IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-                        NamedIconEx(a.optString("icon", "more_vert"), null)
-                    }
-                }
-            }
-
-            when (variant) {
-                "center" -> CenterAlignedTopAppBar(
-                    title = { titleSlot() },
-                    actions = actionsSlot,
-                    colors = colors,
-                    scrollBehavior = scrollBehavior
-                )
-                "medium" -> MediumTopAppBar(
-                    title = { titleSlot() },
-                    actions = actionsSlot,
-                    colors = colors,
-                    scrollBehavior = scrollBehavior
-                )
-                "large" -> LargeTopAppBar(
-                    title = { titleSlot() },
-                    actions = actionsSlot,
-                    colors = colors,
-                    scrollBehavior = scrollBehavior
-                )
-                else -> TopAppBar(
-                    title = { titleSlot() },
-                    actions = actionsSlot,
-                    colors = colors,
-                    scrollBehavior = scrollBehavior
-                )
-            }
-
-            if (cfg.optBoolean("divider", false)) {
-                Divider(Modifier.align(Alignment.BottomCenter))
-            }
+        // Divider opzionale (compat legacy)
+        if (cfg.optBoolean("divider", false)) {
+            Divider(Modifier.align(Alignment.BottomCenter))
         }
     }
 }
+
+
 
 @Composable
 fun UiScreen(
@@ -388,57 +417,108 @@ private fun pressEffectModifier(
     return mod to src
 }
 
+
 /* ========= Unified container style resolver (background/border/shape) ========= */
 
+private enum class BorderMode { None, Full, TopBottom }
+
 private data class ResolvedContainer(
-    val containerColor: Color,
+    val background: Color,
     val contentColor: Color,
-    val border: BorderStroke?,
     val shape: Shape,
     val elevation: Dp,
-    val styleKey: String
+    val borderColor: Color,
+    val borderWidth: Dp,
+    val borderMode: BorderMode,
+    val brush: Brush?
 )
 
 @Composable
-private fun resolveContainer(
-    cfg: JSONObject?,
-    defaultShape: Shape = RoundedCornerShape(12.dp),
-    fallbackStyle: String? = null
-): ResolvedContainer? {
-    if (cfg == null && fallbackStyle == null) return null
+private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
+    val style   = cfg?.optString("style", "surface") ?: "surface"  // "primary","tonal","outlined","text","surface"
+    val tint    = cfg?.optString("tint", "default") ?: "default"
+    val custom  = cfg?.optString("customColor","")?.takeIf { it.isNotBlank() }
+    val (bg, content, defaultBorder) = mapContainerColors(style, tint, custom)
 
-    val style = cfg?.optString("style", fallbackStyle ?: "text") ?: "text"
-    val tint = cfg?.optString("tint", "default") ?: "default"
-    val custom = parseColorOrRole(cfg?.optString("customColor", ""))
-
-    val (containerColor, contentColor, borderW) = mapContainerColors(style, tint, custom)
-
-    val shapeKey = cfg?.optString("shape", "rounded") ?: "rounded"
-    val corner = Dp(cfg?.optDouble("corner", 12.0)?.toFloat() ?: 12f)
+    val shapeKey = cfg?.optString("shape","rounded") ?: "rounded"
+    val cornerDp = Dp(cfg?.optDouble("corner", 12.0)?.toFloat() ?: 12f)
     val shape = when (shapeKey) {
         "pill" -> RoundedCornerShape(50)
-        "cut" -> CutCornerShape(corner)
-        else -> RoundedCornerShape(corner)
+        "cut"  -> CutCornerShape(cornerDp)
+        else   -> RoundedCornerShape(cornerDp)
     }
 
-    val borderColor = parseColorOrRole(cfg?.optString("borderColor","")) ?: contentColor
-    val borderThickness = Dp(
-        cfg?.optDouble("borderThicknessDp", borderW.value.toDouble())?.toFloat() ?: borderW.value
-    )
-    val border = when (style) {
-        "outlined" -> BorderStroke(borderThickness, borderColor)
-        else -> null
+    val defaultElev = when (style) {
+        "surface","primary","tonal" -> 1.0
+        else -> 0.0
+    }
+    val elevation = Dp((cfg?.optDouble("elevationDp", defaultElev) ?: defaultElev).toFloat())
+
+    val borderMode = when (cfg?.optString("borderMode","")) {
+        "topBottom" -> BorderMode.TopBottom
+        "full"      -> BorderMode.Full
+        else        -> if (style == "outlined") BorderMode.Full else BorderMode.None
+    }
+    val borderColor = parseColorOrRole(cfg?.optString("borderColor","")) ?: defaultBorder
+    val borderW = Dp((cfg?.optDouble("borderThicknessDp", if (borderMode != BorderMode.None) 1.0 else 0.0) ?: 0.0).toFloat())
+
+    // Gradient opzionale
+    val brush = cfg?.optJSONObject("gradient")?.let { g ->
+        val arr = g.optJSONArray("colors")
+        val cols = (0 until (arr?.length() ?: 0)).mapNotNull { i -> parseColorOrRole(arr!!.optString(i)) }
+        if (cols.size >= 2) {
+            if (g.optString("direction","vertical") == "horizontal") Brush.horizontalGradient(cols)
+            else Brush.verticalGradient(cols)
+        } else null
     }
 
-    val elevation = Dp(cfg?.optDouble("elevationDp", 0.0)?.toFloat() ?: 0f)
     return ResolvedContainer(
-        containerColor = if (style == "text" || style == "outlined") Color.Transparent else containerColor,
-        contentColor = contentColor,
-        border = border,
+        background = bg,
+        contentColor = content,
         shape = shape,
         elevation = elevation,
-        styleKey = style
+        borderColor = borderColor,
+        borderWidth = borderW,
+        borderMode = borderMode,
+        brush = if (style == "text") null else brush // "text" resta trasparente
     )
+}
+
+private fun Modifier.topBottomBorder(color: Color, thickness: Dp): Modifier = drawBehind {
+    val sw = thickness.toPx().coerceAtLeast(1f)
+    val yTop = sw / 2f
+    val yBot = size.height - sw / 2f
+    drawLine(color, Offset(0f, yTop), Offset(size.width, yTop), strokeWidth = sw)
+    drawLine(color, Offset(0f, yBot), Offset(size.width, yBot), strokeWidth = sw)
+}
+
+@Composable
+private fun StyledContainer(
+    cfg: JSONObject?,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    content: @Composable () -> Unit
+) {
+    val r = resolveContainer(cfg)
+    val base = modifier
+        .shadow(r.elevation, r.shape, clip = false)
+        .clip(r.shape)
+        .then(if (r.brush != null) Modifier.background(r.brush!!) else Modifier.background(r.background))
+        .then(
+            when (r.borderMode) {
+                BorderMode.Full      -> Modifier.border(BorderStroke(r.borderWidth, r.borderColor), r.shape)
+                BorderMode.TopBottom -> Modifier.topBottomBorder(r.borderColor, r.borderWidth)
+                BorderMode.None      -> Modifier
+            }
+        )
+        .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+
+    CompositionLocalProvider(LocalContentColor provides r.contentColor) {
+        Column(base.padding(contentPadding)) {
+            content()
+        }
+    }
 }
 
 @Composable
@@ -569,7 +649,8 @@ private fun RenderRootScaffold(
                         }
                     }
                 }
-            }
+            },
+            containerColor = Color.Transparent
         ) { innerPadding ->
             val blocks = layout.optJSONArray("blocks") ?: JSONArray()
 
@@ -1162,9 +1243,7 @@ private fun RenderBlock(
 
         "Card" -> {
             val clickAction = block.optString("clickActionId","")
-            val press = block.optString("pressEffect","none")
-            val (pressMod, interaction) = pressEffectModifier(path, press, enabled = clickAction.isNotBlank() && !designerMode)
-
+        
             val innerContent: @Composable () -> Unit = {
                 val innerBlocks = block.optJSONArray("blocks") ?: JSONArray()
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1175,26 +1254,28 @@ private fun RenderBlock(
                     }
                 }
             }
-
-            val baseClickable = if (clickAction.isNotBlank() && !designerMode)
-                Modifier.then(pressMod).clickable(interactionSource = interaction, indication = null) { dispatch(clickAction) }
-            else Modifier
-
+        
+            val legacyVariant = block.optString("variant","")
+            val containerCfg = block.optJSONObject("container") ?: JSONObject().apply {
+                when (legacyVariant) {
+                    "outlined" -> put("style","outlined")
+                    "filled"   -> put("style","primary")
+                    "elevated" -> { put("style","surface"); put("elevationDp", 2) }
+                    else       -> put("style","surface")
+                }
+            }
+        
+            val baseMod = Modifier
+                .fillMaxWidth()
+                .then(if (clickAction.isNotBlank() && !designerMode) Modifier.clickable { dispatch(clickAction) } else Modifier)
+        
             ContainerOverlayGear(designerMode, path, onOpenInspector) {
-                val containerCfg = block.optJSONObject("container")
-                if (containerCfg != null) {
-                    StyledSurface(cfg = containerCfg, modifier = baseClickable) {
-                        Column(Modifier.padding(12.dp)) { innerContent() }
-                    }
-                } else {
-                    // Fallback legacy Card varianti
-                    val variant = block.optString("variant","elevated")
-                    val cardMod = Modifier.then(baseClickable)
-                    when (variant) {
-                        "outlined" -> OutlinedCard(cardMod) { Column(Modifier.padding(12.dp)) { innerContent() } }
-                        "filled"   -> Card(cardMod)        { Column(Modifier.padding(12.dp)) { innerContent() } }
-                        else       -> ElevatedCard(cardMod){ Column(Modifier.padding(12.dp)) { innerContent() } }
-                    }
+                StyledContainer(
+                    cfg = containerCfg,
+                    modifier = baseMod,
+                    contentPadding = PaddingValues(12.dp)
+                ) {
+                    innerContent()
                 }
             }
         }
@@ -2768,38 +2849,49 @@ private fun IconText(
 
 /* ---- Unified color mapping for containers (riusa la logica dei bottoni) ---- */
 @Composable
-private fun mapContainerColors(style: String, tint: String, custom: Color?): Triple<Color, Color, Dp> {
+private fun mapContainerColors(style: String, tint: String, customHex: String?): Triple<Color, Color, Color> {
     val cs = MaterialTheme.colorScheme
-
-    // Base palette per tint
     val (baseContainer, baseContent) = when (tint) {
         "success" -> cs.tertiary to cs.onTertiary
-        "warning" -> Color(0xFFFFD54F) to Color(0xFF3E2723)
+        "warning" -> Color(0xFFFFF3CD) to Color(0xFF664D03)
         "error"   -> cs.errorContainer to cs.onErrorContainer
         else      -> cs.primary to cs.onPrimary
     }
 
-    return when (style) {
-        "surface" -> Triple(cs.surface, cs.onSurface, 0.dp)
-        "outlined" -> Triple(Color.Transparent, when (tint) {
+    var container = when (style) {
+        "tonal"    -> cs.secondaryContainer
+        "outlined",
+        "text"     -> Color.Transparent
+        "surface"  -> cs.surface
+        else       -> baseContainer // "primary" = filled
+    }
+
+    var content = when (style) {
+        "tonal"    -> cs.onSecondaryContainer
+        "outlined",
+        "text"     -> when (tint) {
             "success" -> cs.tertiary
             "warning" -> Color(0xFF8D6E63)
             "error"   -> cs.error
             else      -> cs.primary
-        }, 1.dp)
-        "text" -> Triple(Color.Transparent, when (tint) {
-            "success" -> cs.tertiary
-            "warning" -> Color(0xFF8D6E63)
-            "error"   -> cs.error
-            else      -> cs.primary
-        }, 0.dp)
-        "tonal" -> Triple(cs.secondaryContainer, cs.onSecondaryContainer, 0.dp)
-        // "primary" / default filled
-        else -> {
-            val cont = custom ?: baseContainer
-            Triple(cont, bestOnColor(cont), 0.dp)
+        }
+        "surface"  -> cs.onSurface
+        else       -> baseContent
+    }
+
+    customHex?.let { hex ->
+        parseColorOrRole(hex)?.let { c ->
+            container = c
+            content = bestOnColor(c)
         }
     }
+
+    val defaultBorder = when (style) {
+        "outlined" -> content
+        else       -> parseColorOrRole("outline") ?: content
+    }
+
+    return Triple(container, content, defaultBorder)
 }
 
 /* Back-compat: bottoni continuano a usare questa funzione */
@@ -3098,31 +3190,6 @@ private fun NamedIconEx(name: String?, contentDescription: String?) {
 
 /* ---- Color parsing / pickers ---- */
 
-@Composable
-private fun parseColorOrRole(value: String?): Color? {
-    if (value.isNullOrBlank()) return null
-    val v = value.trim()
-    if (v.equals("transparent", ignoreCase = true)) return Color.Transparent
-    if (v.startsWith("#") && (v.length == 7 || v.length == 9)) {
-        return try { Color(android.graphics.Color.parseColor(v)) } catch (_: Exception) { null }
-    }
-    val cs = MaterialTheme.colorScheme
-    return when (v) {
-        "primary" -> cs.primary
-        "onPrimary" -> cs.onPrimary
-        "secondary" -> cs.secondary
-        "onSecondary" -> cs.onSecondary
-        "tertiary" -> cs.tertiary
-        "onTertiary" -> cs.onTertiary
-        "error" -> cs.error
-        "onError" -> cs.onError
-        "surface" -> cs.surface
-        "surfaceVariant" -> cs.surfaceVariant
-        "onSurface" -> cs.onSurface
-        "outline" -> cs.outline
-        else -> null
-    }
-}
 
 private val NAMED_SWATCHES = linkedMapOf(
     "White" to 0xFFFFFFFF.toInt(), "Black" to 0xFF000000.toInt(),
