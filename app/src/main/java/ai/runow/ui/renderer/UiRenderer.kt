@@ -3732,19 +3732,3 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
 
     return st
 }
-
-/* =========================================================
- * FONT CATALOG MINIMO (sicuro, retro‑compatibile)
- * ========================================================= */
-private object FontCatalog {
-    // Puoi estendere questa lista con famiglie custom quando aggiungi i .ttf in res/font
-    val FONT_FAMILY_OPTIONS = listOf("(default)","sans","serif","monospace","cursive")
-
-    fun resolveFontFamily(key: String): FontFamily? = when (key) {
-        "sans" -> FontFamily.SansSerif
-        "serif" -> FontFamily.Serif
-        "monospace" -> FontFamily.Monospace
-        "cursive" -> FontFamily.Cursive
-        else -> null // per chiavi custom, aggiungi qui la risoluzione da risorsa
-    }
-}
