@@ -12,6 +12,10 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -35,6 +39,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,8 +47,10 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -52,6 +59,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,6 +68,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.res.ResourcesCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.graphics.BitmapFactory
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.max
@@ -218,7 +230,8 @@ private data class ResolvedContainer(
 )
 
 private data class BgImage(
-    val resId: Int,
+    val resId: Int?,          // preferito se presente
+    val uriString: String?,   // alternativamente URI
     val scale: ContentScale,
     val alpha: Float
 )
@@ -309,21 +322,21 @@ private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
         } else null
     }
 
-    // Immagine opzionale (solo resource locale "res:...")
+    // Immagine opzionale (res: o uri:/content:/file:)
     val bgImage = cfg?.optJSONObject("image")?.let { img ->
         val src = img.optString("source", "")
+        val scale = when (img.optString("contentScale","crop")) {
+            "fit" -> ContentScale.Fit
+            "fill" -> ContentScale.FillBounds
+            else -> ContentScale.Crop
+        }
+        val alpha = img.optDouble("alpha", 1.0).toFloat().coerceIn(0f, 1f)
         if (src.startsWith("res:")) {
             val ctx = LocalContext.current
             val id = ctx.resources.getIdentifier(src.removePrefix("res:"), "drawable", ctx.packageName)
-            if (id != 0) {
-                val scale = when (img.optString("contentScale","crop")) {
-                    "fit" -> ContentScale.Fit
-                    "fill" -> ContentScale.FillBounds
-                    else -> ContentScale.Crop
-                }
-                val alpha = img.optDouble("alpha", 1.0).toFloat().coerceIn(0f, 1f)
-                BgImage(id, scale, alpha)
-            } else null
+            if (id != 0) BgImage(id, null, scale, alpha) else null
+        } else if (src.startsWith("uri:") || src.startsWith("content:") || src.startsWith("file:")) {
+            BgImage(null, src.removePrefix("uri:"), scale, alpha)
         } else null
     }
 
@@ -374,13 +387,26 @@ private fun StyledContainer(
         Box(base) {
             // Immagine sotto al contenuto
             r.bgImage?.let { bg ->
-                Image(
-                    painter = painterResource(bg.resId),
-                    contentDescription = null,
-                    contentScale = bg.scale,
-                    modifier = Modifier.matchParentSize(),
-                    alpha = bg.alpha
-                )
+                if (bg.resId != null) {
+                    Image(
+                        painter = painterResource(bg.resId),
+                        contentDescription = null,
+                        contentScale = bg.scale,
+                        modifier = Modifier.matchParentSize(),
+                        alpha = bg.alpha
+                    )
+                } else if (!bg.uriString.isNullOrBlank()) {
+                    val bmp = rememberImageBitmapFromUri(bg.uriString)
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp,
+                            contentDescription = null,
+                            contentScale = bg.scale,
+                            modifier = Modifier.matchParentSize(),
+                            alpha = bg.alpha
+                        )
+                    }
+                }
             }
             Column(Modifier.padding(contentPadding)) {
                 content()
@@ -405,31 +431,47 @@ private fun BoxScope.RenderPageBackground(cfg: JSONObject?) {
     }
     val img = cfg?.optJSONObject("image")?.let { j ->
         val src = j.optString("source","")
+        val scale = when (j.optString("contentScale","fill")) {
+            "fit" -> ContentScale.Fit
+            "crop" -> ContentScale.Crop
+            else -> ContentScale.FillBounds
+        }
+        val alpha = j.optDouble("alpha", 1.0).toFloat().coerceIn(0f, 1f)
+
         if (src.startsWith("res:")) {
             val ctx = LocalContext.current
             val id = ctx.resources.getIdentifier(src.removePrefix("res:"), "drawable", ctx.packageName)
-            if (id != 0) {
-                val scale = when (j.optString("contentScale","fill")) {
-                    "fit" -> ContentScale.Fit
-                    "crop" -> ContentScale.Crop
-                    else -> ContentScale.FillBounds
-                }
-                val alpha = j.optDouble("alpha", 1.0).toFloat().coerceIn(0f, 1f)
-                Triple(id, scale, alpha)
-            } else null
+            if (id != 0) Triple("res", id.toString(), scale) to alpha else null
+        } else if (src.startsWith("uri:") || src.startsWith("content:") || src.startsWith("file:")) {
+            Triple("uri", src.removePrefix("uri:"), scale) to alpha
         } else null
     }
 
     // Layering: colore -> immagine -> gradient
     Box(Modifier.matchParentSize().background(color))
-    img?.let { (id, scale, alpha) ->
-        Image(
-            painter = painterResource(id),
-            contentDescription = null,
-            contentScale = scale,
-            modifier = Modifier.matchParentSize(),
-            alpha = alpha
-        )
+    img?.let { pair ->
+        val (info, alpha) = pair
+        val (kind, payload, scale) = info
+        if (kind == "res") {
+            Image(
+                painter = painterResource(payload.toInt()),
+                contentDescription = null,
+                contentScale = scale,
+                modifier = Modifier.matchParentSize(),
+                alpha = alpha
+            )
+        } else {
+            val bmp = rememberImageBitmapFromUri(payload)
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp,
+                    contentDescription = null,
+                    contentScale = scale,
+                    modifier = Modifier.matchParentSize(),
+                    alpha = alpha
+                )
+            }
+        }
     }
     brush?.let { b ->
         Box(Modifier.matchParentSize().background(b))
@@ -1302,24 +1344,44 @@ private fun RenderBlock(
             val corner = Dp(block.optDouble("corner", 12.0).toFloat())
             val scale = when (block.optString("contentScale","fit")) {
                 "crop" -> ContentScale.Crop
+                "fill" -> ContentScale.FillBounds
                 else   -> ContentScale.Fit
             }
 
-            val resId = if (source.startsWith("res:"))
+            val isRes = source.startsWith("res:")
+            val resId = if (isRes)
                 LocalContext.current.resources.getIdentifier(source.removePrefix("res:"), "drawable", LocalContext.current.packageName)
             else 0
 
             Surface(shape = RoundedCornerShape(corner), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
-                if (resId != 0) {
-                    Image(
-                        painter = painterResource(resId),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxWidth().height(height),
-                        contentScale = scale
-                    )
-                } else {
-                    Box(Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
-                        Text("Image: ${if (source.isBlank()) "(not set)" else source}", style = MaterialTheme.typography.labelMedium)
+                when {
+                    isRes && resId != 0 -> {
+                        Image(
+                            painter = painterResource(resId),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxWidth().height(height),
+                            contentScale = scale
+                        )
+                    }
+                    source.startsWith("uri:") || source.startsWith("content:") || source.startsWith("file:") -> {
+                        val bmp = rememberImageBitmapFromUri(source.removePrefix("uri:"))
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxWidth().height(height),
+                                contentScale = scale
+                            )
+                        } else {
+                            Box(Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
+                                Text("Image: (seleziona sorgente)", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                    else -> {
+                        Box(Modifier.fillMaxWidth().height(height), contentAlignment = Alignment.Center) {
+                            Text("Image: ${if (source.isBlank()) "(not set)" else source}", style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
             }
@@ -1889,11 +1951,11 @@ private fun PageInspectorPanel(page: JSONObject, onChange: () -> Unit) {
         Spacer(Modifier.width(8.dp)); Text("Abilita immagine di sfondo")
     }
     page.optJSONObject("image")?.let { img ->
-        val src = remember { mutableStateOf(img.optString("source","")) }
-        OutlinedTextField(
-            value = src.value,
-            onValueChange = { src.value = it; img.put("source", it); onChange() },
-            label = { Text("source (res:nome_drawable)") }
+        ImagePickerRow(
+            label = "source",
+            current = img.optString("source",""),
+            onChange = { src -> img.put("source", src); onChange() },
+            onClear = { img.put("source",""); onChange() }
         )
         var scale by remember { mutableStateOf(img.optString("contentScale","fill")) }
         ExposedDropdown(
@@ -1916,7 +1978,6 @@ private fun PageInspectorPanel(page: JSONObject, onChange: () -> Unit) {
 
 /* =========================================================
  * INSPECTOR dei vari BLOCCHI – esistenti
- * (ButtonRow/Toggle/Slider/ChipRow/Tabs/MetricsGrid/Progress/Alert/Image/SectionHeader/List)
  * ========================================================= */
 
 @Composable
@@ -2301,10 +2362,13 @@ private fun AlertInspectorPanel(working: JSONObject, onChange: () -> Unit) {
 private fun ImageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     Text("Image – Proprietà", style = MaterialTheme.typography.titleMedium)
 
-    val source = remember { mutableStateOf(working.optString("source","")) }
-    OutlinedTextField(value = source.value, onValueChange = {
-        source.value = it; working.put("source", it); onChange()
-    }, label = { Text("source (es. res:ic_launcher_foreground)") })
+    // Sorgente con picker cartelle
+    ImagePickerRow(
+        label = "source",
+        current = working.optString("source",""),
+        onChange = { src -> working.put("source", src); onChange() },
+        onClear = { working.put("source",""); onChange() }
+    )
 
     val height = remember { mutableStateOf(working.optDouble("heightDp", 160.0).toString()) }
     StepperField("height (dp)", height, 4.0) { v ->
@@ -2319,7 +2383,7 @@ private fun ImageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     var scale by remember { mutableStateOf(working.optString("contentScale","fit")) }
     ExposedDropdown(
         value = scale, label = "contentScale",
-        options = listOf("fit","crop")
+        options = listOf("fit","crop","fill")
     ) { sel -> scale = sel; working.put("contentScale", sel); onChange() }
 }
 
@@ -2394,6 +2458,14 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
         onChange()
     }
 
+    // Font via risorsa opzionale (res:font_name)
+    val fontRes = remember { mutableStateOf(working.optString("fontRes","")) }
+    OutlinedTextField(
+        value = fontRes.value,
+        onValueChange = { v -> fontRes.value = v; if (v.isBlank()) working.remove("fontRes") else working.put("fontRes", v); onChange() },
+        label = { Text("fontRes (es. res:inter_regular)") }
+    )
+
     val textColor = remember { mutableStateOf(working.optString("textColor","")) }
     NamedColorPickerPlus(current = textColor.value, label = "textColor") { hex ->
         textColor.value = hex
@@ -2402,7 +2474,7 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
     }
 }
 
-/* --------- RIPRISTINATO: ListInspectorPanel (mancante) --------- */
+/* --------- ListInspectorPanel --------- */
 @Composable
 private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     Text("List – Proprietà testo", style = MaterialTheme.typography.titleMedium)
@@ -2448,6 +2520,13 @@ private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
         if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
         onChange()
     }
+
+    val fontRes = remember { mutableStateOf(working.optString("fontRes","")) }
+    OutlinedTextField(
+        value = fontRes.value,
+        onValueChange = { v -> fontRes.value = v; if (v.isBlank()) working.remove("fontRes") else working.put("fontRes", v); onChange() },
+        label = { Text("fontRes (es. res:lato_regular)") }
+    )
 
     val textColor = remember { mutableStateOf(working.optString("textColor","")) }
     NamedColorPickerPlus(
@@ -2700,11 +2779,11 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         Spacer(Modifier.width(8.dp)); Text("Abilita immagine")
     }
     container.optJSONObject("image")?.let { img ->
-        val src = remember { mutableStateOf(img.optString("source","")) }
-        OutlinedTextField(
-            value = src.value,
-            onValueChange = { src.value = it; img.put("source", it); onChange() },
-            label = { Text("source (res:nome_drawable)") }
+        ImagePickerRow(
+            label = "source",
+            current = img.optString("source",""),
+            onChange = { src -> img.put("source", src); onChange() },
+            onClear = { img.put("source",""); onChange() }
         )
         var scale by remember { mutableStateOf(img.optString("contentScale","crop")) }
         ExposedDropdown(
@@ -2902,16 +2981,134 @@ private fun StepperField(
     }
 }
 
+/* ---- Image Picker row (riusabile) ---- */
+
+@Composable
+private fun ImagePickerRow(
+    label: String,
+    current: String,
+    onChange: (String) -> Unit,
+    onClear: () -> Unit,
+    previewHeight: Dp = 80.dp
+) {
+    val ctx = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) { /* permesso già preso o non necessario */ }
+            onChange("uri:${uri}")
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = current,
+                onValueChange = { onChange(it) },
+                label = { Text(label) },
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedButton(onClick = { launcher.launch(arrayOf("image/*")) }) { Text("Sfoglia…") }
+            TextButton(onClick = { onClear() }) { Text("Rimuovi") }
+        }
+        if (current.isNotBlank()) {
+            val isRes = current.startsWith("res:")
+            val isUri = current.startsWith("uri:") || current.startsWith("content:") || current.startsWith("file:")
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(previewHeight)
+                    .clip(RoundedCornerShape(8.dp))
+            ) {
+                when {
+                    isRes -> {
+                        val id = ctx.resources.getIdentifier(current.removePrefix("res:"), "drawable", ctx.packageName)
+                        if (id != 0) {
+                            Image(
+                                painter = painterResource(id),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize()
+                            )
+                        }
+                    }
+                    isUri -> {
+                        val bmp = rememberImageBitmapFromUri(current.removePrefix("uri:"))
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* ---- Caricamento bitmap da URI ---- */
+
+@Composable
+private fun rememberImageBitmapFromUri(uriString: String?): ImageBitmap? {
+    val ctx = LocalContext.current
+    val key = uriString ?: ""
+    val state by produceState<ImageBitmap?>(null, key) {
+        if (key.isBlank()) {
+            value = null
+            return@produceState
+        }
+        val real = key
+        value = withContext(Dispatchers.IO) {
+            try {
+                val uri = Uri.parse(real)
+                ctx.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input)?.asImageBitmap()
+                }
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+    return state
+}
+
 /* ---- Icon helper ---- */
 
 @Composable
 private fun NamedIconEx(name: String?, contentDescription: String?) {
     val __ctx = LocalContext.current
-    if (name?.startsWith("res:") == true) {
+    if (name.isNullOrBlank()) {
+        Text("."); return
+    }
+
+    // icona da risorsa drawable
+    if (name.startsWith("res:")) {
         val resName = name.removePrefix("res:")
         val id = __ctx.resources.getIdentifier(resName, "drawable", __ctx.packageName)
         if (id != 0) { Icon(painterResource(id), contentDescription); return }
     }
+
+    // icona da uri/file/content (raster)
+    if (name.startsWith("uri:") || name.startsWith("content:") || name.startsWith("file:")) {
+        val bmp = rememberImageBitmapFromUri(name.removePrefix("uri:"))
+        if (bmp != null) {
+            Image(
+                bitmap = bmp,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(24.dp)
+            )
+            return
+        }
+    }
+
+    // icone Material note
     val image = when (name) {
         "settings" -> Icons.Filled.Settings
         "more_vert" -> Icons.Filled.MoreVert
@@ -2932,6 +3129,7 @@ private fun NamedIconEx(name: String?, contentDescription: String?) {
         "tab" -> Icons.Filled.Tab
         "grid_on" -> Icons.Filled.GridOn
         "toggle_on" -> Icons.Filled.ToggleOn
+        "bolt" -> Icons.Filled.Bolt
         else -> null
     }
     if (image != null) Icon(image, contentDescription) else Text(".")
@@ -3314,9 +3512,10 @@ private fun newList() = JSONObject(
 )
 
 /* =========================================================
- * TEXT STYLE OVERRIDES
+ * TEXT STYLE OVERRIDES (ora supporta anche fontRes)
  * ========================================================= */
 
+@Composable
 private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
     var st = base
 
@@ -3338,16 +3537,30 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
     }
     if (weight != null) st = st.copy(fontWeight = weight)
 
-    // famiglia
+    // famiglia rapida
     val familyKey = node.optString("fontFamily", "")
-    val family = when (familyKey) {
+    val familyQuick = when (familyKey) {
         "serif" -> FontFamily.Serif
         "monospace" -> FontFamily.Monospace
         "cursive" -> FontFamily.Cursive
         "sans" -> FontFamily.SansSerif
         else -> null
     }
-    if (family != null) st = st.copy(fontFamily = family)
+    if (familyQuick != null) st = st.copy(fontFamily = familyQuick)
+
+    // font da risorsa (res:font_name) – se presente, sovrascrive
+    val fontRes = node.optString("fontRes","")
+    if (fontRes.startsWith("res:")) {
+        val ctx = LocalContext.current
+        val id = ctx.resources.getIdentifier(fontRes.removePrefix("res:"), "font", ctx.packageName)
+        if (id != 0) {
+            try {
+                ResourcesCompat.getFont(ctx, id)?.let { tf ->
+                    st = st.copy(fontFamily = FontFamily(tf))
+                }
+            } catch (_: Exception) { /* fallback silenzioso */ }
+        }
+    }
 
     return st
 }
