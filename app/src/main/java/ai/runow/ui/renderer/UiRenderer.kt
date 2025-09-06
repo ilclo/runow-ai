@@ -2137,7 +2137,7 @@ private fun ChipRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     var fontWeight by remember { mutableStateOf(working.optString("fontWeight","")) }
     ExposedDropdown(
         value = if (fontWeight.isBlank()) "(default)" else fontWeight, label = "fontWeight",
-        options = listOf("(default)","w300","w400","w500","w600","w700")
+        options = listOf("w300","w400","w500","w600","w700","(default)")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontWeight = v
@@ -2147,7 +2147,7 @@ private fun ChipRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) }
     ExposedDropdown(
         value = if (fontFamily.isBlank()) "(default)" else fontFamily, label = "fontFamily",
-        options = listOf("(default)","sans","serif","monospace","cursive")
+        options = listOf("sans","serif","monospace","cursive","(default)")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontFamily = v
@@ -2375,7 +2375,7 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
     ExposedDropdown(
         value = if (fontWeight.isBlank()) "(default)" else fontWeight,
         label = "fontWeight",
-        options = listOf("(default)","w300","w400","w500","w600","w700")
+        options = listOf("w300","w400","w500","w600","w700","(default)")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontWeight = v
@@ -2386,7 +2386,7 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
     var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) }
     ExposedDropdown(
         value = if (fontFamily.isBlank()) "(default)" else fontFamily, label = "fontFamily",
-        options = listOf("(default)","sans","serif","monospace","cursive")
+        options = listOf("sans","serif","monospace","cursive","(default)")
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontFamily = v
@@ -2401,6 +2401,65 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
         onChange()
     }
 }
+
+/* --------- RIPRISTINATO: ListInspectorPanel (mancante) --------- */
+@Composable
+private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+    Text("List – Proprietà testo", style = MaterialTheme.typography.titleMedium)
+
+    val textSize = remember { mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }) }
+    ExposedDropdown(
+        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
+        label = "textSize (sp)",
+        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        textSize.value = v
+        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
+        onChange()
+    }
+
+    var align by remember { mutableStateOf(working.optString("align","start")) }
+    ExposedDropdown(
+        value = align, label = "align",
+        options = listOf("start","center","end")
+    ) { sel -> align = sel; working.put("align", sel); onChange() }
+
+    var fontFamily by remember { mutableStateOf(working.optString("fontFamily", "")) }
+    ExposedDropdown(
+        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+        label = "fontFamily",
+        options = listOf("sans","serif","monospace","cursive","(default)")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontFamily = v
+        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
+        onChange()
+    }
+
+    var fontWeight by remember { mutableStateOf(working.optString("fontWeight", "")) }
+    ExposedDropdown(
+        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+        label = "fontWeight",
+        options = listOf("w300","w400","w500","w600","w700","(default)")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontWeight = v
+        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
+        onChange()
+    }
+
+    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
+    NamedColorPickerPlus(
+        current = textColor.value,
+        label = "textColor"
+    ) { hex ->
+        textColor.value = hex
+        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
+        onChange()
+    }
+}
+/* --------------------------------------------------------------- */
 
 @Composable
 private fun TopBarInspectorPanel(topBar: JSONObject, onChange: () -> Unit) {
