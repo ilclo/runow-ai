@@ -15,10 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,9 +27,9 @@ import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 
-// -----------------------------
-// Dispatch wrapper per side panels
-// -----------------------------
+/* ---------------------------------------------------------
+ * Dispatch wrapper per side panels
+ * --------------------------------------------------------- */
 internal fun wrapDispatchForSidePanels(
     openPanelSetter: (String?) -> Unit,
     appDispatch: (String) -> Unit
@@ -44,11 +41,11 @@ internal fun wrapDispatchForSidePanels(
     }
 }
 
-// -----------------------------
-// Overlay che rende i pannelli laterali runtime
-// layout.json deve avere un array "sidePanels": [{ id, side, width, height, container, items }]
-// side: "left" | "right" | "top"
-// -----------------------------
+/* ---------------------------------------------------------
+ * Overlay che rende i pannelli laterali runtime
+ * layout.json: "sidePanels": [{ id, title?, side, width, height, container, items, scrimAlpha?, animMs? }]
+ * side: "left" | "right" | "top"
+ * --------------------------------------------------------- */
 @Composable
 internal fun RenderSidePanelsOverlay(
     layout: JSONObject,
@@ -71,9 +68,11 @@ internal fun RenderSidePanelsOverlay(
     val containerCfg = panel.optJSONObject("container")
     val items = panel.optJSONArray("items") ?: JSONArray()
 
+    // Scrim
     val scrimAlpha = panel.optDouble("scrimAlpha", 0.25).toFloat().coerceIn(0f, 1f)
     val scrimColor = Color.Black.copy(alpha = scrimAlpha)
 
+    // Animazioni
     val animMs = panel.optInt("animMs", 240).coerceIn(120, 600)
     val enter = when (side) {
         "right" -> slideInHorizontally(animationSpec = tween(animMs)) { it } + fadeIn()
@@ -86,6 +85,7 @@ internal fun RenderSidePanelsOverlay(
         else    -> slideOutHorizontally(animationSpec = tween(animMs)) { -it } + fadeOut()
     }
 
+    // Menù raccolti per i blocks del pannello
     val menus = remember(layout) { collectMenus(layout) }
 
     Box(
@@ -93,6 +93,7 @@ internal fun RenderSidePanelsOverlay(
             .fillMaxSize()
             .background(color = Color.Transparent)
     ) {
+        // SCRIM cliccabile per chiudere
         AnimatedVisibility(
             visible = true,
             enter = fadeIn(animationSpec = tween(animMs)),
@@ -106,6 +107,7 @@ internal fun RenderSidePanelsOverlay(
             )
         }
 
+        // PANNELLO
         val contentAlign = when (side) {
             "right" -> Alignment.CenterEnd
             "top" -> Alignment.TopCenter
@@ -125,6 +127,7 @@ internal fun RenderSidePanelsOverlay(
                     width = if (side == "top") Dp.Unspecified else widthDp,
                     height = if (side == "top") heightDp else Dp.Unspecified
                 ) {
+                    // Header opzionale (titolo + close)
                     val title = panel.optString("title", "")
                     if (title.isNotBlank()) {
                         Row(
@@ -141,6 +144,7 @@ internal fun RenderSidePanelsOverlay(
                         }
                     }
 
+                    // Contenuto scrollabile: blocks del pannello
                     val scroll = rememberScrollState()
                     Column(
                         Modifier
@@ -159,9 +163,7 @@ internal fun RenderSidePanelsOverlay(
                                 uiState = mutableMapOf(),
                                 designerMode = false,
                                 path = path,
-                                menus = menus,
-                                onSelect = { },
-                                onOpenInspector = { }
+                                menus = menus
                             )
                         }
                     }
@@ -171,6 +173,9 @@ internal fun RenderSidePanelsOverlay(
     }
 }
 
+/* ---------------------------------------------------------
+ * Contenitore pannello (coerente con StyledContainer)
+ * --------------------------------------------------------- */
 @Composable
 private fun PanelContainer(
     cfg: JSONObject?,
