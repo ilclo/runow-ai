@@ -5,17 +5,16 @@
 
 package ai.runow.ui.renderer
 
-import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -40,10 +39,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -57,12 +58,8 @@ import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.round
 
 /* =========================================================
@@ -72,7 +69,7 @@ import kotlin.math.round
 @Composable
 fun DesignerRoot() {
     val uiState = remember { mutableMapOf<String, Any>() }
-    val dispatch: (String) -> Unit = { /* TODO routing azioni app */ }
+    val dispatch: (String) -> Unit = { /* route azioni app */ }
     UiScreen(
         screenName = "home",
         dispatch = dispatch,
@@ -112,7 +109,7 @@ fun UiScreen(
         appDispatch = dispatch
     )
 
-    // overlay designer opzionale (qui teniamo solo la levetta)
+    // toggle “designer” (sola levetta)
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
     var overlayHeightPx by remember { mutableStateOf(0) }
     val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
@@ -136,7 +133,7 @@ fun UiScreen(
             dispatch = localDispatch
         )
 
-        // Knob commutatore (solo estetico)
+        // Knob commutatore
         DesignSwitchKnob(
             isDesigner = designMode,
             onToggle = { designMode = !designMode }
@@ -154,17 +151,16 @@ private fun BoxScope.DesignSwitchKnob(
 ) {
     var offsetY by remember { mutableStateOf(0f) }
     val maxDragPx = with(LocalDensity.current) { 220.dp.toPx() }
+    val dragState = rememberDraggableState { delta ->
+        offsetY = (offsetY + delta).coerceIn(-maxDragPx, maxDragPx)
+    }
 
     FloatingActionButton(
         onClick = onToggle,
         modifier = Modifier
             .align(Alignment.CenterEnd)
             .offset { IntOffset(0, offsetY.toInt()) }
-            .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectVerticalDragGestures { _, dragAmount ->
-                    offsetY = (offsetY + dragAmount).coerceIn(-maxDragPx, maxDragPx)
-                }
-            },
+            .draggable(state = dragState, orientation = Orientation.Vertical),
         containerColor = if (isDesigner) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
         contentColor = if (isDesigner) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
         shape = CircleShape
@@ -288,16 +284,6 @@ private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
     )
 }
 
-private fun Modifier.topBottomBorder(color: Color, thickness: Dp): Modifier = this.then(
-    androidx.compose.ui.draw.drawBehind {
-        val sw = thickness.toPx().coerceAtLeast(1f)
-        val yTop = sw / 2f
-        val yBot = size.height - sw / 2f
-        drawLine(color, androidx.compose.ui.geometry.Offset(0f, yTop), androidx.compose.ui.geometry.Offset(size.width, yTop), strokeWidth = sw)
-        drawLine(color, androidx.compose.ui.geometry.Offset(0f, yBot), androidx.compose.ui.geometry.Offset(size.width, yBot), strokeWidth = sw)
-    }
-)
-
 @Composable
 private fun StyledContainer(
     cfg: JSONObject?,
@@ -314,15 +300,21 @@ private fun StyledContainer(
         .then(
             when (r.borderMode) {
                 BorderMode.Full      -> Modifier.border(r.borderWidth, SolidColor(r.borderColor), r.shape)
-                BorderMode.TopBottom -> Modifier.topBottomBorder(r.borderColor, r.borderWidth)
+                BorderMode.TopBottom -> Modifier // handled inside with Dividers
                 BorderMode.None      -> Modifier
             }
         )
         .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
 
     CompositionLocalProvider(LocalContentColor provides r.contentColor) {
-        Box(base) {
-            Column(Modifier.padding(contentPadding)) { content() }
+        Column(base) {
+            if (r.borderMode == BorderMode.TopBottom) {
+                Divider(thickness = r.borderWidth, color = r.borderColor)
+            }
+            Box(Modifier.padding(contentPadding)) { content() }
+            if (r.borderMode == BorderMode.TopBottom) {
+                Divider(thickness = r.borderWidth, color = r.borderColor)
+            }
         }
     }
 }
@@ -605,6 +597,7 @@ internal fun RenderBlock(
     path: String,
     menus: Map<String, JSONArray>,
 ) {
+    @Composable
     fun containerWrap(content: @Composable () -> Unit) {
         val containerCfg = block.optJSONObject("container")
         if (containerCfg != null) {
@@ -699,7 +692,7 @@ internal fun RenderBlock(
                 when {
                     isRes && resId != 0 -> {
                         Image(
-                            painter = androidx.compose.ui.res.painterResource(resId),
+                            painter = painterResource(resId),
                             contentDescription = null,
                             modifier = Modifier.fillMaxWidth().height(height),
                             contentScale = scale
@@ -855,7 +848,10 @@ internal fun RenderBlock(
 
                     val interaction = remember { MutableInteractionSource() }
                     val pressed by interaction.collectIsPressedAsState()
-                    val scale by animateFloatAsState(targetValue = if (pressKey == "scale" && pressed) 0.96f else 1f, label = "btnScale")
+                    val scale by animateFloatAsState(
+                        targetValue = if (pressKey == "scale" && pressed) 0.96f else 1f,
+                        label = "btnScale"
+                    )
 
                     val shape = when (shapeKey) {
                         "pill" -> RoundedCornerShape(50)
@@ -1199,7 +1195,7 @@ internal fun NamedIconEx(name: String?, contentDescription: String?) {
     if (name.startsWith("res:")) {
         val resName = name.removePrefix("res:")
         val id = ctx.resources.getIdentifier(resName, "drawable", ctx.packageName)
-        if (id != 0) { Icon(androidx.compose.ui.res.painterResource(id), contentDescription); return }
+        if (id != 0) { Icon(painterResource(id), contentDescription); return }
     }
 
     // icona raster via uri/content/file
@@ -1276,7 +1272,6 @@ internal fun parseColorOrRole(value: String?): Color? {
 }
 
 internal fun bestOnColor(bg: Color): Color {
-    // luminance (sRGB, gamma corrected) — versione autonoma
     fun channel(c: Float): Double {
         val v = c.toDouble()
         return if (v <= 0.03928) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4)
