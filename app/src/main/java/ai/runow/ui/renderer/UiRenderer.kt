@@ -67,7 +67,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -77,6 +76,21 @@ import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
+import android.graphics.drawable.BitmapDrawable
+import androidx.compose.runtime.remember
+import androidx.core.content.ContextCompat
+
+
+private fun Modifier.applyBackground(color: Color?, brush: Brush?): Modifier = when {
+    brush != null -> this.background(brush)
+    color != null -> this.background(color)
+    else -> this
+}
+
+
+internal fun bestOnColor(bg: Color): Color =
+    if (bg.luminance() > 0.5f) Color.Black else Color.White
+
 
 private fun ButtonRowInspectorPanel(
     working: JSONObject,
@@ -3374,13 +3388,7 @@ private fun ImagePickerRow(
 
 /* ---- Caricamento bitmap da URI ---- */
 
-import android.graphics.BitmapFactory
-import android.graphics.drawable.BitmapDrawable
-import android.net.Uri
-import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.content.ContextCompat
+
 
 @Composable
 internal fun rememberImageBitmapFromUri(uri: String?): ImageBitmap? {
@@ -3392,11 +3400,10 @@ internal fun rememberImageBitmapFromUri(uri: String?): ImageBitmap? {
                 val resName = uri.removePrefix("res:")
                 val id = ctx.resources.getIdentifier(resName, "drawable", ctx.packageName)
                 if (id != 0) {
-                    val dr = ContextCompat.getDrawable(ctx, id) as? BitmapDrawable
+                    val dr = androidx.core.content.ContextCompat.getDrawable(ctx, id) as? android.graphics.drawable.BitmapDrawable
                     dr?.bitmap?.asImageBitmap()
                 } else null
             } else {
-                // file/content://
                 ctx.contentResolver.openInputStream(Uri.parse(uri)).use { input ->
                     val bmp = BitmapFactory.decodeStream(input)
                     bmp?.asImageBitmap()
@@ -3467,30 +3474,34 @@ private fun NamedIconEx(name: String?, contentDescription: String?) {
 // da
 // private @Composable fun parseColorOrRole(...) ...
 // a
-@Composable internal fun parseColorOrRole(value: String?): Color? = /* corpo invariato */
-private fun parseColorOrRole(value: String?): Color? {
-    if (value.isNullOrBlank()) return null
-    val v = value.trim()
-    if (v.equals("transparent", ignoreCase = true)) return Color.Transparent
+@Composable
+internal fun parseColorOrRole(value: String?): Color? {
+    val v = value?.trim().orEmpty()
+    if (v.isEmpty()) return null
+    if (v.equals("transparent", true)) return Color.Transparent
 
-    if (v.startsWith("#") && (v.length == 7 || v.length == 9)) {
-        return try { Color(android.graphics.Color.parseColor(v)) } catch (_: Exception) { null }
+    if (v.startsWith("#")) {
+        return runCatching { Color(android.graphics.Color.parseColor(v)) }.getOrNull()
     }
 
+    val key = if (v.startsWith("role:", true)) v.substringAfter(':') else v
     val cs = MaterialTheme.colorScheme
-    return when (v) {
-        "primary"        -> cs.primary
-        "onPrimary"      -> cs.onPrimary
-        "secondary"      -> cs.secondary
-        "onSecondary"    -> cs.onSecondary
-        "tertiary"       -> cs.tertiary
-        "onTertiary"     -> cs.onTertiary
-        "error"          -> cs.error
-        "onError"        -> cs.onError
-        "surface"        -> cs.surface
-        "surfaceVariant" -> cs.surfaceVariant
-        "onSurface"      -> cs.onSurface
-        "outline"        -> cs.outline
+    return when (key.lowercase()) {
+        "primary" -> cs.primary
+        "onprimary" -> cs.onPrimary
+        "secondary" -> cs.secondary
+        "onsecondary" -> cs.onSecondary
+        "tertiary" -> cs.tertiary
+        "ontertiary" -> cs.onTertiary
+        "surface" -> cs.surface
+        "onsurface" -> cs.onSurface
+        "surfacevariant" -> cs.surfaceVariant
+        "onsurfacevariant" -> cs.onSurfaceVariant
+        "background" -> cs.background
+        "onbackground" -> cs.onBackground
+        "outline" -> cs.outline
+        "inverseprimary" -> cs.inversePrimary
+        "inverseonsurface" -> cs.inverseOnSurface
         else -> null
     }
 }
