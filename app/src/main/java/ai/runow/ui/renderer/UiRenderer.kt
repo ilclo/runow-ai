@@ -5,6 +5,11 @@
 
 package ai.runow.ui.renderer
 
+// per Color.luminance()
+import androidx.compose.ui.graphics.luminance
+
+// per Modifier.matchParentSize()
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
