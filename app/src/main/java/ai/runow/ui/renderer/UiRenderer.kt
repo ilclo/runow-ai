@@ -78,6 +78,74 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
+private fun ButtonRowInspectorPanel(
+    working: JSONObject,
+    onChange: () -> Unit,
+    sidePanelIds: List<String> = emptyList()
+) {
+    // ... (contenuto già esistente)
+
+    // Dentro il ciclo dei bottoni, dopo il campo actionId…
+    if (sidePanelIds.isNotEmpty()) {
+        var sel by remember {
+            val seed = btn.optString("actionId","")
+            mutableStateOf(if (seed.startsWith("open_side_panel:")) seed.removePrefix("open_side_panel:") else "(nessuno)")
+        }
+        ExposedDropdown(
+            value = sel,
+            label = "Apri side panel (opz.)",
+            options = listOf("(nessuno)") + sidePanelIds
+        ) { pick ->
+            sel = pick
+            if (pick == "(nessuno)") {
+                // non forzo nulla: resta actionId manuale
+            } else {
+                btn.put("actionId", "open_side_panel:$pick")
+            }
+            onChange()
+        }
+    }
+}
+
+@Composable
+private fun PageBackgroundBox(pageCfg: JSONObject?, content: @Composable () -> Unit) {
+    if (pageCfg == null) { content(); return }
+    val color = parseColorOrRole(pageCfg.optString("containerColor",""))
+    val brush = pageCfg.optJSONObject("gradient")?.let { g ->
+        val cols = g.optJSONArray("colors")?.let { arr -> (0 until arr.length()).mapNotNull { parseColorOrRole(arr.optString(it)) } } ?: emptyList()
+        if (cols.size >= 2) {
+            if (g.optString("direction","vertical") == "horizontal")
+                Brush.horizontalGradient(cols)
+            else
+                Brush.verticalGradient(cols)
+        } else null
+    }
+    val imgUri = pageCfg.optString("image","").takeIf { it.isNotBlank() }
+    val bmp = rememberImageBitmapFromUri(imgUri)
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .then(
+                when {
+                    brush != null -> Modifier.background(brush)
+                    color != null -> Modifier.background(color)
+                    else -> Modifier
+                }
+            )
+    ) {
+        if (bmp != null) {
+            androidx.compose.foundation.Image(
+                bitmap = bmp,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+            )
+        }
+        content()
+    }
+}
+
 /* =========================================================
  * ENTRY ROOT CHIAMATA DA MainActivity
  * ========================================================= */
@@ -132,33 +200,41 @@ fun UiScreen(
     // Modalità designer persistente per schermata
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
 
-    // ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
-    var previewRoot: JSONObject? by remember { mutableStateOf(null) }
-    fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
-        val out = JSONObject(base.toString())
-        listOf("page", "topBar").forEach { k ->
-            if (preview.has(k)) out.put(k, preview.opt(k))
-        }
-        return out
-    }
-    val effectiveLayout = remember(layout, previewRoot) {
-        if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
-    }
+    // ---- Live override dal pannello "Layout": applicazione istantanea ----
+    var livePageOverride by remember(screenName) { mutableStateOf<JSONObject?>(null) }
+    var liveTopBarOverride by remember(screenName) { mutableStateOf<JSONObject?>(null) }
+    var liveBottomBarOverride by remember(screenName) { mutableStateOf<JSONArray?>(null) }
+
+    // ---- Side panels (runtime) ----
+    var openSidePanelId by remember { mutableStateOf<String?>(null) }
+    val localDispatch = wrapDispatchForSidePanels(
+        openPanelSetter = { openSidePanelId = it },
+        appDispatch = dispatch
+    )
 
     Box(Modifier.fillMaxSize()) {
-        // ====== SFONDO PAGINA (colore/gradient/immagine) ======
-        RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
-        // ====== CONTENUTO con Scaffold di ROOT ======
+        // ====== CONTENUTO con Scaffold di ROOT (con override live) ======
         RenderRootScaffold(
-            layout = effectiveLayout,
-            dispatch = dispatch,
+            layout = layout!!,
+            dispatch = localDispatch,
             uiState = uiState,
             designerMode = designMode,
             menus = menus,
             selectedPathSetter = { selectedPath = it },
             extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-            scaffoldPadding = scaffoldPadding
+            scaffoldPadding = scaffoldPadding,
+            pageOverride = livePageOverride,
+            topBarOverride = liveTopBarOverride,
+            bottomOverride = liveBottomBarOverride
+        )
+
+        // ====== OVERLAY PANNELLI LATERALI (runtime) ======
+        RenderSidePanelsOverlay(
+            layout = layout!!,
+            openPanelId = openSidePanelId,
+            onClose = { openSidePanelId = null },
+            dispatch = localDispatch
         )
 
         if (designMode) {
@@ -174,7 +250,10 @@ fun UiScreen(
                     tick++
                 },
                 onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
+                onPublish = {
+                    UiLoader.saveDraft(ctx, screenName, layout!!)
+                    UiLoader.publish(ctx, screenName)
+                },
                 onReset = {
                     UiLoader.resetPublished(ctx, screenName)
                     layout = UiLoader.loadLayout(ctx, screenName)
@@ -183,8 +262,12 @@ fun UiScreen(
                 },
                 topPadding = scaffoldPadding.calculateTopPadding(),
                 onOverlayHeight = { overlayHeightPx = it },
-                onOpenRootInspector = { /* gestito sotto */ },
-                onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
+                onOpenRootInspector = { /* gestito internamente all'overlay */ },
+
+                // >>> Live update istantaneo dal pannello "Layout"
+                onLivePage = { livePageOverride = it },
+                onLiveTopBar = { liveTopBarOverride = it },
+                onLiveBottomBar = { liveBottomBarOverride = it }
             )
         }
 
@@ -195,6 +278,7 @@ fun UiScreen(
         )
     }
 }
+
 
 /* =========================================================
  * KNOB laterale (trascinabile) per commutare Designer/Anteprima
@@ -504,17 +588,27 @@ private fun RenderRootScaffold(
     menus: Map<String, JSONArray>,
     selectedPathSetter: (String) -> Unit,
     extraPaddingBottom: Dp,
-    scaffoldPadding: PaddingValues
+    scaffoldPadding: PaddingValues,
+    // --- override live (instant apply dal pannello Layout)
+    pageOverride: JSONObject? = null,
+    topBarOverride: JSONObject? = null,
+    bottomOverride: JSONArray? = null
 ) {
     val title = layout.optString("topTitle", "")
     val topActions = layout.optJSONArray("topActions") ?: JSONArray() // legacy
-    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy
-    val bottomBarNode = layout.optJSONObject("bottomBar")
-    val bottomBarCfg = bottomBarNode?.optJSONObject("container")
-    val bottomBarItems = bottomBarNode?.optJSONArray("items")
     val fab = layout.optJSONObject("fab")
     val scroll = layout.optBoolean("scroll", true)
-    val topBarConf = layout.optJSONObject("topBar")
+
+    // TopBar config: override live > layout
+    val topBarConf = topBarOverride ?: layout.optJSONObject("topBar")
+
+    // Nuovo schema bottomBar (se presente)
+    val bottomBarNode = layout.optJSONObject("bottomBar")
+    val bottomBarCfg = bottomBarNode?.optJSONObject("container")
+    val bottomBarItemsFromLayout = bottomBarNode?.optJSONArray("items")
+
+    // Legacy bottomButtons oppure override live dei pulsanti (lista di bottoni semplici)
+    val legacyBottomButtons = bottomOverride ?: (layout.optJSONArray("bottomButtons") ?: JSONArray())
 
     // Scroll behavior della TopAppBar (solo se definito in topBar)
     val topScrollBehavior = when (topBarConf?.optString("scroll", "none")) {
@@ -522,6 +616,69 @@ private fun RenderRootScaffold(
         "enterAlways" -> TopAppBarDefaults.enterAlwaysScrollBehavior()
         "exitUntilCollapsed" -> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
         else -> null
+    }
+
+    // Mapper: legacy bottomButtons -> nuovo items (se non c'è schema nuovo)
+    fun legacyButtonsAsItems(legacy: JSONArray): JSONArray {
+        if (legacy.length() == 0) return JSONArray()
+        return JSONArray().apply {
+            for (i in 0 until legacy.length()) {
+                val it = legacy.optJSONObject(i) ?: continue
+                put(
+                    JSONObject().apply {
+                        put("type", "button")
+                        put("label", it.optString("label", "Button"))
+                        put("actionId", it.optString("actionId", ""))
+                        put("style", "text")
+                    }
+                )
+            }
+        }
+    }
+
+    // ---- Wrapper per sfondo pagina (colore/gradiente/immagine res:) ----
+    @Composable
+    fun PageBackgroundBox(pageCfg: JSONObject?, content: @Composable () -> Unit) {
+        if (pageCfg == null) { content(); return }
+        val color = parseColorOrRole(pageCfg.optString("containerColor", ""))
+        val brush = pageCfg.optJSONObject("gradient")?.let { g ->
+            val cols = g.optJSONArray("colors")?.let { arr ->
+                (0 until arr.length()).mapNotNull { idx -> parseColorOrRole(arr.optString(idx)) }
+            } ?: emptyList()
+            if (cols.size >= 2) {
+                if (g.optString("direction", "vertical") == "horizontal")
+                    Brush.horizontalGradient(cols)
+                else
+                    Brush.verticalGradient(cols)
+            } else null
+        }
+        val resName = pageCfg.optString("image", "").takeIf { it.startsWith("res:") }?.removePrefix("res:")
+        val ctx = LocalContext.current
+        val resId = resName?.let { name ->
+            ctx.resources.getIdentifier(name, "drawable", ctx.packageName)
+        } ?: 0
+
+        Box(
+            Modifier
+                .fillMaxSize()
+                .then(
+                    when {
+                        brush != null -> Modifier.background(brush)
+                        color != null -> Modifier.background(color)
+                        else -> Modifier
+                    }
+                )
+        ) {
+            if (resId != 0) {
+                androidx.compose.foundation.Image(
+                    painter = painterResource(resId),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+            }
+            content()
+        }
     }
 
     Scaffold(
@@ -549,20 +706,11 @@ private fun RenderRootScaffold(
             }
         },
         bottomBar = {
-            // Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
-            val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
-                JSONArray().apply {
-                    for (i in 0 until bottomButtons.length()) {
-                        val it = bottomButtons.optJSONObject(i) ?: continue
-                        put(JSONObject().apply {
-                            put("type","button")
-                            put("label", it.optString("label","Button"))
-                            put("actionId", it.optString("actionId",""))
-                            put("style","text")
-                        })
-                    }
-                }
-            } else null
+            // Se ho schema nuovo => uso items; altrimenti trasformo i legacy (o gli override) in items
+            val items: JSONArray? = bottomBarItemsFromLayout ?: run {
+                val converted = legacyButtonsAsItems(legacyBottomButtons)
+                if (converted.length() > 0) converted else null
+            }
 
             if (items != null && items.length() > 0) {
                 StyledContainer(
@@ -586,7 +734,7 @@ private fun RenderRootScaffold(
                 }
             }
         },
-        containerColor = Color.Transparent // per vedere sfondo/gradient dietro le top bar "text/outlined"
+        containerColor = Color.Transparent // lascia intravedere lo sfondo (text/outlined, ecc.)
     ) { innerPadding ->
         val blocks = layout.optJSONArray("blocks") ?: JSONArray()
 
@@ -621,13 +769,17 @@ private fun RenderRootScaffold(
             }
         }
 
-        if (scroll) {
-            Column(Modifier.verticalScroll(rememberScrollState())) { host() }
-        } else {
-            host()
+        // Applica sfondo pagina (override live > layout)
+        PageBackgroundBox(pageCfg = pageOverride ?: layout.optJSONObject("page")) {
+            if (scroll) {
+                Column(Modifier.verticalScroll(rememberScrollState())) { host() }
+            } else {
+                host()
+            }
         }
     }
 }
+
 
 /* =========================================================
  * RENDER ITEMS DI BARRA (Top/Bottom) – icone, bottoni, spacer
