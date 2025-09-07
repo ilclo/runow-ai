@@ -5,17 +5,12 @@
 
 package ai.runow.ui.renderer
 
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopAppBarScrollBehavior
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.TextUnitType
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.net.Uri
+import android.graphics.BitmapFactory
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -37,21 +32,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -59,274 +56,279 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import android.graphics.BitmapFactory
+import androidx.compose.material3.VerticalDivider
+import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
-import android.graphics.drawable.BitmapDrawable
-import androidx.compose.runtime.remember
-import androidx.core.content.ContextCompat
 
-
-private fun Modifier.applyBackground(color: Color?, brush: Brush?): Modifier = when {
-    brush != null -> this.background(brush)
-    color != null -> this.background(color)
-    else -> this
-}
-
-
+/* =========================================================
+ * HELPER: colore “on” migliore
+ * ========================================================= */
 internal fun bestOnColor(bg: Color): Color =
     if (bg.luminance() > 0.5f) Color.Black else Color.White
 
-
-private fun ButtonRowInspectorPanel(
-    working: JSONObject,
-    onChange: () -> Unit,
-    sidePanelIds: List<String> = emptyList()
-) {
-    // ... (contenuto già esistente)
-
-    // Dentro il ciclo dei bottoni, dopo il campo actionId…
-    if (sidePanelIds.isNotEmpty()) {
-        var sel by remember {
-            val seed = btn.optString("actionId","")
-            mutableStateOf(if (seed.startsWith("open_side_panel:")) seed.removePrefix("open_side_panel:") else "(nessuno)")
-        }
-        ExposedDropdown(
-            value = sel,
-            label = "Apri side panel (opz.)",
-            options = listOf("(nessuno)") + sidePanelIds
-        ) { pick ->
-            sel = pick
-            if (pick == "(nessuno)") {
-                // non forzo nulla: resta actionId manuale
-            } else {
-                btn.put("actionId", "open_side_panel:$pick")
-            }
-            onChange()
-        }
-    }
-}
-
-@Composable
-private fun PageBackgroundBox(pageCfg: JSONObject?, content: @Composable () -> Unit) {
-    if (pageCfg == null) { content(); return }
-    val color = parseColorOrRole(pageCfg.optString("containerColor",""))
-    val brush = pageCfg.optJSONObject("gradient")?.let { g ->
-        val cols = g.optJSONArray("colors")?.let { arr -> (0 until arr.length()).mapNotNull { parseColorOrRole(arr.optString(it)) } } ?: emptyList()
-        if (cols.size >= 2) {
-            if (g.optString("direction","vertical") == "horizontal")
-                Brush.horizontalGradient(cols)
-            else
-                Brush.verticalGradient(cols)
-        } else null
-    }
-    val imgUri = pageCfg.optString("image","").takeIf { it.isNotBlank() }
-    val bmp = rememberImageBitmapFromUri(imgUri)
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .then(
-                when {
-                    brush != null -> Modifier.background(brush)
-                    color != null -> Modifier.background(color)
-                    else -> Modifier
-                }
-            )
-    ) {
-        if (bmp != null) {
-            androidx.compose.foundation.Image(
-                bitmap = bmp,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-            )
-        }
-        content()
-    }
-}
-
 /* =========================================================
- * ENTRY ROOT CHIAMATA DA MainActivity
+ * IMMAGINI: carica da URI / res:
  * ========================================================= */
 @Composable
-fun DesignerRoot() {
-    val uiState = remember { mutableMapOf<String, Any>() }
-    val dispatch: (String) -> Unit = { /* TODO: instrada azioni app */ }
-
-    // Schermata unica "home": UiLoader farà fallback su {"blocks":[]}
-    UiScreen(
-        screenName = "home",
-        dispatch = dispatch,
-        uiState = uiState,
-        designerMode = true,                 // parte in designer, ma c'è la levetta
-        scaffoldPadding = PaddingValues(0.dp)
-    )
-}
-
-/* =========================================================
- * RENDER DI UNA SCHERMATA JSON (con Scaffold di root e levetta)
- * ========================================================= */
-
-@Composable
-fun UiScreen(
-    screenName: String,
-    dispatch: (String) -> Unit,
-    uiState: MutableMap<String, Any>,
-    designerMode: Boolean = false,
-    scaffoldPadding: PaddingValues = PaddingValues(0.dp)
-) {
+internal fun rememberImageBitmapFromUri(uri: String?): ImageBitmap? {
+    if (uri.isNullOrBlank()) return null
     val ctx = LocalContext.current
-    var layout: JSONObject? by remember(screenName) {
-        mutableStateOf(UiLoader.loadLayout(ctx, screenName))
-    }
-    var tick by remember { mutableStateOf(0) }
-
-    if (layout == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Layout '$screenName' non trovato", style = MaterialTheme.typography.bodyLarge)
-        }
-        return
-    }
-
-    // Menù raccolti dal layout + selezione corrente
-    val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
-    var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
-
-    // Stato barra designer in basso (per lasciare spazio ai contenuti)
-    var overlayHeightPx by remember { mutableStateOf(0) }
-    val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
-
-    // Modalità designer persistente per schermata
-    var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
-
-    // ---- Preview root dal pannello layout (la tua versione stabile usa onRootLivePreview)
-    var previewRoot: JSONObject? by remember { mutableStateOf(null) }
-    fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
-        val out = JSONObject(base.toString())
-        listOf("page", "topBar").forEach { k ->
-            if (preview.has(k)) out.put(k, preview.opt(k))
-        }
-        return out
-    }
-    val effectiveLayout = remember(layout, previewRoot) {
-        if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
-    }
-
-    // ---- Side panels (runtime) – dispatch wrappato per open/close
-    var openSidePanelId by remember { mutableStateOf<String?>(null) }
-    val localDispatch = wrapDispatchForSidePanels(
-        openPanelSetter = { openSidePanelId = it },
-        appDispatch = dispatch
-    )
-
-    Box(Modifier.fillMaxSize()) {
-        // ====== CONTENUTO con Scaffold di ROOT (usa effectiveLayout che include l'eventuale preview root) ======
-        RenderRootScaffold(
-            layout = effectiveLayout,
-            dispatch = localDispatch,
-            uiState = uiState,
-            designerMode = designMode,
-            menus = menus,
-            selectedPathSetter = { selectedPath = it },
-            extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-            scaffoldPadding = scaffoldPadding
-        )
-
-        // ====== OVERLAY PANNELLI LATERALI (runtime) ======
-        RenderSidePanelsOverlay(
-            layout = layout!!,
-            openPanelId = openSidePanelId,
-            onClose = { openSidePanelId = null },
-            dispatch = localDispatch
-        )
-
-        if (designMode) {
-            DesignerOverlay(
-                screenName = screenName,
-                layout = layout!!,
-                selectedPath = selectedPath,
-                setSelectedPath = { selectedPath = it },
-                onLiveChange = { tick++ },
-                onLayoutChange = {
-                    UiLoader.saveDraft(ctx, screenName, layout!!)
-                    layout = JSONObject(layout.toString())
-                    tick++
-                },
-                onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                onPublish = {
-                    UiLoader.saveDraft(ctx, screenName, layout!!)
-                    UiLoader.publish(ctx, screenName)
-                },
-                onReset = {
-                    UiLoader.resetPublished(ctx, screenName)
-                    layout = UiLoader.loadLayout(ctx, screenName)
-                    selectedPath = null
-                    tick++
-                },
-                topPadding = scaffoldPadding.calculateTopPadding(),
-                onOverlayHeight = { overlayHeightPx = it },
-                onOpenRootInspector = { /* gestito sotto */ },
-                // >>> mantiene la compatibilità con la tua versione stabile
-                onRootLivePreview = { previewRoot = it }
-            )
-        }
-
-        // ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
-        DesignSwitchKnob(
-            isDesigner = designMode,
-            onToggle = { designMode = !designMode }
-        )
+    return remember(uri) {
+        try {
+            if (uri.startsWith("res:")) {
+                val resName = uri.removePrefix("res:")
+                val id = ctx.resources.getIdentifier(resName, "drawable", ctx.packageName)
+                if (id != 0) {
+                    val dr = ContextCompat.getDrawable(ctx, id) as? android.graphics.drawable.BitmapDrawable
+                    dr?.bitmap?.asImageBitmap()
+                } else null
+            } else {
+                ctx.contentResolver.openInputStream(Uri.parse(uri)).use { input ->
+                    val bmp = BitmapFactory.decodeStream(input)
+                    bmp?.asImageBitmap()
+                }
+            }
+        } catch (_: Exception) { null }
     }
 }
 
-
-
 /* =========================================================
- * KNOB laterale (trascinabile) per commutare Designer/Anteprima
+ * COLOR PICKER / PARSER
  * ========================================================= */
 @Composable
-private fun BoxScope.DesignSwitchKnob(
-    isDesigner: Boolean,
-    onToggle: () -> Unit
-) {
-    var offsetY by remember { mutableStateOf(0f) }
-    val maxDragPx = with(LocalDensity.current) { 220.dp.toPx() }
+internal fun parseColorOrRole(value: String?): Color? {
+    val v = value?.trim().orEmpty()
+    if (v.isEmpty()) return null
+    if (v.equals("transparent", true)) return Color.Transparent
 
-    FloatingActionButton(
-        onClick = onToggle,
-        modifier = Modifier
-            .align(Alignment.CenterEnd)
-            .offset { IntOffset(0, offsetY.toInt()) }
-            .pointerInput(Unit) {
-                detectVerticalDragGestures { _, dragAmount ->
-                    offsetY = (offsetY + dragAmount).coerceIn(-maxDragPx, maxDragPx)
-                }
-            },
-        containerColor = if (isDesigner) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = if (isDesigner) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-        shape = CircleShape
-    ) {
-        Icon(if (isDesigner) Icons.Filled.Build else Icons.Filled.Visibility, contentDescription = "Designer toggle")
+    if (v.startsWith("#")) {
+        return runCatching { Color(android.graphics.Color.parseColor(v)) }.getOrNull()
+    }
+
+    val key = if (v.startsWith("role:", true)) v.substringAfter(':') else v
+    val cs = MaterialTheme.colorScheme
+    return when (key.lowercase()) {
+        "primary" -> cs.primary
+        "onprimary" -> cs.onPrimary
+        "secondary" -> cs.secondary
+        "onsecondary" -> cs.onSecondary
+        "tertiary" -> cs.tertiary
+        "ontertiary" -> cs.onTertiary
+        "surface" -> cs.surface
+        "onsurface" -> cs.onSurface
+        "surfacevariant" -> cs.surfaceVariant
+        "onsurfacevariant" -> cs.onSurfaceVariant
+        "background" -> cs.background
+        "onbackground" -> cs.onBackground
+        "outline" -> cs.outline
+        "inverseprimary" -> cs.inversePrimary
+        "inverseonsurface" -> cs.inverseOnSurface
+        "error" -> cs.error
+        "onerror" -> cs.onError
+        else -> null
     }
 }
 
 /* =========================================================
- * STYLED CONTAINER – wrapper unificato per stile/forma/bordo/bg
+ * ICON HELPER + PICKER
+ * ========================================================= */
+
+@Composable
+internal fun NamedIconEx(name: String?, contentDescription: String?) {
+    val ctx = LocalContext.current
+    if (name.isNullOrBlank()) {
+        Text("."); return
+    }
+    if (name.startsWith("res:")) {
+        val resName = name.removePrefix("res:")
+        val id = ctx.resources.getIdentifier(resName, "drawable", ctx.packageName)
+        if (id != 0) { Icon(painterResource(id), contentDescription); return }
+    }
+    if (name.startsWith("uri:") || name.startsWith("content:") || name.startsWith("file:")) {
+        val bmp = rememberImageBitmapFromUri(name.removePrefix("uri:"))
+        if (bmp != null) {
+            Image(
+                bitmap = bmp,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(24.dp)
+            )
+            return
+        }
+    }
+    val image = when (name) {
+        "settings" -> Icons.Filled.Settings
+        "more_vert" -> Icons.Filled.MoreVert
+        "tune" -> Icons.Filled.Tune
+        "play_arrow" -> Icons.Filled.PlayArrow
+        "pause" -> Icons.Filled.Pause
+        "stop" -> Icons.Filled.Stop
+        "add" -> Icons.Filled.Add
+        "flag" -> Icons.Filled.Flag
+        "queue_music" -> Icons.Filled.QueueMusic
+        "widgets" -> Icons.Filled.Widgets
+        "palette" -> Icons.Filled.Palette
+        "home" -> Icons.Filled.Home
+        "menu" -> Icons.Filled.Menu
+        "close" -> Icons.Filled.Close
+        "more_horiz" -> Icons.Filled.MoreHoriz
+        "list" -> Icons.Filled.List
+        "tab" -> Icons.Filled.Tab
+        "grid_on" -> Icons.Filled.GridOn
+        "toggle_on" -> Icons.Filled.ToggleOn
+        "bolt" -> Icons.Filled.Bolt
+        "local_fire_department" -> Icons.Filled.LocalFireDepartment
+        "sports_score" -> Icons.Filled.SportsScore
+        "timer" -> Icons.Filled.Timer
+        "watch_later" -> Icons.Filled.WatchLater
+        else -> null
+    }
+    if (image != null) Icon(image, contentDescription) else Text(".")
+}
+
+private val ICONS = listOf(
+    "settings", "more_vert", "tune",
+    "play_arrow", "pause", "stop", "add",
+    "flag", "queue_music", "widgets", "palette",
+    "home", "menu", "close", "more_horiz", "list", "tab", "grid_on",
+    "directions_run", "directions_walk", "directions_bike",
+    "fitness_center", "timer", "timer_off", "watch_later",
+    "map", "my_location", "place", "speed",
+    "bolt", "local_fire_department", "sports_score", "toggle_on"
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IconPickerField(
+    value: MutableState<String>,
+    label: String,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = value.value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            leadingIcon = { if (value.value.isNotBlank()) NamedIconEx(value.value, null) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ICONS.forEach { name ->
+                DropdownMenuItem(
+                    text = { Text(name) },
+                    leadingIcon = { NamedIconEx(name, null) },
+                    onClick = { onSelected(name); expanded = false }
+                )
+            }
+        }
+    }
+}
+
+/* =========================================================
+ * NAMED COLOR PICKER
+ * ========================================================= */
+
+private val NAMED_SWATCHES = linkedMapOf(
+    "White" to 0xFFFFFFFF.toInt(),
+    "Black" to 0xFF000000.toInt(),
+    "Gray50" to 0xFFFAFAFA.toInt(), "Gray100" to 0xFFF5F5F5.toInt(), "Gray200" to 0xFFEEEEEE.toInt(),
+    "Gray300" to 0xFFE0E0E0.toInt(), "Gray400" to 0xFFBDBDBD.toInt(),
+    "Gray500" to 0xFF9E9E9E.toInt(), "Gray600" to 0xFF757575.toInt(), "Gray700" to 0xFF616161.toInt(), "Gray800" to 0xFF424242.toInt(), "Gray900" to 0xFF212121.toInt(),
+    "Red" to 0xFFE53935.toInt(), "RedDark" to 0xFFC62828.toInt(), "RedLight" to 0xFFEF5350.toInt(),
+    "Pink" to 0xFFD81B60.toInt(), "PinkDark" to 0xFFC2185B.toInt(), "PinkLight" to 0xFFF06292.toInt(),
+    "Purple" to 0xFF8E24AA.toInt(), "PurpleDark" to 0xFF6A1B9A.toInt(), "PurpleLight" to 0xFFBA68C8.toInt(),
+    "DeepPurple" to 0xFF5E35B1.toInt(), "Indigo" to 0xFF3949AB.toInt(),
+    "Blue" to 0xFF1E88E5.toInt(), "BlueDark" to 0xFF1565C0.toInt(), "BlueLight" to 0xFF64B5F6.toInt(),
+    "LightBlue" to 0xFF039BE5.toInt(), "Cyan" to 0xFF00ACC1.toInt(),
+    "Teal" to 0xFF00897B.toInt(), "TealLight" to 0xFF26A69A.toInt(),
+    "Green" to 0xFF43A047.toInt(), "GreenDark" to 0xFF2E7D32.toInt(), "GreenLight" to 0xFF66BB6A.toInt(),
+    "LightGreen" to 0xFF7CB342.toInt(), "Lime" to 0xFFC0CA33.toInt(),
+    "Yellow" to 0xFFFDD835.toInt(), "Amber" to 0xFFFFB300.toInt(),
+    "Orange" to 0xFFFB8C00.toInt(), "DeepOrange" to 0xFFF4511E.toInt(),
+    "Brown" to 0xFF6D4C41.toInt(), "BlueGrey" to 0xFF546E7A.toInt()
+)
+
+private val MATERIAL_ROLES = listOf(
+    "primary","secondary","tertiary","error","surface",
+    "onPrimary","onSecondary","onTertiary","onSurface","onError"
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NamedColorPickerPlus(
+    current: String,
+    label: String,
+    allowRoles: Boolean = false,
+    onPick: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val display = if (current.isBlank()) "(default)" else current
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = display,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (allowRoles) {
+                val cs = MaterialTheme.colorScheme
+                fun roleColor(role: String): Color = when (role) {
+                    "primary","onPrimary"     -> cs.primary
+                    "secondary","onSecondary" -> cs.secondary
+                    "tertiary","onTertiary"   -> cs.tertiary
+                    "error","onError"         -> cs.error
+                    "surface","onSurface"     -> cs.surface
+                    else -> cs.primary
+                }
+                MATERIAL_ROLES.forEach { role ->
+                    val c = roleColor(role)
+                    DropdownMenuItem(
+                        leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
+                        text = { Text(role) },
+                        onClick = { onPick(role); expanded = false }
+                    )
+                }
+                Divider()
+            }
+            NAMED_SWATCHES.forEach { (name, argb) ->
+                val c = Color(argb)
+                DropdownMenuItem(
+                    leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
+                    text = { Text(name) },
+                    onClick = {
+                        val hex = "#%06X".format(argb and 0xFFFFFF)
+                        onPick(hex); expanded = false
+                    }
+                )
+            }
+            DropdownMenuItem(text = { Text("(default)") }, onClick = { onPick(""); expanded = false })
+        }
+    }
+}
+
+/* =========================================================
+ * STYLED CONTAINER – wrapper unificato
  * ========================================================= */
 
 private enum class BorderMode { None, Full, TopBottom }
@@ -334,7 +336,7 @@ private enum class BorderMode { None, Full, TopBottom }
 private data class ResolvedContainer(
     val background: Color,
     val contentColor: Color,
-    val shape: Shape,
+    val shape: androidx.compose.ui.graphics.Shape,
     val elevation: Dp,
     val borderColor: Color,
     val borderWidth: Dp,
@@ -344,8 +346,8 @@ private data class ResolvedContainer(
 )
 
 private data class BgImage(
-    val resId: Int?,          // preferito se presente
-    val uriString: String?,   // alternativamente URI
+    val resId: Int?,
+    val uriString: String?,
     val scale: ContentScale,
     val alpha: Float
 )
@@ -365,7 +367,7 @@ private fun mapContainerColors(style: String, tint: String, customHex: String?):
         "outlined",
         "text"     -> Color.Transparent
         "surface"  -> cs.surface
-        else       -> baseContainer // "primary" = filled
+        else       -> baseContainer
     }
 
     var content = when (style) {
@@ -398,7 +400,7 @@ private fun mapContainerColors(style: String, tint: String, customHex: String?):
 
 @Composable
 private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
-    val style   = cfg?.optString("style", "surface") ?: "surface"  // "primary","tonal","outlined","text","surface"
+    val style   = cfg?.optString("style", "surface") ?: "surface"
     val tint    = cfg?.optString("tint", "default") ?: "default"
     val custom  = cfg?.optString("customColor","")?.takeIf { it.isNotBlank() }
     val (bg, content, defaultBorder) = mapContainerColors(style, tint, custom)
@@ -426,7 +428,6 @@ private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
     val borderColor = parseColorOrRole(cfg?.optString("borderColor","")) ?: defaultBorder
     val borderW = Dp((cfg?.optDouble("borderThicknessDp", if (borderMode != BorderMode.None) 1.0 else 0.0) ?: 0.0).toFloat())
 
-    // Gradient opzionale
     val brush = cfg?.optJSONObject("gradient")?.let { g ->
         val arr = g.optJSONArray("colors")
         val cols = (0 until (arr?.length() ?: 0)).mapNotNull { i -> parseColorOrRole(arr!!.optString(i)) }
@@ -436,7 +437,6 @@ private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
         } else null
     }
 
-    // Immagine opzionale (res: o uri:/content:/file:)
     val bgImage = cfg?.optJSONObject("image")?.let { img ->
         val src = img.optString("source", "")
         val scale = when (img.optString("contentScale","crop")) {
@@ -462,7 +462,7 @@ private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
         borderColor = borderColor,
         borderWidth = borderW,
         borderMode = borderMode,
-        brush = if (style == "text") null else brush, // "text" resta trasparente
+        brush = if (style == "text") null else brush,
         bgImage = if (style == "text") null else bgImage
     )
 }
@@ -499,7 +499,6 @@ private fun StyledContainer(
 
     CompositionLocalProvider(LocalContentColor provides r.contentColor) {
         Box(base) {
-            // Immagine sotto al contenuto
             r.bgImage?.let { bg ->
                 if (bg.resId != null) {
                     Image(
@@ -530,12 +529,13 @@ private fun StyledContainer(
 }
 
 /* =========================================================
- * PAGE BACKGROUND (colore/gradient/immagine a tutta pagina)
+ * PAGINA: sfondo (colore/gradiente/immagine)
  * ========================================================= */
 @Composable
-private fun BoxScope.RenderPageBackground(cfg: JSONObject?) {
-    val color = parseColorOrRole(cfg?.optString("color","")) ?: MaterialTheme.colorScheme.background
-    val brush = cfg?.optJSONObject("gradient")?.let { g ->
+private fun PageBackgroundBox(pageCfg: JSONObject?, content: @Composable () -> Unit) {
+    if (pageCfg == null) { content(); return }
+    val color = parseColorOrRole(pageCfg.optString("color","")) ?: MaterialTheme.colorScheme.background
+    val brush = pageCfg.optJSONObject("gradient")?.let { g ->
         val arr = g.optJSONArray("colors")
         val cols = (0 until (arr?.length() ?: 0)).mapNotNull { i -> parseColorOrRole(arr!!.optString(i)) }
         if (cols.size >= 2) {
@@ -543,7 +543,7 @@ private fun BoxScope.RenderPageBackground(cfg: JSONObject?) {
             else Brush.verticalGradient(cols)
         } else null
     }
-    val img = cfg?.optJSONObject("image")?.let { j ->
+    val img = pageCfg.optJSONObject("image")?.let { j ->
         val src = j.optString("source","")
         val scale = when (j.optString("contentScale","fill")) {
             "fit" -> ContentScale.Fit
@@ -561,8 +561,7 @@ private fun BoxScope.RenderPageBackground(cfg: JSONObject?) {
         } else null
     }
 
-    // Layering: colore -> immagine -> gradient
-    Box(Modifier.matchParentSize().background(color))
+    Box(Modifier.fillMaxSize().background(color))
     img?.let { pair ->
         val (info, alpha) = pair
         val (kind, payload, scale) = info
@@ -587,13 +586,163 @@ private fun BoxScope.RenderPageBackground(cfg: JSONObject?) {
             }
         }
     }
-    brush?.let { b ->
-        Box(Modifier.matchParentSize().background(b))
+    brush?.let { b -> Box(Modifier.matchParentSize().background(b)) }
+}
+
+/* =========================================================
+ * ENTRY ROOT DI ESEMPIO
+ * ========================================================= */
+@Composable
+fun DesignerRoot() {
+    val uiState = remember { mutableMapOf<String, Any>() }
+    val dispatch: (String) -> Unit = { /* TODO: instrada azioni app */ }
+
+    UiScreen(
+        screenName = "home",
+        dispatch = dispatch,
+        uiState = uiState,
+        designerMode = true,
+        scaffoldPadding = PaddingValues(0.dp)
+    )
+}
+
+/* =========================================================
+ * SCHERMATA
+ * ========================================================= */
+@Composable
+fun UiScreen(
+    screenName: String,
+    dispatch: (String) -> Unit,
+    uiState: MutableMap<String, Any>,
+    designerMode: Boolean = false,
+    scaffoldPadding: PaddingValues = PaddingValues(0.dp)
+) {
+    val ctx = LocalContext.current
+    var layout: JSONObject? by remember(screenName) {
+        mutableStateOf(UiLoader.loadLayout(ctx, screenName))
+    }
+    var tick by remember { mutableStateOf(0) }
+
+    if (layout == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Layout '$screenName' non trovato", style = MaterialTheme.typography.bodyLarge)
+        }
+        return
+    }
+
+    val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
+    var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
+
+    var overlayHeightPx by remember { mutableStateOf(0) }
+    val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
+
+    var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
+
+    var previewRoot: JSONObject? by remember { mutableStateOf(null) }
+    fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
+        val out = JSONObject(base.toString())
+        listOf("page", "topBar").forEach { k ->
+            if (preview.has(k)) out.put(k, preview.opt(k))
+        }
+        return out
+    }
+    val effectiveLayout = remember(layout, previewRoot) {
+        if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
+    }
+
+    var openSidePanelId by remember { mutableStateOf<String?>(null) }
+    val localDispatch = wrapDispatchForSidePanels(
+        openPanelSetter = { openSidePanelId = it },
+        appDispatch = dispatch
+    )
+
+    Box(Modifier.fillMaxSize()) {
+        RenderRootScaffold(
+            layout = effectiveLayout,
+            dispatch = localDispatch,
+            uiState = uiState,
+            designerMode = designMode,
+            menus = menus,
+            selectedPathSetter = { selectedPath = it },
+            extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+            scaffoldPadding = scaffoldPadding
+        )
+
+        RenderSidePanelsOverlay(
+            layout = layout!!,
+            openPanelId = openSidePanelId,
+            onClose = { openSidePanelId = null },
+            dispatch = localDispatch
+        )
+
+        if (designMode) {
+            DesignerOverlay(
+                screenName = screenName,
+                layout = layout!!,
+                selectedPath = selectedPath,
+                setSelectedPath = { selectedPath = it },
+                onLiveChange = { tick++ },
+                onLayoutChange = {
+                    UiLoader.saveDraft(ctx, screenName, layout!!)
+                    layout = JSONObject(layout.toString())
+                    tick++
+                },
+                onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+                onPublish = {
+                    UiLoader.saveDraft(ctx, screenName, layout!!)
+                    UiLoader.publish(ctx, screenName)
+                },
+                onReset = {
+                    UiLoader.resetPublished(ctx, screenName)
+                    layout = UiLoader.loadLayout(ctx, screenName)
+                    selectedPath = null
+                    tick++
+                },
+                topPadding = scaffoldPadding.calculateTopPadding(),
+                onOverlayHeight = { overlayHeightPx = it },
+                onOpenRootInspector = { /* opzionale */ },
+                onRootLivePreview = { previewRoot = it }
+            )
+        }
+
+        DesignSwitchKnob(
+            isDesigner = designMode,
+            onToggle = { designMode = !designMode }
+        )
     }
 }
 
 /* =========================================================
- * ROOT SCAFFOLD (top bar, bottom bar, fab, scroll)
+ * KNOB laterale per commutare Designer/Anteprima
+ * ========================================================= */
+@Composable
+private fun BoxScope.DesignSwitchKnob(
+    isDesigner: Boolean,
+    onToggle: () -> Unit
+) {
+    var offsetY by remember { mutableStateOf(0f) }
+    val maxDragPx = with(LocalDensity.current) { 220.dp.toPx() }
+
+    FloatingActionButton(
+        onClick = onToggle,
+        modifier = Modifier
+            .align(Alignment.CenterEnd)
+            .offset { IntOffset(0, offsetY.toInt()) }
+            .pointerInput(Unit) {
+                detectVerticalDragGestures { _, dragAmount ->
+                    offsetY = (offsetY + dragAmount).coerceIn(-maxDragPx, maxDragPx)
+                }
+            },
+        containerColor = if (isDesigner) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = if (isDesigner) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = CircleShape
+    ) {
+        Icon(if (isDesigner) Icons.Filled.Build else Icons.Filled.Visibility, contentDescription = "Designer toggle")
+    }
+}
+
+/* =========================================================
+ * ROOT SCAFFOLD
  * ========================================================= */
 @Composable
 private fun RenderRootScaffold(
@@ -607,18 +756,16 @@ private fun RenderRootScaffold(
     scaffoldPadding: PaddingValues
 ) {
     val title = layout.optString("topTitle", "")
-    val topActions = layout.optJSONArray("topActions") ?: JSONArray() // legacy
+    val topActions = layout.optJSONArray("topActions") ?: JSONArray()
     val fab = layout.optJSONObject("fab")
     val scroll = layout.optBoolean("scroll", true)
     val topBarConf = layout.optJSONObject("topBar")
 
-    // Nuovo schema bottomBar (se presente); se assente usa legacy bottomButtons
     val bottomBarNode = layout.optJSONObject("bottomBar")
     val bottomBarCfg = bottomBarNode?.optJSONObject("container")
     val bottomBarItemsFromLayout = bottomBarNode?.optJSONArray("items")
-    val legacyBottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy
+    val legacyBottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray()
 
-    // Scroll behavior della TopAppBar (solo se definito in topBar)
     val topScrollBehavior = when (topBarConf?.optString("scroll", "none")) {
         "pinned" -> TopAppBarDefaults.pinnedScrollBehavior()
         "enterAlways" -> TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -626,7 +773,6 @@ private fun RenderRootScaffold(
         else -> null
     }
 
-    // Mapper: legacy bottomButtons -> nuovo items (se non c'è schema nuovo)
     fun legacyButtonsAsItems(legacy: JSONArray): JSONArray {
         if (legacy.length() == 0) return JSONArray()
         return JSONArray().apply {
@@ -644,51 +790,6 @@ private fun RenderRootScaffold(
         }
     }
 
-    // ---- Sfondo pagina (colore/gradiente/immagine res:) ----
-    @Composable
-    fun PageBackgroundBox(pageCfg: JSONObject?, content: @Composable () -> Unit) {
-        if (pageCfg == null) { content(); return }
-        val color = parseColorOrRole(pageCfg.optString("containerColor", ""))
-        val brush = pageCfg.optJSONObject("gradient")?.let { g ->
-            val cols = g.optJSONArray("colors")?.let { arr ->
-                (0 until arr.length()).mapNotNull { idx -> parseColorOrRole(arr.optString(idx)) }
-            } ?: emptyList()
-            if (cols.size >= 2) {
-                if (g.optString("direction", "vertical") == "horizontal")
-                    Brush.horizontalGradient(cols)
-                else
-                    Brush.verticalGradient(cols)
-            } else null
-        }
-        val resName = pageCfg.optString("image", "").takeIf { it.startsWith("res:") }?.removePrefix("res:")
-        val ctx = LocalContext.current
-        val resId = resName?.let { name ->
-            ctx.resources.getIdentifier(name, "drawable", ctx.packageName)
-        } ?: 0
-
-        Box(
-            Modifier
-                .fillMaxSize()
-                .then(
-                    when {
-                        brush != null -> Modifier.background(brush)
-                        color != null -> Modifier.background(color)
-                        else -> Modifier
-                    }
-                )
-        ) {
-            if (resId != 0) {
-                androidx.compose.foundation.Image(
-                    painter = painterResource(resId),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                )
-            }
-            content()
-        }
-    }
-
     Scaffold(
         modifier = if (topScrollBehavior != null)
             Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
@@ -696,25 +797,21 @@ private fun RenderRootScaffold(
         topBar = {
             if (topBarConf != null) {
                 RenderTopBar(topBarConf, dispatch, topScrollBehavior)
-            } else {
-                // Fallback legacy: topTitle/topActions
-                if (title.isNotBlank() || topActions.length() > 0) {
-                    TopAppBar(
-                        title = { Text(title) },
-                        actions = {
-                            for (i in 0 until topActions.length()) {
-                                val a = topActions.optJSONObject(i) ?: continue
-                                IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-                                    NamedIconEx(a.optString("icon", "more_vert"), null)
-                                }
+            } else if (title.isNotBlank() || topActions.length() > 0) {
+                TopAppBar(
+                    title = { Text(title) },
+                    actions = {
+                        for (i in 0 until topActions.length()) {
+                            val a = topActions.optJSONObject(i) ?: continue
+                            IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                                NamedIconEx(a.optString("icon", "more_vert"), null)
                             }
                         }
-                    )
-                }
+                    }
+                )
             }
         },
         bottomBar = {
-            // Se ho schema nuovo => uso items; altrimenti trasformo i legacy in items
             val items: JSONArray? = bottomBarItemsFromLayout ?: run {
                 val converted = legacyButtonsAsItems(legacyBottomButtons)
                 if (converted.length() > 0) converted else null
@@ -722,7 +819,7 @@ private fun RenderRootScaffold(
 
             if (items != null && items.length() > 0) {
                 StyledContainer(
-                    cfg = bottomBarCfg, // se null -> surface di default
+                    cfg = bottomBarCfg,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Row(
@@ -742,7 +839,7 @@ private fun RenderRootScaffold(
                 }
             }
         },
-        containerColor = Color.Transparent // lascia intravedere lo sfondo (text/outlined, ecc.)
+        containerColor = Color.Transparent
     ) { innerPadding ->
         val blocks = layout.optJSONArray("blocks") ?: JSONArray()
 
@@ -777,30 +874,20 @@ private fun RenderRootScaffold(
             }
         }
 
-        // Applica sfondo pagina
         PageBackgroundBox(pageCfg = layout.optJSONObject("page")) {
-            if (scroll) {
-                Column(Modifier.verticalScroll(rememberScrollState())) { host() }
-            } else {
-                host()
-            }
+            if (scroll) Column(Modifier.verticalScroll(rememberScrollState())) { host() } else host()
         }
     }
 }
 
-
-
 /* =========================================================
- * RENDER ITEMS DI BARRA (Top/Bottom) – icone, bottoni, spacer
+ * ITEMS DI BARRA (Top/Bottom)
  * ========================================================= */
 @Composable
 private fun RowScope.RenderBarItemsRow(items: JSONArray, dispatch: (String) -> Unit) {
     for (i in 0 until items.length()) {
         val it = items.optJSONObject(i) ?: continue
-        val type = it.optString("type").ifBlank {
-            // heurstica retrocompatibile
-            if (it.has("label")) "button" else "icon"
-        }
+        val type = it.optString("type").ifBlank { if (it.has("label")) "button" else "icon" }
         when (type) {
             "spacer" -> {
                 when (it.optString("mode","fixed")) {
@@ -834,8 +921,6 @@ private fun RowScope.RenderBarItemsRow(items: JSONArray, dispatch: (String) -> U
                     }) { NamedIconEx(icon, null) }
 
                     val menuId = if (openMenuId.isNotBlank()) openMenuId else actionId.removePrefix("open_menu:")
-                    // il vero contenuto del menu è gestito come blocco "Menu" nel layout
-                    // qui ci limitiamo a segnalare l'azione di apertura
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         DropdownMenuItem(
                             text = { Text("Esegui ${if (menuId.isBlank()) "azione" else "menu:$menuId"}") },
@@ -849,7 +934,7 @@ private fun RowScope.RenderBarItemsRow(items: JSONArray, dispatch: (String) -> U
 }
 
 /* =========================================================
- * TOP BAR – usa StyledContainer e items azioni con SpacerH
+ * TOP BAR
  * ========================================================= */
 @Composable
 private fun RenderTopBar(
@@ -867,13 +952,10 @@ private fun RenderTopBar(
         bottomEnd   = Dp(cfg.optDouble("roundedBottomEnd",   0.0).toFloat())
     )
 
-    // Container unificato con fallback dai campi legacy
     val containerCfg = cfg.optJSONObject("container")?.let { JSONObject(it.toString()) } ?: JSONObject()
-    // Legacy gradient
     cfg.optJSONObject("gradient")?.let { g ->
         if (!containerCfg.has("gradient")) containerCfg.put("gradient", JSONObject(g.toString()))
     }
-    // Legacy containerColor
     cfg.optString("containerColor","").takeIf { it.isNotBlank() }?.let { col ->
         if (!containerCfg.has("customColor")) containerCfg.put("customColor", col)
         if (!containerCfg.has("style")) containerCfg.put("style", "surface")
@@ -884,7 +966,7 @@ private fun RenderTopBar(
     val actionsColor   = parseColorOrRole(cfg.optString("actionsColor", "")) ?: titleColor
 
     val colors = TopAppBarDefaults.topAppBarColors(
-        containerColor = Color.Transparent, // sfondo lo gestisce StyledContainer
+        containerColor = Color.Transparent,
         titleContentColor = titleColor,
         actionIconContentColor = actionsColor,
         navigationIconContentColor = actionsColor
@@ -896,7 +978,7 @@ private fun RenderTopBar(
         cfg = containerCfg,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(rounded) // arrotondamento inferiore legacy
+            .clip(rounded)
     ) {
         when (variant) {
             "center" -> CenterAlignedTopAppBar(
@@ -1135,7 +1217,7 @@ private fun BoxScope.DesignerOverlay(
         }
     }
 
-    // ===== INSPECTOR BLOCCHI =====
+    // ===== INSPECTOR BLOCCO =====
     if (showInspector && selectedBlock != null && selectedPath != null) {
         val working = remember(selectedPath) { JSONObject(selectedBlock.toString()) }
         var previewTick by remember { mutableStateOf(0) }
@@ -1227,18 +1309,17 @@ private fun BoxScope.DesignerOverlay(
         val working = remember { JSONObject(layout.toString()) }
         var dummyTick by remember { mutableStateOf(0) }
 
-        // onChange: aggiorna live preview di page/topBar
         val onChange: () -> Unit = {
             dummyTick++
-            onRootLivePreview(working) // <-- live preview
+            onRootLivePreview(working)
         }
 
         BackHandler(enabled = true) {
-            onRootLivePreview(null) // chiudi preview
+            onRootLivePreview(null)
             showRootInspector = false
         }
 
-        // ANTEPRIMA in alto della BottomBar (proiettata)
+        // ANTEPRIMA in alto della BottomBar
         val previewTopPad = topPadding + 8.dp
         val hasBottomPreview = working.optJSONObject("bottomBar")?.optJSONArray("items")?.length() ?: 0 > 0 ||
                 working.optJSONArray("bottomButtons")?.length() ?: 0 > 0
@@ -1257,7 +1338,6 @@ private fun BoxScope.DesignerOverlay(
                     val bb = working.optJSONObject("bottomBar")
                     val cont = bb?.optJSONObject("container")
                     val items = bb?.optJSONArray("items") ?: run {
-                        // fallback legacy
                         val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
                         JSONArray().apply {
                             for (i in 0 until legacy.length()) {
@@ -1295,12 +1375,12 @@ private fun BoxScope.DesignerOverlay(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // PAGE (sfondo) – live sullo schermo
+                // PAGE
                 Divider(); Text("Page (sfondo)", style = MaterialTheme.typography.titleMedium)
                 val page = working.optJSONObject("page") ?: JSONObject().also { working.put("page", it) }
                 PageInspectorPanel(page, onChange)
 
-                // Top bar – live sullo schermo
+                // Top bar
                 Divider(); Text("Top Bar (estetica)", style = MaterialTheme.typography.titleMedium)
                 var topBarEnabled by remember { mutableStateOf(working.optJSONObject("topBar") != null) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1335,9 +1415,7 @@ private fun BoxScope.DesignerOverlay(
                 }
                 working.optJSONObject("topBar")?.let { tb ->
                     TopBarInspectorPanel(tb, onChange)
-                    // Editor contenitore unificato
                     ContainerEditorSection(tb, key = "container", title = "TopBar – Contenitore", onChange = onChange)
-                    // Editor azioni (icone, bottoni, spacer)
                     BarItemsEditor(
                         owner = tb,
                         arrayKey = "actions",
@@ -1346,7 +1424,7 @@ private fun BoxScope.DesignerOverlay(
                     )
                 }
 
-                // Bottom bar estetica (preview in alto)
+                // Bottom bar
                 Divider(); Text("Bottom Bar (estetica)", style = MaterialTheme.typography.titleMedium)
                 var bottomEnabled by remember { mutableStateOf(working.optJSONObject("bottomBar") != null) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1379,7 +1457,7 @@ private fun BoxScope.DesignerOverlay(
                     BarItemsEditor(owner = bb, arrayKey = "items", title = "BottomBar – Items", onChange = onChange)
                 }
 
-                // VARI – Scroll on/off, FAB (il resto del root)
+                // VARI – Scroll on/off, FAB
                 Divider(); RootInspectorPanel(working, onChange)
 
                 Spacer(Modifier.height(8.dp))
@@ -1390,7 +1468,6 @@ private fun BoxScope.DesignerOverlay(
                     }) { Text("Annulla") }
                     Spacer(Modifier.weight(1f))
                     Button(onClick = {
-                        // Commit nel layout originale
                         val keys = listOf("page","topBar","topTitle","topActions","bottomBar","bottomButtons","fab","scroll")
                         keys.forEach { k -> layout.put(k, working.opt(k)) }
                         onRootLivePreview(null)
@@ -1413,8 +1490,7 @@ private fun ContainerOverlayGear(
     content: @Composable () -> Unit
 ) {
     if (!designerMode) {
-        content()
-        return
+        content(); return
     }
     Box {
         content()
@@ -1431,14 +1507,10 @@ private fun ContainerOverlayGear(
 }
 
 /* =========================================================
- * RENDERER BLOCCHI
+ * RENDERER BLOCCHI (internal per SidePanels)
  * ========================================================= */
-
-// da
-// private @Composable fun RenderBlock(...) ...
-// a
-@Composable internal fun RenderBlock(/* ... */) { /* corpo invariato */ }
-private fun RenderBlock(
+@Composable
+internal fun RenderBlock(
     block: JSONObject,
     dispatch: (String) -> Unit,
     uiState: MutableMap<String, Any>,
@@ -1455,7 +1527,7 @@ private fun RenderBlock(
         if (designerMode) {
             Box {
                 OutlinedCard(
-                    modifier = Modifier.fillMaxWidth().padding(0.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     border = borderSelected,
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -1466,7 +1538,6 @@ private fun RenderBlock(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(Modifier.height(6.dp))
-                        // Se il blocco ha "container", avvolgo con StyledContainer
                         val containerCfg = block.optJSONObject("container")
                         if (containerCfg != null) {
                             StyledContainer(containerCfg, Modifier.fillMaxWidth(), contentPadding = PaddingValues(12.dp)) {
@@ -1662,7 +1733,6 @@ private fun RenderBlock(
                 }
             }
 
-            // Mappatura legacy -> nuovo container
             val legacyVariant = block.optString("variant","")
             val containerCfg = block.optJSONObject("container") ?: JSONObject().apply {
                 when (legacyVariant) {
@@ -2110,7 +2180,6 @@ private fun GridSection(tiles: JSONArray, cols: Int, uiState: MutableMap<String,
 
 @Composable
 private fun RootInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    // Scroll on/off
     Text("Layout (root) – Opzioni", style = MaterialTheme.typography.titleMedium)
 
     var scroll by remember { mutableStateOf(working.optBoolean("scroll", true)) }
@@ -2151,7 +2220,6 @@ private fun RootInspectorPanel(working: JSONObject, onChange: () -> Unit) {
  * ========================================================= */
 @Composable
 private fun PageInspectorPanel(page: JSONObject, onChange: () -> Unit) {
-    // Colore base
     val color = remember { mutableStateOf(page.optString("color","")) }
     NamedColorPickerPlus(current = color.value, label = "color (sfondo pagina)", allowRoles = true) { pick ->
         color.value = pick
@@ -2159,7 +2227,6 @@ private fun PageInspectorPanel(page: JSONObject, onChange: () -> Unit) {
         onChange()
     }
 
-    // Gradient
     Divider(); Text("Gradient (opz.)", style = MaterialTheme.typography.titleSmall)
     var gradEnabled by remember { mutableStateOf(page.optJSONObject("gradient") != null) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2196,7 +2263,6 @@ private fun PageInspectorPanel(page: JSONObject, onChange: () -> Unit) {
         ) { sel -> dir = sel; g.put("direction", sel); onChange() }
     }
 
-    // Immagine pagina
     Divider(); Text("Immagine a tutta pagina (opz.)", style = MaterialTheme.typography.titleSmall)
     var imgEnabled by remember { mutableStateOf(page.optJSONObject("image") != null) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2231,7 +2297,7 @@ private fun PageInspectorPanel(page: JSONObject, onChange: () -> Unit) {
 }
 
 /* =========================================================
- * EDITOR ITEMS DI BARRA (riusabile per TopBar e BottomBar)
+ * EDITOR ITEMS DI BARRA (Top/Bottom)
  * ========================================================= */
 @Composable
 private fun BarItemsEditor(
@@ -2314,7 +2380,7 @@ private fun BarItemsEditor(
 }
 
 /* =========================================================
- * TOP BAR INSPECTOR (proprietà base; azioni via BarItemsEditor)
+ * TOP BAR INSPECTOR
  * ========================================================= */
 @Composable
 private fun TopBarInspectorPanel(topBar: JSONObject, onChange: () -> Unit) {
@@ -2346,7 +2412,6 @@ private fun TopBarInspectorPanel(topBar: JSONObject, onChange: () -> Unit) {
         options = listOf("none","pinned","enterAlways","exitUntilCollapsed")
     ) { sel -> scroll = sel; if (sel=="none") topBar.remove("scroll") else topBar.put("scroll", sel); onChange() }
 
-    // Colori testo (legacy compat)
     val titleColor = remember { mutableStateOf(topBar.optString("titleColor","onSurface")) }
     NamedColorPickerPlus(current = titleColor.value, label = "titleColor", allowRoles = true) { pick ->
         titleColor.value = pick
@@ -2361,7 +2426,6 @@ private fun TopBarInspectorPanel(topBar: JSONObject, onChange: () -> Unit) {
         onChange()
     }
 
-    // Legacy gradient flag (mantenuto per compat; il renderer mappa in container)
     val legacyGrad = remember { mutableStateOf(topBar.optJSONObject("gradient") != null) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Switch(checked = legacyGrad.value, onCheckedChange = {
@@ -2379,7 +2443,6 @@ private fun TopBarInspectorPanel(topBar: JSONObject, onChange: () -> Unit) {
 /* =========================================================
  * CARD INSPECTOR + CONTAINER EDITOR
  * ========================================================= */
-
 @Composable
 private fun CardInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     Text("Card – Proprietà", style = MaterialTheme.typography.titleMedium)
@@ -2391,14 +2454,12 @@ private fun CardInspectorPanel(working: JSONObject, onChange: () -> Unit) {
         label = { Text("clickActionId (opz.)") }
     )
 
-    // Editor contenitore unificato
     ContainerEditorSection(working, key = "container", title = "Card – Contenitore", onChange = onChange)
 }
 
 /* =========================================================
- * CONTAINER INSPECTOR GENERICO (riusabile ovunque)
+ * CONTAINER INSPECTOR GENERICO
  * ========================================================= */
-
 @Composable
 private fun ContainerEditorSection(
     owner: JSONObject,
@@ -2426,21 +2487,18 @@ private fun ContainerEditorSection(
 
 @Composable
 private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit) {
-    // Style
     var style by remember { mutableStateOf(container.optString("style","surface")) }
     ExposedDropdown(
         value = style, label = "style",
         options = listOf("text","outlined","tonal","primary","surface")
     ) { sel -> style = sel; container.put("style", sel); onChange() }
 
-    // Tint
     var tint by remember { mutableStateOf(container.optString("tint","default")) }
     ExposedDropdown(
         value = tint, label = "tint",
         options = listOf("default","success","warning","error")
     ) { sel -> tint = sel; container.put("tint", sel); onChange() }
 
-    // CustomColor (ruoli o hex)
     val customColor = remember { mutableStateOf(container.optString("customColor","")) }
     NamedColorPickerPlus(current = customColor.value, label = "customColor (palette/ruoli)", allowRoles = true) { hex ->
         customColor.value = hex
@@ -2448,7 +2506,6 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         onChange()
     }
 
-    // Forma / corner
     var shape by remember { mutableStateOf(container.optString("shape","rounded")) }
     ExposedDropdown(
         value = shape, label = "shape",
@@ -2460,14 +2517,12 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         container.put("corner", v.coerceAtLeast(0.0)); onChange()
     }
 
-    // Elevation
     val elev = remember { mutableStateOf(container.optDouble("elevationDp", if (style in listOf("surface","primary","tonal")) 1.0 else 0.0).toString()) }
     StepperField("elevation (dp)", elev, 1.0) { v ->
         if (v <= 0.0) container.remove("elevationDp") else container.put("elevationDp", v)
         onChange()
     }
 
-    // Bordo
     var borderMode by remember { mutableStateOf(container.optString("borderMode", if (style=="outlined") "full" else "none")) }
     ExposedDropdown(
         value = when (borderMode) {
@@ -2496,7 +2551,6 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         onChange()
     }
 
-    // Gradient
     Divider(); Text("Gradient (opz.)", style = MaterialTheme.typography.titleSmall)
     var gradEnabled by remember { mutableStateOf(container.optJSONObject("gradient") != null) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2539,7 +2593,6 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         ) { sel -> dir = sel; g.put("direction", sel); onChange() }
     }
 
-    // Immagine di background (facoltativa)
     Divider(); Text("Immagine di sfondo (opz.)", style = MaterialTheme.typography.titleSmall)
     var imgEnabled by remember { mutableStateOf(container.optJSONObject("image") != null) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2574,7 +2627,7 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
 }
 
 /* =========================================================
- * INSPECTOR dei vari BLOCCHI – esistenti
+ * INSPECTOR dei vari BLOCCHI
  * ========================================================= */
 
 @Composable
@@ -2806,7 +2859,7 @@ private fun ChipRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     ExposedDropdown(
         value = if (fontFamily.isBlank()) "(default)" else fontFamily,
         label = "fontFamily",
-        options = FontCatalog.FONT_FAMILY_OPTIONS
+        options = FontCatalog.FONT_FAMILY_OPTIONS  // definito nel tuo progetto
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontFamily = v
@@ -2961,7 +3014,6 @@ private fun AlertInspectorPanel(working: JSONObject, onChange: () -> Unit) {
 private fun ImageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     Text("Image – Proprietà", style = MaterialTheme.typography.titleMedium)
 
-    // Sorgente con picker cartelle
     ImagePickerRow(
         label = "source",
         current = working.optString("source",""),
@@ -3050,7 +3102,7 @@ private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Uni
     ExposedDropdown(
         value = if (fontFamily.isBlank()) "(default)" else fontFamily,
         label = "fontFamily",
-        options = FontCatalog.FONT_FAMILY_OPTIONS
+        options = FontCatalog.FONT_FAMILY_OPTIONS // definito nel tuo progetto
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontFamily = v
@@ -3202,55 +3254,9 @@ private fun mapButtonColors(style: String, tint: String): Triple<Color, Color, D
     }
 }
 
-/* ---- Pickers ---- */
-
-private val ICONS = listOf(
-    "settings", "more_vert", "tune",
-    "play_arrow", "pause", "stop", "add",
-    "flag", "queue_music", "widgets", "palette",
-    "home", "menu", "close", "more_horiz", "list", "tab", "grid_on",
-    "directions_run", "directions_walk", "directions_bike",
-    "fitness_center", "timer", "timer_off", "watch_later",
-    "map", "my_location", "place", "speed",
-    "bolt", "local_fire_department", "sports_score", "toggle_on"
-)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun IconPickerField(
-    value: MutableState<String>,
-    label: String,
-    onSelected: (String) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(
-            value = value.value,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            leadingIcon = { if (value.value.isNotBlank()) NamedIconEx(value.value, null) },
-            modifier = Modifier.menuAnchor()
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            ICONS.forEach { name ->
-                DropdownMenuItem(
-                    text = { Text(name) },
-                    leadingIcon = { NamedIconEx(name, null) },
-                    onClick = { onSelected(name); expanded = false }
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-// da
-// private @Composable fun ExposedDropdown(...) ...
-// a
-@Composable internal fun ExposedDropdown(/* ... */) { /* corpo invariato */ }
-private fun ExposedDropdown(
+internal fun ExposedDropdown(
     value: String,
     label: String,
     options: List<String>,
@@ -3274,11 +3280,8 @@ private fun ExposedDropdown(
     }
 }
 
-// da
-// private @Composable fun StepperField(...) ...
-// a
-@Composable internal fun StepperField(/* ... */) { /* corpo invariato */ }
-private fun StepperField(
+@Composable
+internal fun StepperField(
     label: String,
     state: MutableState<String>,
     step: Double = 1.0,
@@ -3314,7 +3317,7 @@ private fun StepperField(
     }
 }
 
-/* ---- Image Picker row (riusabile) ---- */
+/* ---- Image Picker row ---- */
 
 @Composable
 private fun ImagePickerRow(
@@ -3386,231 +3389,62 @@ private fun ImagePickerRow(
     }
 }
 
-/* ---- Caricamento bitmap da URI ---- */
-
-
-
+/* =========================================================
+ * TEXT STYLE OVERRIDES
+ * ========================================================= */
 @Composable
-internal fun rememberImageBitmapFromUri(uri: String?): ImageBitmap? {
-    if (uri.isNullOrBlank()) return null
-    val ctx = LocalContext.current
-    return remember(uri) {
-        try {
-            if (uri.startsWith("res:")) {
-                val resName = uri.removePrefix("res:")
-                val id = ctx.resources.getIdentifier(resName, "drawable", ctx.packageName)
-                if (id != 0) {
-                    val dr = androidx.core.content.ContextCompat.getDrawable(ctx, id) as? android.graphics.drawable.BitmapDrawable
-                    dr?.bitmap?.asImageBitmap()
-                } else null
-            } else {
-                ctx.contentResolver.openInputStream(Uri.parse(uri)).use { input ->
-                    val bmp = BitmapFactory.decodeStream(input)
-                    bmp?.asImageBitmap()
-                }
-            }
-        } catch (_: Exception) { null }
-    }
-}
+private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
+    var st = base
 
-/* ---- Icon helper ---- */
-
-@Composable
-private fun NamedIconEx(name: String?, contentDescription: String?) {
-    val __ctx = LocalContext.current
-    if (name.isNullOrBlank()) {
-        Text("."); return
+    val size = node.optDouble("textSizeSp", Double.NaN)
+    if (!size.isNaN()) {
+        st = st.copy(fontSize = TextUnit(size.toFloat(), TextUnitType.Sp))
     }
 
-    // icona da risorsa drawable
-    if (name.startsWith("res:")) {
-        val resName = name.removePrefix("res:")
-        val id = __ctx.resources.getIdentifier(resName, "drawable", __ctx.packageName)
-        if (id != 0) { Icon(painterResource(id), contentDescription); return }
+    when (node.optString("fontWeight", "")) {
+        "w100" -> st = st.copy(fontWeight = FontWeight.Thin)
+        "w200" -> st = st.copy(fontWeight = FontWeight.ExtraLight)
+        "w300" -> st = st.copy(fontWeight = FontWeight.Light)
+        "w400" -> st = st.copy(fontWeight = FontWeight.Normal)
+        "w500" -> st = st.copy(fontWeight = FontWeight.Medium)
+        "w600" -> st = st.copy(fontWeight = FontWeight.SemiBold)
+        "w700" -> st = st.copy(fontWeight = FontWeight.Bold)
+        "w800" -> st = st.copy(fontWeight = FontWeight.ExtraBold)
+        "w900" -> st = st.copy(fontWeight = FontWeight.Black)
     }
 
-    // icona da uri/file/content (raster)
-    if (name.startsWith("uri:") || name.startsWith("content:") || name.startsWith("file:")) {
-        val bmp = rememberImageBitmapFromUri(name.removePrefix("uri:"))
-        if (bmp != null) {
-            Image(
-                bitmap = bmp,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(24.dp)
-            )
-            return
-        }
+    val styleKey = node.optString("fontStyle", "")
+    val italicFlag = node.optBoolean("italic", false)
+    if (styleKey.equals("italic", ignoreCase = true) || italicFlag) {
+        st = st.copy(fontStyle = FontStyle.Italic)
+    } else if (styleKey.equals("normal", ignoreCase = true)) {
+        st = st.copy(fontStyle = FontStyle.Normal)
     }
 
-    // icone Material note
-    val image = when (name) {
-        "settings" -> Icons.Filled.Settings
-        "more_vert" -> Icons.Filled.MoreVert
-        "tune" -> Icons.Filled.Tune
-        "play_arrow" -> Icons.Filled.PlayArrow
-        "pause" -> Icons.Filled.Pause
-        "stop" -> Icons.Filled.Stop
-        "add" -> Icons.Filled.Add
-        "flag" -> Icons.Filled.Flag
-        "queue_music" -> Icons.Filled.QueueMusic
-        "widgets" -> Icons.Filled.Widgets
-        "palette" -> Icons.Filled.Palette
-        "home" -> Icons.Filled.Home
-        "menu" -> Icons.Filled.Menu
-        "close" -> Icons.Filled.Close
-        "more_horiz" -> Icons.Filled.MoreHoriz
-        "list" -> Icons.Filled.List
-        "tab" -> Icons.Filled.Tab
-        "grid_on" -> Icons.Filled.GridOn
-        "toggle_on" -> Icons.Filled.ToggleOn
-        "bolt" -> Icons.Filled.Bolt
-        else -> null
+    val familyKey = node.optString("fontFamily", "")
+    val family = when (familyKey) {
+        "serif"     -> FontFamily.Serif
+        "monospace" -> FontFamily.Monospace
+        "cursive"   -> FontFamily.Cursive
+        "sans"      -> FontFamily.SansSerif
+        ""          -> null
+        else        -> FontCatalog.resolveFontFamily(familyKey) // definito nel tuo progetto
     }
-    if (image != null) Icon(image, contentDescription) else Text(".")
-}
+    if (family != null) st = st.copy(fontFamily = family)
 
-/* ---- Color parsing / pickers ---- */
+    val letterSp = node.optDouble("letterSpacingSp", Double.NaN)
+    if (!letterSp.isNaN()) st = st.copy(letterSpacing = TextUnit(letterSp.toFloat(), TextUnitType.Sp))
 
-// da
-// private @Composable fun parseColorOrRole(...) ...
-// a
-@Composable
-internal fun parseColorOrRole(value: String?): Color? {
-    val v = value?.trim().orEmpty()
-    if (v.isEmpty()) return null
-    if (v.equals("transparent", true)) return Color.Transparent
+    val lineH = node.optDouble("lineHeightSp", Double.NaN)
+    if (!lineH.isNaN()) st = st.copy(lineHeight = TextUnit(lineH.toFloat(), TextUnitType.Sp))
 
-    if (v.startsWith("#")) {
-        return runCatching { Color(android.graphics.Color.parseColor(v)) }.getOrNull()
-    }
-
-    val key = if (v.startsWith("role:", true)) v.substringAfter(':') else v
-    val cs = MaterialTheme.colorScheme
-    return when (key.lowercase()) {
-        "primary" -> cs.primary
-        "onprimary" -> cs.onPrimary
-        "secondary" -> cs.secondary
-        "onsecondary" -> cs.onSecondary
-        "tertiary" -> cs.tertiary
-        "ontertiary" -> cs.onTertiary
-        "surface" -> cs.surface
-        "onsurface" -> cs.onSurface
-        "surfacevariant" -> cs.surfaceVariant
-        "onsurfacevariant" -> cs.onSurfaceVariant
-        "background" -> cs.background
-        "onbackground" -> cs.onBackground
-        "outline" -> cs.outline
-        "inverseprimary" -> cs.inversePrimary
-        "inverseonsurface" -> cs.inverseOnSurface
-        else -> null
-    }
-}
-
-private val NAMED_SWATCHES = linkedMapOf(
-    // Neutri
-    "White" to 0xFFFFFFFF.toInt(),
-    "Black" to 0xFF000000.toInt(),
-    "Gray50" to 0xFFFAFAFA.toInt(), "Gray100" to 0xFFF5F5F5.toInt(), "Gray200" to 0xFFEEEEEE.toInt(),
-    "Gray300" to 0xFFE0E0E0.toInt(), "Gray400" to 0xFFBDBDBD.toInt(),
-    "Gray500" to 0xFF9E9E9E.toInt(), "Gray600" to 0xFF757575.toInt(), "Gray700" to 0xFF616161.toInt(), "Gray800" to 0xFF424242.toInt(), "Gray900" to 0xFF212121.toInt(),
-
-    // Material-like
-    "Red" to 0xFFE53935.toInt(), "RedDark" to 0xFFC62828.toInt(), "RedLight" to 0xFFEF5350.toInt(),
-    "Pink" to 0xFFD81B60.toInt(), "PinkDark" to 0xFFC2185B.toInt(), "PinkLight" to 0xFFF06292.toInt(),
-    "Purple" to 0xFF8E24AA.toInt(), "PurpleDark" to 0xFF6A1B9A.toInt(), "PurpleLight" to 0xFFBA68C8.toInt(),
-    "DeepPurple" to 0xFF5E35B1.toInt(), "Indigo" to 0xFF3949AB.toInt(),
-    "Blue" to 0xFF1E88E5.toInt(), "BlueDark" to 0xFF1565C0.toInt(), "BlueLight" to 0xFF64B5F6.toInt(),
-    "LightBlue" to 0xFF039BE5.toInt(), "Cyan" to 0xFF00ACC1.toInt(),
-    "Teal" to 0xFF00897B.toInt(), "TealLight" to 0xFF26A69A.toInt(),
-    "Green" to 0xFF43A047.toInt(), "GreenDark" to 0xFF2E7D32.toInt(), "GreenLight" to 0xFF66BB6A.toInt(),
-    "LightGreen" to 0xFF7CB342.toInt(), "Lime" to 0xFFC0CA33.toInt(),
-    "Yellow" to 0xFFFDD835.toInt(), "Amber" to 0xFFFFB300.toInt(),
-    "Orange" to 0xFFFB8C00.toInt(), "DeepOrange" to 0xFFF4511E.toInt(),
-    "Brown" to 0xFF6D4C41.toInt(), "BlueGrey" to 0xFF546E7A.toInt()
-)
-
-private val MATERIAL_ROLES = listOf(
-    "primary","secondary","tertiary","error","surface",
-    "onPrimary","onSecondary","onTertiary","onSurface","onError"
-)
-
-@OptIn(ExperimentalMaterial3Api::class)
-// da
-// private @Composable fun NamedColorPickerPlus(...) ...
-// a
-@Composable internal fun NamedColorPickerPlus(/* ... */) { /* corpo invariato */ }
-private fun NamedColorPickerPlus(
-    current: String,
-    label: String,
-    allowRoles: Boolean = false,
-    onPick: (String) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val display = if (current.isBlank()) "(default)" else current
-
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(
-            value = display,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            if (allowRoles) {
-                val cs = MaterialTheme.colorScheme
-                fun roleColor(role: String): Color = when (role) {
-                    "primary","onPrimary"     -> cs.primary
-                    "secondary","onSecondary" -> cs.secondary
-                    "tertiary","onTertiary"   -> cs.tertiary
-                    "error","onError"         -> cs.error
-                    "surface","onSurface"     -> cs.surface
-                    else -> cs.primary
-                }
-                MATERIAL_ROLES.forEach { role ->
-                    val c = roleColor(role)
-                    DropdownMenuItem(
-                        leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
-                        text = { Text(role) },
-                        onClick = { onPick(role); expanded = false }
-                    )
-                }
-                Divider()
-            }
-            NAMED_SWATCHES.forEach { (name, argb) ->
-                val c = Color(argb)
-                DropdownMenuItem(
-                    leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
-                    text = { Text(name) },
-                    onClick = {
-                        val hex = "#%06X".format(argb and 0xFFFFFF)
-                        onPick(hex); expanded = false
-                    }
-                )
-            }
-            DropdownMenuItem(text = { Text("(default)") }, onClick = { onPick(""); expanded = false })
-        }
-    }
-}
-
-// da
-// private fun bestOnColor(...) ...
-// a
-internal fun bestOnColor(bg: Color): Color = /* corpo invariato */
-/* ---- Readability helper ---- */
-    val l = 0.2126f * bg.red + 0.7152f * bg.green + 0.0722f * bg.blue
-    return if (l < 0.5f) Color.White else Color.Black
+    return st
 }
 
 /* =========================================================
  * JSON utils
  * ========================================================= */
-
-// da
-// private fun collectMenus(...) ...
-// a
-internal fun collectMenus(root: JSONObject): Map<String, JSONArray> = /* corpo invariato */ {
+internal fun collectMenus(root: JSONObject): Map<String, JSONArray> {
     val map = mutableMapOf<String, JSONArray>()
     fun walk(n: Any?) {
         when (n) {
@@ -3737,10 +3571,7 @@ private fun moveAndReturnNewPath(root: JSONObject, path: String, delta: Int): St
     return "$parentPath/$newIdx"
 }
 
-// da
-// private fun moveInArray(...) ...
-// a
-internal fun moveInArray(arr: JSONArray, index: Int, delta: Int) { /* corpo invariato */ }
+internal fun moveInArray(arr: JSONArray, index: Int, delta: Int) {
     if (index < 0 || index >= arr.length()) return
     val newIdx = (index + delta).coerceIn(0, arr.length() - 1)
     if (newIdx == index) return
@@ -3773,10 +3604,8 @@ private fun remove(root: JSONObject, path: String) {
     while (arr.length() > 0) arr.remove(arr.length() - 1)
     tmp.forEach { arr.put(it) }
 }
-// da
-// private fun removeAt(...) ...
-// a
-internal fun removeAt(arr: JSONArray, index: Int) { /* corpo invariato */ }
+
+internal fun removeAt(arr: JSONArray, index: Int) {
     if (index < 0 || index >= arr.length()) return
     val tmp = mutableListOf<Any?>()
     for (i in 0 until arr.length()) if (i != index) tmp.add(arr.get(i))
@@ -3787,7 +3616,6 @@ internal fun removeAt(arr: JSONArray, index: Int) { /* corpo invariato */ }
 /* =========================================================
  * BLUEPRINTS
  * ========================================================= */
-
 private fun newSectionHeader() = JSONObject("""{"type":"SectionHeader","title":"Nuova sezione"}""")
 
 private fun newButtonRow() = JSONObject(
@@ -3852,9 +3680,7 @@ private fun newChipRow() = JSONObject(
 )
 
 private fun newMetricsGrid() = JSONObject("""{"type":"MetricsGrid","columns":2,"tiles":[{"label":"Pace"},{"label":"Heart"}]}""")
-
 private fun newSlider() = JSONObject("""{"type":"Slider","label":"Pace","bind":"pace","min":3.0,"max":7.0,"step":0.1,"unit":" min/km"}""")
-
 private fun newToggle() = JSONObject("""{"type":"Toggle","label":"Attiva opzione","bind":"toggle_1"}""")
 
 private fun newList() = JSONObject(
@@ -3865,62 +3691,3 @@ private fun newList() = JSONObject(
     ]}
     """.trimIndent()
 )
-
-/* =========================================================
- * TEXT STYLE OVERRIDES
- * ========================================================= */
-
-// Funzione composable per potere espandere in futuro a font di risorsa
-@Composable
-private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
-    var st = base
-
-    // dimensione (sp)
-    val size = node.optDouble("textSizeSp", Double.NaN)
-    if (!size.isNaN()) {
-        st = st.copy(fontSize = TextUnit(size.toFloat(), TextUnitType.Sp))
-    }
-
-    // peso
-    when (node.optString("fontWeight", "")) {
-        "w100" -> st = st.copy(fontWeight = FontWeight.Thin)
-        "w200" -> st = st.copy(fontWeight = FontWeight.ExtraLight)
-        "w300" -> st = st.copy(fontWeight = FontWeight.Light)
-        "w400" -> st = st.copy(fontWeight = FontWeight.Normal)
-        "w500" -> st = st.copy(fontWeight = FontWeight.Medium)
-        "w600" -> st = st.copy(fontWeight = FontWeight.SemiBold)
-        "w700" -> st = st.copy(fontWeight = FontWeight.Bold)
-        "w800" -> st = st.copy(fontWeight = FontWeight.ExtraBold)
-        "w900" -> st = st.copy(fontWeight = FontWeight.Black)
-    }
-
-    // stile (italic)
-    val styleKey = node.optString("fontStyle", "")
-    val italicFlag = node.optBoolean("italic", false)
-    if (styleKey.equals("italic", ignoreCase = true) || italicFlag) {
-        st = st.copy(fontStyle = FontStyle.Italic)
-    } else if (styleKey.equals("normal", ignoreCase = true)) {
-        st = st.copy(fontStyle = FontStyle.Normal)
-    }
-
-    // famiglia: ruoli base + custom (se in futuro aggiungerai risorse font)
-    val familyKey = node.optString("fontFamily", "")
-    val family = when (familyKey) {
-        "serif"     -> FontFamily.Serif
-        "monospace" -> FontFamily.Monospace
-        "cursive"   -> FontFamily.Cursive
-        "sans"      -> FontFamily.SansSerif
-        ""          -> null
-        else        -> FontCatalog.resolveFontFamily(familyKey)
-    }
-    if (family != null) st = st.copy(fontFamily = family)
-
-    // spaziatura lettere (sp) e interlinea (sp)
-    val letterSp = node.optDouble("letterSpacingSp", Double.NaN)
-    if (!letterSp.isNaN()) st = st.copy(letterSpacing = TextUnit(letterSp.toFloat(), TextUnitType.Sp))
-
-    val lineH = node.optDouble("lineHeightSp", Double.NaN)
-    if (!lineH.isNaN()) st = st.copy(lineHeight = TextUnit(lineH.toFloat(), TextUnitType.Sp))
-
-    return st
-}
