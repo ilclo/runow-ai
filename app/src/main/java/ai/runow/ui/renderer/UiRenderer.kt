@@ -95,6 +95,100 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
+
+@Composable
+internal fun RenderCenterMenuOverlay(
+    layout: JSONObject,
+    openMenuId: String?,
+    onClose: () -> Unit,
+    menus: Map<String, JSONArray>,
+    dispatch: (String) -> Unit
+) {
+    if (openMenuId == null) return
+    val items = menus[openMenuId] ?: return
+
+    val cfg = layout.optJSONObject("centerMenuOverlay") ?: JSONObject()
+    val widthFrac  = cfg.optDouble("widthFraction", 0.90).toFloat().coerceIn(0.5f, 1f)
+    val maxHFrac   = cfg.optDouble("maxHeightFraction", 0.70).toFloat().coerceIn(0.3f, 0.95f)
+    val cornerDp   = cfg.optDouble("corner", 18.0).toFloat().dp
+    val alphaBox   = cfg.optDouble("alpha", 0.88).toFloat().coerceIn(0.35f, 1f)
+    val scrimAlpha = cfg.optDouble("scrimAlpha", 0.08).toFloat().coerceIn(0f, 0.35f)
+    val baseColor  = parseColorOrRole(cfg.optString("containerColor","surface")) ?: MaterialTheme.colorScheme.surface
+    val textColor  = parseColorOrRole(cfg.optString("textColor","")) ?: bestOnColor(baseColor)
+    val title      = cfg.optString("title","")
+
+    BackHandler(enabled = true) { onClose() }
+
+    Box(Modifier.fillMaxSize()) {
+        // leggero scrim per catturare il tap fuori e dare focus al menu, senza coprire la sidebar dietro
+        if (scrimAlpha > 0f) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = scrimAlpha))
+                    .clickable { onClose() }
+            )
+        } else {
+            Box(Modifier.fillMaxSize().clickable { onClose() })
+        }
+
+        Surface(
+            color = baseColor.copy(alpha = alphaBox),        // semitrasparente: si intravede il background
+            contentColor = textColor,
+            shape = RoundedCornerShape(cornerDp),
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth(widthFrac)
+                .fillMaxHeight(maxHFrac)
+        ) {
+            Column(
+                Modifier
+                    .padding(12.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (title.isNotBlank()) title else openMenuId,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    IconButton(onClick = onClose) { NamedIconEx("close", "Chiudi menu") }
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                // voci del menu
+                for (i in 0 until items.length()) {
+                    val it = items.optJSONObject(i) ?: continue
+                    val label = it.optString("label", "")
+                    val icon  = it.optString("icon", "")
+                    val act   = it.optString("actionId", "")
+
+                    ListItem(
+                        headlineContent = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        leadingContent  = { if (icon.isNotBlank()) NamedIconEx(icon, label) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                onClose()
+                                if (act.isNotBlank()) dispatch(act)
+                            }
+                            .padding(vertical = 2.dp, horizontal = 4.dp)
+                    )
+                    Divider()
+                }
+
+                Spacer(Modifier.height(4.dp))
+            }
+        }
+    }
+}
+
 @Composable
 internal fun RenderBlock(
     block: JSONObject,
@@ -145,23 +239,31 @@ internal fun CenteredSheet(
 }
 
 
-internal fun wrapDispatchForSidePanels(
+internal fun wrapDispatchForOverlays(
     openPanelSetter: (String?) -> Unit,
+    openMenuSetter: (String?) -> Unit,
     appDispatch: (String) -> Unit
 ): (String) -> Unit = { actionId ->
     when {
         actionId.startsWith("sidepanel:open:") -> openPanelSetter(actionId.removePrefix("sidepanel:open:"))
-        actionId == "sidepanel:close" -> openPanelSetter(null)
+        actionId == "sidepanel:close"         -> openPanelSetter(null)
+
+        actionId.startsWith("open_menu:")     -> openMenuSetter(actionId.removePrefix("open_menu:"))
+        actionId == "menu:close"              -> openMenuSetter(null)
+
         else -> appDispatch(actionId)
     }
 }
+
 
 @Composable
 internal fun RenderSidePanelsOverlay(
     layout: JSONObject,
     openPanelId: String?,
     onClose: () -> Unit,
-    dispatch: (String) -> Unit
+    dispatch: (String) -> Unit,
+    menus: Map<String, JSONArray>,
+    dimBehind: Boolean
 ) {
     val panels = layout.optJSONArray("sidePanels") ?: JSONArray()
     if (openPanelId == null || panels.length() == 0) return
@@ -177,7 +279,8 @@ internal fun RenderSidePanelsOverlay(
     val height = panel.optDouble("heightDp", 0.0).toFloat().let { if (it > 0) it.dp else Dp.Unspecified }
     val items = panel.optJSONArray("items") ?: JSONArray()
 
-    val scrimAlpha = panel.optDouble("scrimAlpha", 0.25).toFloat().coerceIn(0f, 1f)
+    val baseScrimAlpha = panel.optDouble("scrimAlpha", 0.25).toFloat().coerceIn(0f, 1f)
+    val scrimAlpha = if (dimBehind) baseScrimAlpha else 0f // quando c'è il menu centrale, lasciamo “intravedere”
     val scrimColor = Color.Black.copy(alpha = scrimAlpha)
     val ms = panel.optInt("animMs", 240).coerceIn(120, 600)
 
@@ -192,14 +295,21 @@ internal fun RenderSidePanelsOverlay(
         else    -> slideOutHorizontally(animationSpec = tween(ms)) { -it } + fadeOut()
     }
 
-    val menus = remember(layout) { collectMenus(layout) }
-
     Box(Modifier.fillMaxSize()) {
-        AnimatedVisibility(visible = true, enter = fadeIn(tween(ms)), exit = fadeOut(tween(ms))) {
+        if (scrimAlpha > 0f) {
+            AnimatedVisibility(visible = true, enter = fadeIn(tween(ms)), exit = fadeOut(tween(ms))) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(scrimColor)
+                        .clickable { onClose() }
+                )
+            }
+        } else {
+            // clickable trasparente per chiudere, senza oscurare
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(scrimColor)
                     .clickable { onClose() }
             )
         }
@@ -256,6 +366,7 @@ internal fun RenderSidePanelsOverlay(
         }
     }
 }
+
 
 
 internal fun collectSidePanelIds(layout: JSONObject): List<String> {
@@ -325,9 +436,12 @@ fun UiScreen(
 
     // Pannelli laterali runtime
     var openSidePanelId by remember { mutableStateOf<String?>(null) }
-    val localDispatch = wrapDispatchForSidePanels(
+    var openCenterMenuId by remember { mutableStateOf<String?>(null) }
+    
+    val localDispatch = wrapDispatchForOverlays(
         openPanelSetter = { openSidePanelId = it },
-        appDispatch = dispatch
+        openMenuSetter  = { openCenterMenuId = it },
+        appDispatch     = dispatch
     )
 
     // Live preview root (page/topBar) opzionale: tieni NULL se non la usi ora
@@ -354,14 +468,21 @@ fun UiScreen(
             scaffoldPadding = scaffoldPadding
         )
 
-        // Overlay pannelli laterali
         RenderSidePanelsOverlay(
-            layout = layout!!,
-            openPanelId = openSidePanelId,
-            onClose = { openSidePanelId = null },
-            dispatch = localDispatch
+            layout       = layout!!,
+            openPanelId  = openSidePanelId,
+            onClose      = { openSidePanelId = null },
+            dispatch     = localDispatch,
+            menus        = menus,
+            dimBehind    = openCenterMenuId == null   // quando il menu centrale è aperto, niente scrim pesante
         )
-
+        RenderCenterMenuOverlay(
+            layout      = layout!!,
+            openMenuId  = openCenterMenuId,
+            onClose     = { openCenterMenuId = null },
+            menus       = menus,
+            dispatch    = localDispatch
+        )
         // Overlay designer (palette/inspector) — identico al tuo stabile
         if (designMode) {
             DesignerOverlay(
@@ -871,26 +992,15 @@ private fun RowScope.RenderBarItemsRow(items: JSONArray, dispatch: (String) -> U
                 val icon = it.optString("icon","more_vert")
                 val actionId = it.optString("actionId","")
                 val openMenuId = it.optString("openMenuId","")
-                var expanded by remember { mutableStateOf(false) }
-                Box {
-                    IconButton(onClick = {
-                        if (openMenuId.isNotBlank() || actionId.startsWith("open_menu:")) {
-                            expanded = true
-                        } else if (actionId.isNotBlank()) {
-                            dispatch(actionId)
-                        }
-                    }) { NamedIconEx(icon, null) }
-
-                    val menuId = if (openMenuId.isNotBlank()) openMenuId else actionId.removePrefix("open_menu:")
-                    // il vero contenuto del menu è gestito come blocco "Menu" nel layout
-                    // qui ci limitiamo a segnalare l'azione di apertura
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Esegui ${if (menuId.isBlank()) "azione" else "menu:$menuId"}") },
-                            onClick = { expanded = false; dispatch(actionId.ifBlank { "open_menu:$menuId" }) }
-                        )
+            
+                IconButton(onClick = {
+                    val targetMenu = if (openMenuId.isNotBlank()) openMenuId else actionId.removePrefix("open_menu:")
+                    if (openMenuId.isNotBlank() || actionId.startsWith("open_menu:")) {
+                        dispatch("open_menu:$targetMenu")
+                    } else if (actionId.isNotBlank()) {
+                        dispatch(actionId)
                     }
-                }
+                }) { NamedIconEx(icon, null) }
             }
         }
     }
