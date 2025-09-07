@@ -175,7 +175,8 @@ internal fun RenderCenterMenuOverlay(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .clickable {
-                                onClose()
+                                val keepOpen = act.startsWith("sidepanel:open:")
+                                if (!keepOpen) onClose()           // resta aperto se sto aprendo una sidebar
                                 if (act.isNotBlank()) dispatch(act)
                             }
                             .padding(vertical = 2.dp, horizontal = 4.dp)
@@ -197,10 +198,42 @@ internal fun RenderBlock(
     designerMode: Boolean,
     path: String,
     menus: Map<String, JSONArray>,
-    onSelect: (String) -> Unit = {},
-    onOpenInspector: (String) -> Unit = {}
+    onSelect: (String) -> Unit,
+    onOpenInspector: (String) -> Unit
 ) {
-    // <-- qui rimane il TUO corpo stabile già funzionante -->
+    // --- Intercettori per menu centrale/sidepanel ---
+    when (block.optString("type")) {
+        "IconButton" -> {
+            val icon = block.optString("icon", "more_vert")
+            val openMenuId = block.optString("openMenuId", "")
+            val actionId = block.optString("actionId", "")
+
+            IconButton(onClick = {
+                when {
+                    openMenuId.isNotBlank() -> dispatch("open_menu:$openMenuId")
+                    actionId.startsWith("open_menu:") -> dispatch(actionId)
+                    else -> if (actionId.isNotBlank()) dispatch(actionId)
+                }
+            }) { NamedIconEx(icon, null) }
+            return
+        }
+        "Menu" -> {
+            // Il contenuto del menu viene reso dal Center Overlay.
+            // In designer mostriamo un chip cliccabile che apre l’overlay per anteprima rapida.
+            if (designerMode) {
+                val id = block.optString("id","(menu)")
+                TextButton(onClick = { if (id.isNotBlank()) dispatch("open_menu:$id") }) {
+                    NamedIconEx("more_vert", null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Menu: $id")
+                }
+            }
+            return
+        }
+    }
+
+    // --- qui sotto resta il TUO corpo stabile già funzionante ---
+    // ...
 }
 
 
@@ -264,6 +297,7 @@ internal fun RenderSidePanelsOverlay(
     dispatch: (String) -> Unit,
     menus: Map<String, JSONArray>,
     dimBehind: Boolean
+    BackHandler(enabled = true) { onClose() }
 ) {
     val panels = layout.optJSONArray("sidePanels") ?: JSONArray()
     if (openPanelId == null || panels.length() == 0) return
@@ -486,6 +520,9 @@ fun UiScreen(
         // Overlay designer (palette/inspector) — identico al tuo stabile
         if (designMode) {
             DesignerOverlay(
+                val working = remember(selectedPath) {
+                    JSONObject(selectedBlock.toString()).apply { put("_root", layout) }
+                }
                 screenName = screenName,
                 layout = layout!!,
                 selectedPath = selectedPath,
@@ -496,6 +533,12 @@ fun UiScreen(
                     layout = JSONObject(layout.toString())
                     tick++
                 },
+                Button(onClick = {
+                    val toSave = JSONObject(working.toString()).apply { remove("_root") }
+                    replaceAtPath(layout, selectedPath, toSave)
+                    showInspector = false
+                    onLayoutChange()
+                }) { Text("OK") }
                 onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
                 onPublish = {
                     UiLoader.saveDraft(ctx, screenName, layout!!)
@@ -835,8 +878,8 @@ private fun RenderRootScaffold(
     scaffoldPadding: PaddingValues
 ) {
     val title = layout.optString("topTitle", "")
-    val topActions = layout.optJSONArray("topActions") ?: JSONArray() // legacy
-    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy
+    val topActions = layout.optJSONArray("topActions") ?: JSONArray()
+    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray()
     val bottomBarNode = layout.optJSONObject("bottomBar")
     val bottomBarCfg = bottomBarNode?.optJSONObject("container")
     val bottomBarItems = bottomBarNode?.optJSONArray("items")
@@ -844,7 +887,6 @@ private fun RenderRootScaffold(
     val scroll = layout.optBoolean("scroll", true)
     val topBarConf = layout.optJSONObject("topBar")
 
-    // Scroll behavior della TopAppBar (solo se definito in topBar)
     val topScrollBehavior = when (topBarConf?.optString("scroll", "none")) {
         "pinned" -> TopAppBarDefaults.pinnedScrollBehavior()
         "enterAlways" -> TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -852,112 +894,116 @@ private fun RenderRootScaffold(
         else -> null
     }
 
-    Scaffold(
-        modifier = if (topScrollBehavior != null)
-            Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
-        else Modifier,
-        topBar = {
-            if (topBarConf != null) {
-                RenderTopBar(topBarConf, dispatch, topScrollBehavior)
-            } else {
-                // Fallback legacy: topTitle/topActions
-                if (title.isNotBlank() || topActions.length() > 0) {
-                    TopAppBar(
-                        title = { Text(title) },
-                        actions = {
-                            for (i in 0 until topActions.length()) {
-                                val a = topActions.optJSONObject(i) ?: continue
-                                IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-                                    NamedIconEx(a.optString("icon", "more_vert"), null)
+    Box(Modifier.fillMaxSize()) {
+        // <<< BACKGROUND PAGINA (rimesso) >>>
+        RenderPageBackground(effectiveLayout.optJSONObject("page"))
+
+        Scaffold(
+            modifier = if (topScrollBehavior != null)
+                Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
+            else Modifier,
+            topBar = {
+                if (topBarConf != null) {
+                    RenderTopBar(topBarConf, dispatch, topScrollBehavior)
+                } else {
+                    // Fallback legacy con patch azioni (vedi punto 1)
+                    if (title.isNotBlank() || topActions.length() > 0) {
+                        TopAppBar(
+                            title = { Text(title) },
+                            actions = {
+                                for (i in 0 until topActions.length()) {
+                                    val a = topActions.optJSONObject(i) ?: continue
+                                    val icon        = a.optString("icon", "more_vert")
+                                    val actionId    = a.optString("actionId", "")
+                                    val openMenuId  = a.optString("openMenuId", "")
+                                    IconButton(onClick = {
+                                        when {
+                                            openMenuId.isNotBlank()               -> dispatch("open_menu:$openMenuId")
+                                            actionId.startsWith("open_menu:")     -> dispatch(actionId)
+                                            actionId.startsWith("sidepanel:open:")-> dispatch(actionId)
+                                            actionId.isNotBlank()                 -> dispatch(actionId)
+                                        }
+                                    }) { NamedIconEx(icon, null) }
                                 }
-                            }
-                        }
-                    )
-                }
-            }
-        },
-        bottomBar = {
-            // Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
-            val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
-                JSONArray().apply {
-                    for (i in 0 until bottomButtons.length()) {
-                        val it = bottomButtons.optJSONObject(i) ?: continue
-                        put(
-                            JSONObject().apply {
-                                put("type", "button")
-                                put("label", it.optString("label", "Button"))
-                                put("actionId", it.optString("actionId", ""))
-                                put("style", "text")
                             }
                         )
                     }
                 }
-            } else null
+            },
+            bottomBar = {
+                val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
+                    JSONArray().apply {
+                        for (i in 0 until bottomButtons.length()) {
+                            val it = bottomButtons.optJSONObject(i) ?: continue
+                            put(
+                                JSONObject().apply {
+                                    put("type", "button")
+                                    put("label", it.optString("label", "Button"))
+                                    put("actionId", it.optString("actionId", ""))
+                                    put("style", "text")
+                                }
+                            )
+                        }
+                    }
+                } else null
 
-            if (items != null && items.length() > 0) {
-                StyledContainer(
-                    cfg = bottomBarCfg, // se null -> surface di default
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                if (items != null && items.length() > 0) {
+                    StyledContainer(
+                        cfg = bottomBarCfg,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                     ) {
-                        RenderBarItemsRow(items, dispatch)
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RenderBarItemsRow(items, dispatch)
+                        }
+                    }
+                }
+            },
+            floatingActionButton = {
+                fab?.let {
+                    FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
+                        NamedIconEx(it.optString("icon", "play_arrow"), null)
+                    }
+                }
+            },
+            containerColor = Color.Transparent
+        ) { innerPadding ->
+            val blocks = layout.optJSONArray("blocks") ?: JSONArray()
+
+            val host: @Composable () -> Unit = {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(scaffoldPadding)
+                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = extraPaddingBottom),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    for (i in 0 until blocks.length()) {
+                        val block = blocks.optJSONObject(i) ?: continue
+                        val path = "/blocks/$i"
+                        RenderBlock(
+                            block = block,
+                            dispatch = dispatch,
+                            uiState = uiState,
+                            designerMode = designerMode,
+                            path = path,
+                            menus = menus,
+                            onSelect = { p -> selectedPathSetter(p) },
+                            onOpenInspector = { p -> selectedPathSetter(p) }
+                        )
                     }
                 }
             }
-        },
-        floatingActionButton = {
-            fab?.let {
-                FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
-                    NamedIconEx(it.optString("icon", "play_arrow"), null)
-                }
-            }
-        },
-        containerColor = Color.Transparent // per vedere sfondo/gradient dietro le top bar "text/outlined"
-    ) { innerPadding ->
-        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
 
-        val host: @Composable () -> Unit = {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(scaffoldPadding)
-                    .padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 16.dp,
-                        bottom = extraPaddingBottom
-                    ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                for (i in 0 until blocks.length()) {
-                    val block = blocks.optJSONObject(i) ?: continue
-                    val path = "/blocks/$i"
-                    RenderBlock(
-                        block = block,
-                        dispatch = dispatch,
-                        uiState = uiState,
-                        designerMode = designerMode,
-                        path = path,
-                        menus = menus,
-                        onSelect = { p -> selectedPathSetter(p) },
-                        onOpenInspector = { p -> selectedPathSetter(p) }
-                    )
-                }
-            }
-        }
-
-        if (scroll) {
-            Column(Modifier.verticalScroll(rememberScrollState())) { host() }
-        } else {
-            host()
+            if (scroll) Column(Modifier.verticalScroll(rememberScrollState())) { host() } else host()
         }
     }
 }
+
 
 /* =========================================================
  * RENDER ITEMS DI BARRA (Top/Bottom) – icone, bottoni, spacer
