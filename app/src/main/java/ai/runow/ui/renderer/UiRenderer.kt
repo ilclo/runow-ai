@@ -7,6 +7,7 @@ package ai.runow.ui.renderer
 
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
