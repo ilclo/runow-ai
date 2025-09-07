@@ -200,12 +200,20 @@ fun UiScreen(
     // Modalità designer persistente per schermata
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
 
-    // ---- Live override dal pannello "Layout": applicazione istantanea ----
-    var livePageOverride by remember(screenName) { mutableStateOf<JSONObject?>(null) }
-    var liveTopBarOverride by remember(screenName) { mutableStateOf<JSONObject?>(null) }
-    var liveBottomBarOverride by remember(screenName) { mutableStateOf<JSONArray?>(null) }
+    // ---- Preview root dal pannello layout (la tua versione stabile usa onRootLivePreview)
+    var previewRoot: JSONObject? by remember { mutableStateOf(null) }
+    fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
+        val out = JSONObject(base.toString())
+        listOf("page", "topBar").forEach { k ->
+            if (preview.has(k)) out.put(k, preview.opt(k))
+        }
+        return out
+    }
+    val effectiveLayout = remember(layout, previewRoot) {
+        if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
+    }
 
-    // ---- Side panels (runtime) ----
+    // ---- Side panels (runtime) – dispatch wrappato per open/close
     var openSidePanelId by remember { mutableStateOf<String?>(null) }
     val localDispatch = wrapDispatchForSidePanels(
         openPanelSetter = { openSidePanelId = it },
@@ -213,20 +221,16 @@ fun UiScreen(
     )
 
     Box(Modifier.fillMaxSize()) {
-
-        // ====== CONTENUTO con Scaffold di ROOT (con override live) ======
+        // ====== CONTENUTO con Scaffold di ROOT (usa effectiveLayout che include l'eventuale preview root) ======
         RenderRootScaffold(
-            layout = layout!!,
+            layout = effectiveLayout,
             dispatch = localDispatch,
             uiState = uiState,
             designerMode = designMode,
             menus = menus,
             selectedPathSetter = { selectedPath = it },
             extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-            scaffoldPadding = scaffoldPadding,
-            pageOverride = livePageOverride,
-            topBarOverride = liveTopBarOverride,
-            bottomOverride = liveBottomBarOverride
+            scaffoldPadding = scaffoldPadding
         )
 
         // ====== OVERLAY PANNELLI LATERALI (runtime) ======
@@ -262,12 +266,9 @@ fun UiScreen(
                 },
                 topPadding = scaffoldPadding.calculateTopPadding(),
                 onOverlayHeight = { overlayHeightPx = it },
-                onOpenRootInspector = { /* gestito internamente all'overlay */ },
-
-                // >>> Live update istantaneo dal pannello "Layout"
-                onLivePage = { livePageOverride = it },
-                onLiveTopBar = { liveTopBarOverride = it },
-                onLiveBottomBar = { liveBottomBarOverride = it }
+                onOpenRootInspector = { /* gestito sotto */ },
+                // >>> mantiene la compatibilità con la tua versione stabile
+                onRootLivePreview = { previewRoot = it }
             )
         }
 
@@ -278,6 +279,7 @@ fun UiScreen(
         )
     }
 }
+
 
 
 /* =========================================================
@@ -588,27 +590,19 @@ private fun RenderRootScaffold(
     menus: Map<String, JSONArray>,
     selectedPathSetter: (String) -> Unit,
     extraPaddingBottom: Dp,
-    scaffoldPadding: PaddingValues,
-    // --- override live (instant apply dal pannello Layout)
-    pageOverride: JSONObject? = null,
-    topBarOverride: JSONObject? = null,
-    bottomOverride: JSONArray? = null
+    scaffoldPadding: PaddingValues
 ) {
     val title = layout.optString("topTitle", "")
     val topActions = layout.optJSONArray("topActions") ?: JSONArray() // legacy
     val fab = layout.optJSONObject("fab")
     val scroll = layout.optBoolean("scroll", true)
+    val topBarConf = layout.optJSONObject("topBar")
 
-    // TopBar config: override live > layout
-    val topBarConf = topBarOverride ?: layout.optJSONObject("topBar")
-
-    // Nuovo schema bottomBar (se presente)
+    // Nuovo schema bottomBar (se presente); se assente usa legacy bottomButtons
     val bottomBarNode = layout.optJSONObject("bottomBar")
     val bottomBarCfg = bottomBarNode?.optJSONObject("container")
     val bottomBarItemsFromLayout = bottomBarNode?.optJSONArray("items")
-
-    // Legacy bottomButtons oppure override live dei pulsanti (lista di bottoni semplici)
-    val legacyBottomButtons = bottomOverride ?: (layout.optJSONArray("bottomButtons") ?: JSONArray())
+    val legacyBottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy
 
     // Scroll behavior della TopAppBar (solo se definito in topBar)
     val topScrollBehavior = when (topBarConf?.optString("scroll", "none")) {
@@ -636,7 +630,7 @@ private fun RenderRootScaffold(
         }
     }
 
-    // ---- Wrapper per sfondo pagina (colore/gradiente/immagine res:) ----
+    // ---- Sfondo pagina (colore/gradiente/immagine res:) ----
     @Composable
     fun PageBackgroundBox(pageCfg: JSONObject?, content: @Composable () -> Unit) {
         if (pageCfg == null) { content(); return }
@@ -706,7 +700,7 @@ private fun RenderRootScaffold(
             }
         },
         bottomBar = {
-            // Se ho schema nuovo => uso items; altrimenti trasformo i legacy (o gli override) in items
+            // Se ho schema nuovo => uso items; altrimenti trasformo i legacy in items
             val items: JSONArray? = bottomBarItemsFromLayout ?: run {
                 val converted = legacyButtonsAsItems(legacyBottomButtons)
                 if (converted.length() > 0) converted else null
@@ -769,8 +763,8 @@ private fun RenderRootScaffold(
             }
         }
 
-        // Applica sfondo pagina (override live > layout)
-        PageBackgroundBox(pageCfg = pageOverride ?: layout.optJSONObject("page")) {
+        // Applica sfondo pagina
+        PageBackgroundBox(pageCfg = layout.optJSONObject("page")) {
             if (scroll) {
                 Column(Modifier.verticalScroll(rememberScrollState())) { host() }
             } else {
@@ -779,6 +773,7 @@ private fun RenderRootScaffold(
         }
     }
 }
+
 
 
 /* =========================================================
@@ -1425,7 +1420,10 @@ private fun ContainerOverlayGear(
  * RENDERER BLOCCHI
  * ========================================================= */
 
-@Composable
+// da
+// private @Composable fun RenderBlock(...) ...
+// a
+@Composable internal fun RenderBlock(/* ... */) { /* corpo invariato */ }
 private fun RenderBlock(
     block: JSONObject,
     dispatch: (String) -> Unit,
@@ -3234,7 +3232,10 @@ private fun IconPickerField(
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable
+// da
+// private @Composable fun ExposedDropdown(...) ...
+// a
+@Composable internal fun ExposedDropdown(/* ... */) { /* corpo invariato */ }
 private fun ExposedDropdown(
     value: String,
     label: String,
@@ -3259,7 +3260,10 @@ private fun ExposedDropdown(
     }
 }
 
-@Composable
+// da
+// private @Composable fun StepperField(...) ...
+// a
+@Composable internal fun StepperField(/* ... */) { /* corpo invariato */ }
 private fun StepperField(
     label: String,
     state: MutableState<String>,
@@ -3370,28 +3374,36 @@ private fun ImagePickerRow(
 
 /* ---- Caricamento bitmap da URI ---- */
 
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.content.ContextCompat
+
 @Composable
-private fun rememberImageBitmapFromUri(uriString: String?): ImageBitmap? {
+internal fun rememberImageBitmapFromUri(uri: String?): ImageBitmap? {
+    if (uri.isNullOrBlank()) return null
     val ctx = LocalContext.current
-    val key = uriString ?: ""
-    val state by produceState<ImageBitmap?>(null, key) {
-        if (key.isBlank()) {
-            value = null
-            return@produceState
-        }
-        val real = key
-        value = withContext(Dispatchers.IO) {
-            try {
-                val uri = Uri.parse(real)
-                ctx.contentResolver.openInputStream(uri)?.use { input ->
-                    BitmapFactory.decodeStream(input)?.asImageBitmap()
+    return remember(uri) {
+        try {
+            if (uri.startsWith("res:")) {
+                val resName = uri.removePrefix("res:")
+                val id = ctx.resources.getIdentifier(resName, "drawable", ctx.packageName)
+                if (id != 0) {
+                    val dr = ContextCompat.getDrawable(ctx, id) as? BitmapDrawable
+                    dr?.bitmap?.asImageBitmap()
+                } else null
+            } else {
+                // file/content://
+                ctx.contentResolver.openInputStream(Uri.parse(uri)).use { input ->
+                    val bmp = BitmapFactory.decodeStream(input)
+                    bmp?.asImageBitmap()
                 }
-            } catch (e: Exception) {
-                null
             }
-        }
+        } catch (_: Exception) { null }
     }
-    return state
 }
 
 /* ---- Icon helper ---- */
@@ -3452,7 +3464,10 @@ private fun NamedIconEx(name: String?, contentDescription: String?) {
 
 /* ---- Color parsing / pickers ---- */
 
-@Composable
+// da
+// private @Composable fun parseColorOrRole(...) ...
+// a
+@Composable internal fun parseColorOrRole(value: String?): Color? = /* corpo invariato */
 private fun parseColorOrRole(value: String?): Color? {
     if (value.isNullOrBlank()) return null
     val v = value.trim()
@@ -3509,7 +3524,10 @@ private val MATERIAL_ROLES = listOf(
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable
+// da
+// private @Composable fun NamedColorPickerPlus(...) ...
+// a
+@Composable internal fun NamedColorPickerPlus(/* ... */) { /* corpo invariato */ }
 private fun NamedColorPickerPlus(
     current: String,
     label: String,
@@ -3565,8 +3583,11 @@ private fun NamedColorPickerPlus(
     }
 }
 
+// da
+// private fun bestOnColor(...) ...
+// a
+internal fun bestOnColor(bg: Color): Color = /* corpo invariato */
 /* ---- Readability helper ---- */
-private fun bestOnColor(bg: Color): Color {
     val l = 0.2126f * bg.red + 0.7152f * bg.green + 0.0722f * bg.blue
     return if (l < 0.5f) Color.White else Color.Black
 }
@@ -3575,7 +3596,10 @@ private fun bestOnColor(bg: Color): Color {
  * JSON utils
  * ========================================================= */
 
-private fun collectMenus(root: JSONObject): Map<String, JSONArray> {
+// da
+// private fun collectMenus(...) ...
+// a
+internal fun collectMenus(root: JSONObject): Map<String, JSONArray> = /* corpo invariato */ {
     val map = mutableMapOf<String, JSONArray>()
     fun walk(n: Any?) {
         when (n) {
@@ -3702,7 +3726,10 @@ private fun moveAndReturnNewPath(root: JSONObject, path: String, delta: Int): St
     return "$parentPath/$newIdx"
 }
 
-private fun moveInArray(arr: JSONArray, index: Int, delta: Int) {
+// da
+// private fun moveInArray(...) ...
+// a
+internal fun moveInArray(arr: JSONArray, index: Int, delta: Int) { /* corpo invariato */ }
     if (index < 0 || index >= arr.length()) return
     val newIdx = (index + delta).coerceIn(0, arr.length() - 1)
     if (newIdx == index) return
@@ -3735,8 +3762,10 @@ private fun remove(root: JSONObject, path: String) {
     while (arr.length() > 0) arr.remove(arr.length() - 1)
     tmp.forEach { arr.put(it) }
 }
-
-private fun removeAt(arr: JSONArray, index: Int) {
+// da
+// private fun removeAt(...) ...
+// a
+internal fun removeAt(arr: JSONArray, index: Int) { /* corpo invariato */ }
     if (index < 0 || index >= arr.length()) return
     val tmp = mutableListOf<Any?>()
     for (i in 0 until arr.length()) if (i != index) tmp.add(arr.get(i))
