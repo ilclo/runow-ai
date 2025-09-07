@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -39,12 +38,8 @@ internal fun wrapDispatchForSidePanels(
     appDispatch: (String) -> Unit
 ): (String) -> Unit = { actionId ->
     when {
-        actionId.startsWith("sidepanel:open:") -> {
-            openPanelSetter(actionId.removePrefix("sidepanel:open:"))
-        }
-        actionId == "sidepanel:close" -> {
-            openPanelSetter(null)
-        }
+        actionId.startsWith("sidepanel:open:") -> openPanelSetter(actionId.removePrefix("sidepanel:open:"))
+        actionId == "sidepanel:close" -> openPanelSetter(null)
         else -> appDispatch(actionId)
     }
 }
@@ -53,9 +48,6 @@ internal fun wrapDispatchForSidePanels(
 // Overlay che rende i pannelli laterali runtime
 // layout.json deve avere un array "sidePanels": [{ id, side, width, height, container, items }]
 // side: "left" | "right" | "top"
-// width/height in dp (numero)
-// container: come gli altri container (style, containerColor, borderColor, borderWidth, cornerRadius, gradient, ...)
-// items: array blocks come in page
 // -----------------------------
 @Composable
 internal fun RenderSidePanelsOverlay(
@@ -79,11 +71,9 @@ internal fun RenderSidePanelsOverlay(
     val containerCfg = panel.optJSONObject("container")
     val items = panel.optJSONArray("items") ?: JSONArray()
 
-    // Scrim
     val scrimAlpha = panel.optDouble("scrimAlpha", 0.25).toFloat().coerceIn(0f, 1f)
     val scrimColor = Color.Black.copy(alpha = scrimAlpha)
 
-    // Animazioni
     val animMs = panel.optInt("animMs", 240).coerceIn(120, 600)
     val enter = when (side) {
         "right" -> slideInHorizontally(animationSpec = tween(animMs)) { it } + fadeIn()
@@ -96,7 +86,6 @@ internal fun RenderSidePanelsOverlay(
         else    -> slideOutHorizontally(animationSpec = tween(animMs)) { -it } + fadeOut()
     }
 
-    // Menù raccolti per i blocks del pannello
     val menus = remember(layout) { collectMenus(layout) }
 
     Box(
@@ -104,7 +93,6 @@ internal fun RenderSidePanelsOverlay(
             .fillMaxSize()
             .background(color = Color.Transparent)
     ) {
-        // SCRIM cliccabile per chiudere
         AnimatedVisibility(
             visible = true,
             enter = fadeIn(animationSpec = tween(animMs)),
@@ -118,7 +106,6 @@ internal fun RenderSidePanelsOverlay(
             )
         }
 
-        // PANNELLO
         val contentAlign = when (side) {
             "right" -> Alignment.CenterEnd
             "top" -> Alignment.TopCenter
@@ -138,7 +125,6 @@ internal fun RenderSidePanelsOverlay(
                     width = if (side == "top") Dp.Unspecified else widthDp,
                     height = if (side == "top") heightDp else Dp.Unspecified
                 ) {
-                    // Header opzionale (titolo + close)
                     val title = panel.optString("title", "")
                     if (title.isNotBlank()) {
                         Row(
@@ -150,13 +136,11 @@ internal fun RenderSidePanelsOverlay(
                         ) {
                             Text(title, style = MaterialTheme.typography.titleMedium)
                             IconButton(onClick = onClose) {
-                                // Preferisco NamedIconEx per coerenza con il resto
                                 NamedIconEx("close", "close")
                             }
                         }
                     }
 
-                    // Contenuto scrollabile: blocks del pannello
                     val scroll = rememberScrollState()
                     Column(
                         Modifier
@@ -172,12 +156,12 @@ internal fun RenderSidePanelsOverlay(
                             RenderBlock(
                                 block = block,
                                 dispatch = dispatch,
-                                uiState = mutableMapOf(), // i pannelli sono tipicamente “stateless”, se hai già uno state passalo qui
+                                uiState = mutableMapOf(),
                                 designerMode = false,
                                 path = path,
                                 menus = menus,
-                                onSelect = { /* no-op nel runtime */ },
-                                onOpenInspector = { /* no-op nel runtime */ }
+                                onSelect = { },
+                                onOpenInspector = { }
                             )
                         }
                     }
@@ -187,9 +171,6 @@ internal fun RenderSidePanelsOverlay(
     }
 }
 
-// -----------------------------
-// Contenitore pannello (stessi concetti di StyledContainer)
-// -----------------------------
 @Composable
 private fun PanelContainer(
     cfg: JSONObject?,
@@ -233,7 +214,7 @@ private fun PanelContainer(
             when {
                 style.equals("outlined", true) || style.equals("tonal", true) ->
                     Modifier.border(width = borderWidth, color = borderColor, shape = shape)
-                style.equals("text", true) -> Modifier // niente bordo, niente riempimento
+                style.equals("text", true) -> Modifier
                 else -> Modifier
             }
         )
@@ -242,7 +223,6 @@ private fun PanelContainer(
         .then(if (width != Dp.Unspecified) Modifier.width(width) else Modifier)
         .then(if (height != Dp.Unspecified) Modifier.height(height) else Modifier)
 
-    // Uso Surface per avere elevation su Android in modo coerente con M3
     Surface(
         modifier = baseMod,
         color = Color.Transparent,
