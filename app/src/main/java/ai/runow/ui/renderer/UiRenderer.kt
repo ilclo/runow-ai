@@ -5,7 +5,7 @@
 
 package ai.runow.ui.renderer
 
-import androidx.compose.ui.layout.matchParentSize
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -613,7 +613,7 @@ private fun StyledContainer(
                         painter = painterResource(bg.resId),
                         contentDescription = null,
                         contentScale = bg.scale,
-                        modifier = Modifier.matchParentSize(),
+                        modifier = Modifier.fillMaxSize(),
                         alpha = bg.alpha
                     )
                 } else if (!bg.uriString.isNullOrBlank()) {
@@ -623,7 +623,7 @@ private fun StyledContainer(
                             bitmap = bmp,
                             contentDescription = null,
                             contentScale = bg.scale,
-                            modifier = Modifier.matchParentSize(),
+                            modifier = Modifier.fillMaxSize(),
                             alpha = bg.alpha
                         )
                     }
@@ -669,7 +669,7 @@ private fun BoxScope.RenderPageBackground(cfg: JSONObject?) {
     }
 
     // Layering: colore -> immagine -> gradient
-    Box(Modifier.matchParentSize().background(color))
+    Box(Modifier.fillMaxSize().background(color))
     img?.let { pair ->
         val (info, alpha) = pair
         val (kind, payload, scale) = info
@@ -678,7 +678,7 @@ private fun BoxScope.RenderPageBackground(cfg: JSONObject?) {
                 painter = painterResource(payload.toInt()),
                 contentDescription = null,
                 contentScale = scale,
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier.fillMaxSize(),
                 alpha = alpha
             )
         } else {
@@ -688,14 +688,14 @@ private fun BoxScope.RenderPageBackground(cfg: JSONObject?) {
                     bitmap = bmp,
                     contentDescription = null,
                     contentScale = scale,
-                    modifier = Modifier.matchParentSize(),
+                    modifier = Modifier.fillMaxSize(),
                     alpha = alpha
                 )
             }
         }
     }
     brush?.let { b ->
-        Box(Modifier.matchParentSize().background(b))
+        Box(Modifier.fillMaxSize().background(b))
     }
 }
 
@@ -2798,7 +2798,7 @@ private fun ImagePickerRow(
                                 painter = painterResource(id),
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier.matchParentSize()
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
                     }
@@ -2809,7 +2809,7 @@ private fun ImagePickerRow(
                                 bitmap = bmp,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier.matchParentSize()
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
                     }
@@ -2847,59 +2847,7 @@ private fun rememberImageBitmapFromUri(uriString: String?): ImageBitmap? {
 
 /* ---- Icon helper ---- */
 
-@Composable
-private fun NamedIconEx(name: String?, contentDescription: String?) {
-    val __ctx = LocalContext.current
-    if (name.isNullOrBlank()) {
-        Text("."); return
-    }
 
-    // icona da risorsa drawable
-    if (name.startsWith("res:")) {
-        val resName = name.removePrefix("res:")
-        val id = __ctx.resources.getIdentifier(resName, "drawable", __ctx.packageName)
-        if (id != 0) { Icon(painterResource(id), contentDescription); return }
-    }
-
-    // icona da uri/file/content (raster)
-    if (name.startsWith("uri:") || name.startsWith("content:") || name.startsWith("file:")) {
-        val bmp = rememberImageBitmapFromUri(name.removePrefix("uri:"))
-        if (bmp != null) {
-            Image(
-                bitmap = bmp,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(24.dp)
-            )
-            return
-        }
-    }
-
-    // icone Material note
-    val image = when (name) {
-        "settings" -> Icons.Filled.Settings
-        "more_vert" -> Icons.Filled.MoreVert
-        "tune" -> Icons.Filled.Tune
-        "play_arrow" -> Icons.Filled.PlayArrow
-        "pause" -> Icons.Filled.Pause
-        "stop" -> Icons.Filled.Stop
-        "add" -> Icons.Filled.Add
-        "flag" -> Icons.Filled.Flag
-        "queue_music" -> Icons.Filled.QueueMusic
-        "widgets" -> Icons.Filled.Widgets
-        "palette" -> Icons.Filled.Palette
-        "home" -> Icons.Filled.Home
-        "menu" -> Icons.Filled.Menu
-        "close" -> Icons.Filled.Close
-        "more_horiz" -> Icons.Filled.MoreHoriz
-        "list" -> Icons.Filled.List
-        "tab" -> Icons.Filled.Tab
-        "grid_on" -> Icons.Filled.GridOn
-        "toggle_on" -> Icons.Filled.ToggleOn
-        "bolt" -> Icons.Filled.Bolt
-        else -> null
-    }
-    if (image != null) Icon(image, contentDescription) else Text(".")
-}
 
 /* ---- Color parsing / pickers ---- */
 
