@@ -17,7 +17,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -79,23 +78,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
-
-@Composable
-private fun TopBarActions(actions: JSONArray, dispatch: (String) -> Unit) {
-    for (i in 0 until actions.length()) {
-        val a = actions.optJSONObject(i) ?: continue
-        when (a.optString("type","icon")) {
-            "spacer" -> {
-                val w = Dp(a.optDouble("widthDp", 8.0).toFloat())
-                Spacer(Modifier.width(w))
-            }
-            else -> IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-                NamedIconEx(a.optString("icon", "more_vert"), null)
-            }
-        }
-    }
-}
-
 /* =========================================================
  * ENTRY ROOT CHIAMATA DA MainActivity
  * ========================================================= */
@@ -132,25 +114,6 @@ fun UiScreen(
     }
     var tick by remember { mutableStateOf(0) }
 
-var openSidePanelId by remember { mutableStateOf<String?>(null) }
-// Dispatch wrapper that can open side panels using `actionId = "open_side_panel:<id>"`
-val dispatchWrapped: (String) -> Unit = { act ->
-    if (act.startsWith("open_side_panel:")) {
-        openSidePanelId = act.substringAfter(":")
-    } else {
-        dispatch(act)
-    }
-}
-// Recompute side panel ids when layout changes
-val sidePanelIds = remember(screenName, tick, layout) {
-    if (layout != null) collectSidePanelIds(layout!!) else emptyList()
-}
-    // --- Overrides live mentre il Layout Inspector è aperto ---
-    var livePageOverride by remember(screenName, tick) { mutableStateOf<JSONObject?>(null) }
-    var liveTopBarOverride by remember(screenName, tick) { mutableStateOf<JSONObject?>(null) }
-    var liveBottomBarOverride by remember(screenName, tick) { mutableStateOf<JSONObject?>(null) }
-
-
     if (layout == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Layout '$screenName' non trovato", style = MaterialTheme.typography.bodyLarge)
@@ -183,22 +146,19 @@ val sidePanelIds = remember(screenName, tick, layout) {
     }
 
     Box(Modifier.fillMaxSize()) {
-        // Se c'è un override live, usa quello al posto del layout
-        RenderPageBackground(livePageOverride ?: layout!!.optJSONObject("page"))
-
+        // ====== SFONDO PAGINA (colore/gradient/immagine) ======
+        RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
         // ====== CONTENUTO con Scaffold di ROOT ======
         RenderRootScaffold(
-            layout = layout!!,
-            dispatch = dispatchWrapped,
+            layout = effectiveLayout,
+            dispatch = dispatch,
             uiState = uiState,
             designerMode = designMode,
             menus = menus,
             selectedPathSetter = { selectedPath = it },
             extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-            scaffoldPadding = scaffoldPadding,
-            topBarOverride = liveTopBarOverride,
-            bottomBarOverride = liveBottomBarOverride
+            scaffoldPadding = scaffoldPadding
         )
 
         if (designMode) {
@@ -222,19 +182,10 @@ val sidePanelIds = remember(screenName, tick, layout) {
                     tick++
                 },
                 topPadding = scaffoldPadding.calculateTopPadding(),
-            sidePanelIds = sidePanelIds,
                 onOverlayHeight = { overlayHeightPx = it },
                 onOpenRootInspector = { /* gestito sotto */ },
                 onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
             )
-// Side panels overlay
-RenderSidePanelsOverlay(
-    layout = layout ?: JSONObject(),
-    openPanelId = openSidePanelId,
-    onDismiss = { openSidePanelId = null },
-    dispatch = dispatchWrapped
-)
-
         }
 
         // ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
@@ -553,19 +504,17 @@ private fun RenderRootScaffold(
     menus: Map<String, JSONArray>,
     selectedPathSetter: (String) -> Unit,
     extraPaddingBottom: Dp,
-    scaffoldPadding: PaddingValues,
-    topBarOverride: JSONObject? = null,
-    bottomBarOverride: JSONObject? = null
+    scaffoldPadding: PaddingValues
 ) {
     val title = layout.optString("topTitle", "")
     val topActions = layout.optJSONArray("topActions") ?: JSONArray() // legacy
     val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy
     val bottomBarNode = layout.optJSONObject("bottomBar")
+    val bottomBarCfg = bottomBarNode?.optJSONObject("container")
     val bottomBarItems = bottomBarNode?.optJSONArray("items")
     val fab = layout.optJSONObject("fab")
     val scroll = layout.optBoolean("scroll", true)
-    val topBarConf = (topBarOverride ?: layout.optJSONObject("topBar"))
-    val bottomBarCfg = (bottomBarOverride ?: layout.optJSONObject("bottomBar"))?.optJSONObject("container")
+    val topBarConf = layout.optJSONObject("topBar")
 
     // Scroll behavior della TopAppBar (solo se definito in topBar)
     val topScrollBehavior = when (topBarConf?.optString("scroll", "none")) {
@@ -621,9 +570,7 @@ private fun RenderRootScaffold(
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Row(
-                        Modifier.fillMaxWidth()
-            .widthIn(max = 720.dp)
-            .padding(horizontal = 16.dp),
+                        Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -861,7 +808,7 @@ private fun BoxScope.DesignerOverlay(
 
     Column(
         Modifier
-            .align(Alignment.Center)
+            .align(Alignment.BottomCenter)
             .fillMaxWidth()
             .padding(12.dp)
             .onGloballyPositioned { onOverlayHeight(it.size.height) },
@@ -1073,7 +1020,7 @@ private fun BoxScope.DesignerOverlay(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .fillMaxHeight(0.78f),
+                    .fillMaxHeight(0.6f),
                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
                 tonalElevation = 8.dp
             ) {
@@ -1086,7 +1033,7 @@ private fun BoxScope.DesignerOverlay(
                 ) {
                     when (working.optString("type")) {
                         "Card"          -> CardInspectorPanel(working, onChange = bumpPreview)
-                        "ButtonRow"     -> { ButtonRowInspectorPanel(working, onChange = bumpPreview, sidePanelIds = sidePanelIds); ContainerEditorSection(working, onChange = bumpPreview) }
+                        "ButtonRow"     -> { ButtonRowInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
                         "SectionHeader" -> { SectionHeaderInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
                         "Progress"      -> ProgressInspectorPanel(working, onChange = bumpPreview)
                         "Alert"         -> AlertInspectorPanel(working, onChange = bumpPreview)
@@ -1118,34 +1065,67 @@ private fun BoxScope.DesignerOverlay(
     if (showRootInspector) {
         val working = remember { JSONObject(layout.toString()) }
         var dummyTick by remember { mutableStateOf(0) }
-        val onChange: () -> Unit = { dummyTick++ }
-    
-        // 🔴 LIVE BINDS: ogni volta che working cambia, aggiorniamo gli override
-        LaunchedEffect(dummyTick) {
-            livePageOverride = working.optJSONObject("page")
-            liveTopBarOverride = working.optJSONObject("topBar")
-            liveBottomBarOverride = working.optJSONObject("bottomBar")
+
+        // onChange: aggiorna live preview di page/topBar
+        val onChange: () -> Unit = {
+            dummyTick++
+            onRootLivePreview(working) // <-- live preview
         }
-    
+
         BackHandler(enabled = true) {
-            // Annulla ⇒ niente salvataggio, ripristina layout, pulisci override
-            livePageOverride = null
-            liveTopBarOverride = null
-            liveBottomBarOverride = null
+            onRootLivePreview(null) // chiudi preview
             showRootInspector = false
         }
-    
-        // Pannello centrato, scrollabile, semi-trasparente
+
+        // ANTEPRIMA in alto della BottomBar (proiettata)
+        val previewTopPad = topPadding + 8.dp
+        val hasBottomPreview = working.optJSONObject("bottomBar")?.optJSONArray("items")?.length() ?: 0 > 0 ||
+                working.optJSONArray("bottomButtons")?.length() ?: 0 > 0
+        if (hasBottomPreview) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
+                    .shadow(10.dp, RoundedCornerShape(16.dp))
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                tonalElevation = 6.dp
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelLarge)
+                    val bb = working.optJSONObject("bottomBar")
+                    val cont = bb?.optJSONObject("container")
+                    val items = bb?.optJSONArray("items") ?: run {
+                        // fallback legacy
+                        val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
+                        JSONArray().apply {
+                            for (i in 0 until legacy.length()) {
+                                val it = legacy.optJSONObject(i) ?: continue
+                                put(JSONObject().apply {
+                                    put("type","button")
+                                    put("label", it.optString("label","Button"))
+                                    put("actionId", it.optString("actionId",""))
+                                    put("style","text")
+                                })
+                            }
+                        }
+                    }
+                    StyledContainer(cont, Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RenderBarItemsRow(items) { /* anteprima: no-op */ }
+                        }
+                    }
+                }
+            }
+        }
+
         Surface(
             modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth(0.92f)
-                .fillMaxHeight(0.78f)
-                .graphicsLayer(alpha = 0.93f),
-            shape = RoundedCornerShape(18.dp),
-            tonalElevation = 8.dp,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-            contentColor = MaterialTheme.colorScheme.onSurface
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.75f),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            tonalElevation = 8.dp
         ) {
             Column(
                 Modifier
@@ -1154,12 +1134,12 @@ private fun BoxScope.DesignerOverlay(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // PAGE (sfondo) – modifiche live via onChange()
+                // PAGE (sfondo) – live sullo schermo
                 Divider(); Text("Page (sfondo)", style = MaterialTheme.typography.titleMedium)
                 val page = working.optJSONObject("page") ?: JSONObject().also { working.put("page", it) }
                 PageInspectorPanel(page, onChange)
-    
-                // Top bar – modifiche live via onChange()
+
+                // Top bar – live sullo schermo
                 Divider(); Text("Top Bar (estetica)", style = MaterialTheme.typography.titleMedium)
                 var topBarEnabled by remember { mutableStateOf(working.optJSONObject("topBar") != null) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1180,6 +1160,7 @@ private fun BoxScope.DesignerOverlay(
                                             put("corner", 0)
                                             put("borderMode","none")
                                         })
+                                        put("actions", JSONArray())
                                     })
                                 }
                             } else {
@@ -1193,10 +1174,18 @@ private fun BoxScope.DesignerOverlay(
                 }
                 working.optJSONObject("topBar")?.let { tb ->
                     TopBarInspectorPanel(tb, onChange)
+                    // Editor contenitore unificato
                     ContainerEditorSection(tb, key = "container", title = "TopBar – Contenitore", onChange = onChange)
+                    // Editor azioni (icone, bottoni, spacer)
+                    BarItemsEditor(
+                        owner = tb,
+                        arrayKey = "actions",
+                        title = "TopBar – Azioni",
+                        onChange = onChange
+                    )
                 }
-    
-                // Bottom bar – modifiche live via onChange()
+
+                // Bottom bar estetica (preview in alto)
                 Divider(); Text("Bottom Bar (estetica)", style = MaterialTheme.typography.titleMedium)
                 var bottomEnabled by remember { mutableStateOf(working.optJSONObject("bottomBar") != null) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1212,6 +1201,7 @@ private fun BoxScope.DesignerOverlay(
                                             put("borderMode","none")
                                             put("corner", 0)
                                         })
+                                        put("items", JSONArray())
                                     })
                                 }
                             } else {
@@ -1225,60 +1215,31 @@ private fun BoxScope.DesignerOverlay(
                 }
                 working.optJSONObject("bottomBar")?.let { bb ->
                     ContainerEditorSection(bb, key = "container", title = "BottomBar – Contenitore", onChange = onChange)
+                    BarItemsEditor(owner = bb, arrayKey = "items", title = "BottomBar – Items", onChange = onChange)
                 }
-    
-                // Bottoni bottom (contenuto) – restano come prima
-                Divider(); Text("Bottom Bar – Bottoni", style = MaterialTheme.typography.titleSmall)
-                val bottom = working.optJSONArray("bottomButtons") ?: JSONArray().also { working.put("bottomButtons", it) }
-                for (i in 0 until bottom.length()) {
-                    val itx = bottom.getJSONObject(i)
-                    ElevatedCard {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Button ${i+1}", style = MaterialTheme.typography.labelLarge)
-                                Row {
-                                    IconButton(onClick = { moveInArray(bottom, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
-                                    IconButton(onClick = { moveInArray(bottom, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
-                                    IconButton(onClick = { removeAt(bottom, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
-                                }
-                            }
-                            val lbl = remember { mutableStateOf(itx.optString("label","")) }
-                            OutlinedTextField(lbl.value, { lbl.value = it; itx.put("label", it); onChange() }, label = { Text("label") })
-                            val act = remember { mutableStateOf(itx.optString("actionId","")) }
-                            OutlinedTextField(act.value, { act.value = it; itx.put("actionId", it); onChange() }, label = { Text("actionId") })
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
-                Button(onClick = { bottom.put(JSONObject("""{"label":"Azione","actionId":""}""")); onChange() }) { Text("+ Aggiungi bottone") }
-    
-                // Opzioni varie (scroll, FAB)
+
+                // VARI – Scroll on/off, FAB (il resto del root)
                 Divider(); RootInspectorPanel(working, onChange)
-    
+
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = {
-                        // CANCEL: ripristina rendering originale e chiudi
-                        livePageOverride = null
-                        liveTopBarOverride = null
-                        liveBottomBarOverride = null
+                        onRootLivePreview(null)
                         showRootInspector = false
                     }) { Text("Annulla") }
                     Spacer(Modifier.weight(1f))
                     Button(onClick = {
-                        // OK: salva su layout, pulisci override, chiudi
+                        // Commit nel layout originale
                         val keys = listOf("page","topBar","topTitle","topActions","bottomBar","bottomButtons","fab","scroll")
                         keys.forEach { k -> layout.put(k, working.opt(k)) }
-                        livePageOverride = null
-                        liveTopBarOverride = null
-                        liveBottomBarOverride = null
+                        onRootLivePreview(null)
                         showRootInspector = false
                     }) { Text("OK") }
                 }
             }
         }
     }
-
+}
 
 /* =========================================================
  * OVERLAY INGRANAGGIO PER CONTENITORI
@@ -2019,8 +1980,6 @@ private fun RootInspectorPanel(working: JSONObject, onChange: () -> Unit) {
         val action = remember { mutableStateOf(fab.optString("actionId","")) }
         OutlinedTextField(action.value, { action.value = it; fab.put("actionId", it); onChange() }, label = { Text("actionId") })
     }
-
-    SidePanelsManager(working, onChange)
 }
 
 /* =========================================================
@@ -2455,7 +2414,7 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
  * ========================================================= */
 
 @Composable
-private fun ButtonRowInspectorPanel(working: JSONObject, onChange: (, sidePanelIds: List<String>) -> Unit) {
+private fun ButtonRowInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     val buttons = working.optJSONArray("buttons") ?: JSONArray().also { working.put("buttons", it) }
 
     Text("ButtonRow – Proprietà", style = MaterialTheme.typography.titleMedium)
@@ -2561,32 +2520,6 @@ private fun ButtonRowInspectorPanel(working: JSONObject, onChange: (, sidePanelI
                     onValueChange = { action.value = it; btn.put("actionId", it); onChange() },
                     label = { Text("actionId (es. nav:settings)") }
                 )
-if (sidePanelIds.isNotEmpty()) {
-    Spacer(Modifier.height(4.dp))
-    Text("Apri pannello laterale", style = MaterialTheme.typography.labelMedium)
-    val sidInit = remember { 
-        val cur = btn.optString("actionId", "")
-        mutableStateOf(
-            if (cur.startsWith("open_side_panel:")) cur.substringAfter(":") else "(nessuno)"
-        )
-    }
-    ExposedDropdownField(
-        value = sidInit.value,
-        onValueChange = { sel -> 
-            sidInit.value = sel
-            if (sel == "(nessuno)") {
-                val cur = btn.optString("actionId", "")
-                if (cur.startsWith("open_side_panel:")) btn.remove("actionId")
-            } else {
-                btn.put("actionId", "open_side_panel:$sel")
-            }
-            onChange()
-        },
-        label = "Seleziona pannello",
-        options = listOf("(nessuno)") + sidePanelIds
-    )
-}
-
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -3798,256 +3731,4 @@ private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyl
     if (!lineH.isNaN()) st = st.copy(lineHeight = TextUnit(lineH.toFloat(), TextUnitType.Sp))
 
     return st
-}
-
-
-/* ======================= Side Panels Support ======================= */
-private fun collectSidePanelIds(root: JSONObject): List<String> {
-    val res = mutableListOf<String>()
-    val arr = root.optJSONArray("sidePanels") ?: return emptyList()
-    for (i in 0 until arr.length()) {
-        val p = arr.optJSONObject(i) ?: continue
-        val id = p.optString("id", "")
-        if (id.isNotBlank()) res += id
-    }
-    return res
-}
-
-private fun newSidePanel(nextIndex: Int = 1): JSONObject = JSONObject(
-    "{\"type\":\"SidePanel\",\"id\":\"panel_$nextIndex\",\"side\":\"left\",\"widthDp\":300,\"heightDp\":0,\"transition\":\"slide\",\"scrimAlpha\":0.32,\"styleKey\":\"tonal\",\"corner\":16,\"strokeWidthDp\":0,\"strokeColor\":\"\",\"containerColor\":\"surface\",\"items\":[{\"label\":\"Voce 1\",\"icon\":\"menu\",\"actionId\":\"\"}]}"
-)
-
-@Composable
-private fun BoxScope.RenderSidePanelsOverlay(
-    layout: JSONObject,
-    openPanelId: String?,
-    onDismiss: () -> Unit,
-    dispatch: (String) -> Unit
-) {
-    if (openPanelId.isNullOrBlank()) return
-    val panels = layout.optJSONArray("sidePanels") ?: return
-    var panel: JSONObject? = null
-    var index = -1
-    for (i in 0 until panels.length()) {
-        val p = panels.optJSONObject(i) ?: continue
-        if (p.optString("id") == openPanelId) { panel = p; index = i; break }
-    }
-    val cfg = panel ?: return
-    val side = cfg.optString("side", "left")
-    val width = cfg.optDouble("widthDp", if (side == "left" || side == "right") 320.0 else 0.0).toFloat().dp
-    val height = cfg.optDouble("heightDp", if (side == "top" || side == "bottom") 300.0 else 0.0).toFloat().dp
-    val scrimAlpha = cfg.optDouble("scrimAlpha", 0.32).toFloat().coerceIn(0f, 0.95f)
-
-    val enter = when (side) {
-        "left" -> slideInHorizontally(initialOffsetX = { -it }) + fadeIn()
-        "right" -> slideInHorizontally(initialOffsetX = { it }) + fadeIn()
-        "top" -> slideInVertically(initialOffsetY = { -it }) + fadeIn()
-        else -> slideInVertically(initialOffsetY = { it }) + fadeIn()
-    }
-    val exit = when (side) {
-        "left" -> slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
-        "right" -> slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
-        "top" -> slideOutVertically(targetOffsetY = { -it }) + fadeOut()
-        else -> slideOutVertically(targetOffsetY = { it }) + fadeOut()
-    }
-
-    // Fullscreen overlay with scrim
-    Box(
-        Modifier
-            .fillMaxSize()
-            .zIndex(10f) // above content
-    ) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(Color.Black.copy(alpha = scrimAlpha))
-                .clickable { onDismiss() }
-        )
-        val align = when (side) {
-            "left" -> Alignment.CenterStart
-            "right" -> Alignment.CenterEnd
-            "top" -> Alignment.TopCenter
-            else -> Alignment.BottomCenter
-        }
-        AnimatedVisibility(
-            visible = true,
-            enter = enter,
-            exit = exit,
-            modifier = Modifier.align(align)
-        ) {
-            // Panel container
-            StyledContainer(cfg = cfg) {
-                val scroll = rememberScrollState()
-                val items = cfg.optJSONArray("items") ?: JSONArray()
-                val padding = it
-                Column(
-                    Modifier
-                        .then(if (side == "left" || side == "right") Modifier.width(width) else Modifier.fillMaxWidth())
-                        .then(if (side == "top" || side == "bottom") Modifier.height(height) else Modifier.fillMaxHeight())
-                        .verticalScroll(scroll)
-                        .padding(padding)
-                ) {
-                    for (i in 0 until items.length()) {
-                        val item = items.optJSONObject(i) ?: continue
-                        val label = item.optString("label", "")
-                        val icon = item.optString("icon", "")
-                        val act = item.optString("actionId", "")
-                        val style = item.optString("style", "text")
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (icon.isNotBlank()) {
-                                NamedIconEx(icon, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            when (style) {
-                                "filled" -> Button(onClick = { if (act.startsWith("open_side_panel:")) onDismiss() else dispatch(act) }) { Text(label) }
-                                "outlined" -> OutlinedButton(onClick = { if (act.startsWith("open_side_panel:")) onDismiss() else dispatch(act) }) { Text(label) }
-                                "tonal" -> FilledTonalButton(onClick = { if (act.startsWith("open_side_panel:")) onDismiss() else dispatch(act) }) { Text(label) }
-                                else -> TextButton(onClick = { if (act.startsWith("open_side_panel:")) onDismiss() else dispatch(act) }) { Text(label) }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-@Composable
-private fun SidePanelsManager(working: JSONObject, onChange: () -> Unit) {
-    Spacer(Modifier.height(12.dp))
-    Divider()
-    Text("Pannelli laterali", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-    val panels = working.optJSONArray("sidePanels") ?: JSONArray().also { working.put("sidePanels", it) }
-    for (i in 0 until panels.length()) {
-        val p = panels.getJSONObject(i)
-        ElevatedCard(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-            Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("ID:", Modifier.width(40.dp))
-                    val id = p.optString("id", "panel_${i+1}")
-                    OutlinedTextField(
-                        value = id,
-                        onValueChange = { v -> p.put("id", v.trim()); onChange() },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        label = { Text("Identificativo univoco") }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Lato:", Modifier.width(48.dp))
-                    ExposedDropdownField(
-                        value = p.optString("side", "left"),
-                        onValueChange = { v -> p.put("side", v); onChange() },
-                        label = "Side",
-                        options = listOf("left","right","top","bottom"),
-                        modifier = Modifier.width(140.dp)
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row {
-                    if (p.optString("side", "left") in listOf("left","right")) {
-                        StepperField(
-                            label = "Larghezza (dp)",
-                            value = p.optDouble("widthDp", 320.0).toInt(),
-                            onValueChange = { v -> p.put("widthDp", v); onChange() },
-                            min = 160, max = 600, step = 8
-                        )
-                    } else {
-                        StepperField(
-                            label = "Altezza (dp)",
-                            value = p.optDouble("heightDp", 300.0).toInt(),
-                            onValueChange = { v -> p.put("heightDp", v); onChange() },
-                            min = 120, max = 800, step = 8
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    ExposedDropdownField(
-                        value = p.optString("transition", "slide"),
-                        onValueChange = { v -> p.put("transition", v); onChange() },
-                        label = "Transizione",
-                        options = listOf("slide","scale"),
-                        modifier = Modifier.width(160.dp)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    SliderField(
-                        label = "Scrim alpha",
-                        value = p.optDouble("scrimAlpha", 0.32).toFloat(),
-                        onValueChange = { v -> p.put("scrimAlpha", v); onChange() },
-                        valueRange = 0f..0.95f
-                    )
-                }
-                // Stile contenitore del pannello
-                ContainerEditorSection(p, onChange = onChange)
-
-                // Items del pannello (testo/icone/bottoni semplici)
-                val items = p.optJSONArray("items") ?: JSONArray().also { p.put("items", it) }
-                Text("Voci (etichette/icone/azioni)", style = MaterialTheme.typography.labelLarge)
-                for (j in 0 until items.length()) {
-                    val itx = items.getJSONObject(j)
-                    Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = itx.optString("label", ""),
-                            onValueChange = { v -> itx.put("label", v); onChange() },
-                            label = { Text("label") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        IconPickerField(
-                            value = itx.optString("icon", ""),
-                            onValueChange = { v -> itx.put("icon", v); onChange() }
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        OutlinedTextField(
-                            value = itx.optString("actionId", ""),
-                            onValueChange = { v -> itx.put("actionId", v); onChange() },
-                            label = { Text("actionId (es. nav:settings o open_side_panel:id)") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        ExposedDropdownField(
-                            value = itx.optString("style", "text"),
-                            onValueChange = { v -> itx.put("style", v); onChange() },
-                            label = "stile",
-                            options = listOf("text","outlined","tonal","filled"),
-                            modifier = Modifier.width(140.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        IconButton(onClick = { 
-                            val newItems = JSONArray()
-                            for (k in 0 until items.length()) { if (k != j) newItems.put(items.get(k)) }
-                            p.put("items", newItems)
-                            onChange() 
-                        }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Rimuovi")
-                        }
-                    }
-                }
-                Row {
-                    OutlinedButton(onClick = { items.put(JSONObject("{\"label\":\"Voce\",\"icon\":\"\",\"actionId\":\"\",\"style\":\"text\"}")); onChange() }) {
-                        Text("+ Aggiungi voce")
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { 
-                        // Preview apri pannello
-                        /* no-op here, la preview si vede aprendo dal bottone in UI */
-                    }) { Text("Anteprima: apri dalla UI") }
-                }
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { 
-                val newArr = JSONArray()
-                for (k in 0 until panels.length()) { if (k != i) newArr.put(panels.get(k)) }
-                working.put("sidePanels", newArr)
-                onChange() 
-            }) { Text("Elimina pannello") }
-            }
-        }
-    }
-    OutlinedButton(onClick = { panels.put(newSidePanel(panels.length()+1)); onChange() }, modifier = Modifier.padding(top = 8.dp)) {
-        Text("+ Nuovo pannello laterale")
-    }
 }
