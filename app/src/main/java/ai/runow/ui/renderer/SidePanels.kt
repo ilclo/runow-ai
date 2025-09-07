@@ -1,3 +1,5 @@
+import androidx.compose.foundation.border
+
 @file:OptIn(
     androidx.compose.animation.ExperimentalAnimationApi::class,
     androidx.compose.material3.ExperimentalMaterial3Api::class
