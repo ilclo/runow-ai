@@ -5,7 +5,7 @@
 
 package ai.runow.ui.renderer
 
-import androidx.compose.foundation.layout.matchParentSize
+import androidx.compose.ui.layout.matchParentSize
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -761,28 +761,14 @@ private fun RenderRootScaffold(
                 JSONArray().apply {
                     for (i in 0 until bottomButtons.length()) {
                         val it = bottomButtons.optJSONObject(i) ?: continue
-                        put(JSONObject().apply {
-                            put("type","button")
-                            put("label", it.optString("label","Button"))
-                            put("actionId", it.optString("actionId",""))
-                            put("style","text")
-                            val sideIds = remember { collectSidePanelIds(owner) }
-                            if (sideIds.isNotEmpty()) {
-                                var sel by remember {
-                                    val seed = it.optString("actionId","")
-                                    mutableStateOf(if (seed.startsWith("sidepanel:open:")) seed.removePrefix("sidepanel:open:") else "(nessuno)")
-                                }
-                                ExposedDropdown(
-                                    value = sel,
-                                    label = "Apri side panel (opz.)",
-                                    options = listOf("(nessuno)") + sideIds
-                                ) { pick ->
-                                    sel = pick
-                                    if (pick != "(nessuno)") it.put("actionId", "sidepanel:open:$pick")
-                                    onChange()
-                                }
+                        put(
+                            JSONObject().apply {
+                                put("type", "button")
+                                put("label", it.optString("label", "Button"))
+                                put("actionId", it.optString("actionId", ""))
+                                put("style", "text")
                             }
-                        })
+                        )
                     }
                 }
             } else null
@@ -1324,29 +1310,14 @@ private fun BoxScope.DesignerOverlay(
                         JSONArray().apply {
                             for (i in 0 until legacy.length()) {
                                 val it = legacy.optJSONObject(i) ?: continue
-                                put(JSONObject().apply {
-                                    put("type","button")
-                                    put("label", it.optString("label","Button"))
-                                    put("actionId", it.optString("actionId",""))
-                                    put("style","text")
-                                    val sideIds = remember { collectSidePanelIds(owner) }
-                                    if (sideIds.isNotEmpty()) {
-                                        var sel by remember {
-                                            val seed = it.optString("actionId","")
-                                            mutableStateOf(if (seed.startsWith("sidepanel:open:")) seed.removePrefix("sidepanel:open:") else "(nessuno)")
-                                        }
-                                        ExposedDropdown(
-                                            value = sel,
-                                            label = "Apri side panel (opz.)",
-                                            options = listOf("(nessuno)") + sideIds
-                                        ) { pick ->
-                                            sel = pick
-                                            if (pick != "(nessuno)") it.put("actionId", "sidepanel:open:$pick")
-                                            onChange()
-                                        }
+                                put(
+                                    JSONObject().apply {
+                                        put("type", "button")
+                                        put("label", it.optString("label", "Button"))
+                                        put("actionId", it.optString("actionId", ""))
+                                        put("style", "text")
                                     }
-
-                                })
+                                )
                             }
                         }
                     }
