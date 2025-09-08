@@ -5,7 +5,7 @@
 
 package ai.runow.ui.renderer
 
-
+import androidx.compose.ui.unit.dp
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -1353,7 +1353,7 @@ private fun BoxScope.DesignerOverlay(
                             designerMode = false,
                             path = selectedPath,
                             menus = emptyMap(),
-                            onSelect = {}
+                            onSelect = {},
                             onOpenInspector = {}
                         )
                     }
