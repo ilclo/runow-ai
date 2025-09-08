@@ -281,7 +281,6 @@ internal fun wrapDispatchForOverlays(
 
 
 @Composable
-@Composable
 internal fun RenderSidePanelsOverlay(
     layout: JSONObject,
     openPanelId: String?,
