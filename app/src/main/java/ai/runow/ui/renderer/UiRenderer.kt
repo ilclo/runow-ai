@@ -14,14 +14,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.ui.graphics.Brush
@@ -84,7 +76,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -290,6 +281,7 @@ internal fun wrapDispatchForOverlays(
 
 
 @Composable
+@Composable
 internal fun RenderSidePanelsOverlay(
     layout: JSONObject,
     openPanelId: String?,
@@ -297,8 +289,9 @@ internal fun RenderSidePanelsOverlay(
     dispatch: (String) -> Unit,
     menus: Map<String, JSONArray>,
     dimBehind: Boolean
-    BackHandler(enabled = true) { onClose() }
 ) {
+    BackHandler(enabled = true) { onClose() }
+
     val panels = layout.optJSONArray("sidePanels") ?: JSONArray()
     if (openPanelId == null || panels.length() == 0) return
 
@@ -314,7 +307,7 @@ internal fun RenderSidePanelsOverlay(
     val items = panel.optJSONArray("items") ?: JSONArray()
 
     val baseScrimAlpha = panel.optDouble("scrimAlpha", 0.25).toFloat().coerceIn(0f, 1f)
-    val scrimAlpha = if (dimBehind) baseScrimAlpha else 0f // quando c'è il menu centrale, lasciamo “intravedere”
+    val scrimAlpha = if (dimBehind) baseScrimAlpha else 0f
     val scrimColor = Color.Black.copy(alpha = scrimAlpha)
     val ms = panel.optInt("animMs", 240).coerceIn(120, 600)
 
@@ -340,12 +333,7 @@ internal fun RenderSidePanelsOverlay(
                 )
             }
         } else {
-            // clickable trasparente per chiudere, senza oscurare
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .clickable { onClose() }
-            )
+            Box(Modifier.fillMaxSize().clickable { onClose() })
         }
 
         val alignment = when (side) {
@@ -391,7 +379,9 @@ internal fun RenderSidePanelsOverlay(
                                 uiState = mutableMapOf(),
                                 designerMode = false,
                                 path = path,
-                                menus = menus
+                                menus = menus,
+                                onSelect = {},                 // aggiunto
+                                onOpenInspector = {}           // aggiunto
                             )
                         }
                     }
@@ -517,12 +507,8 @@ fun UiScreen(
             menus       = menus,
             dispatch    = localDispatch
         )
-        // Overlay designer (palette/inspector) — identico al tuo stabile
         if (designMode) {
             DesignerOverlay(
-                val working = remember(selectedPath) {
-                    JSONObject(selectedBlock.toString()).apply { put("_root", layout) }
-                }
                 screenName = screenName,
                 layout = layout!!,
                 selectedPath = selectedPath,
@@ -530,15 +516,9 @@ fun UiScreen(
                 onLiveChange = { tick++ },
                 onLayoutChange = {
                     UiLoader.saveDraft(ctx, screenName, layout!!)
-                    layout = JSONObject(layout.toString())
+                    layout = JSONObject(layout!!.toString())
                     tick++
                 },
-                Button(onClick = {
-                    val toSave = JSONObject(working.toString()).apply { remove("_root") }
-                    replaceAtPath(layout, selectedPath, toSave)
-                    showInspector = false
-                    onLayoutChange()
-                }) { Text("OK") }
                 onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
                 onPublish = {
                     UiLoader.saveDraft(ctx, screenName, layout!!)
@@ -556,7 +536,6 @@ fun UiScreen(
                 onRootLivePreview = { previewRoot = it }
             )
         }
-
         // Knob laterale
         DesignSwitchKnob(
             isDesigner = designMode,
@@ -896,7 +875,7 @@ private fun RenderRootScaffold(
 
     Box(Modifier.fillMaxSize()) {
         // <<< BACKGROUND PAGINA (rimesso) >>>
-        RenderPageBackground(effectiveLayout.optJSONObject("page"))
+        RenderPageBackground(layout.optJSONObject("page"))
 
         Scaffold(
             modifier = if (topScrollBehavior != null)
@@ -1375,6 +1354,7 @@ private fun BoxScope.DesignerOverlay(
                             path = selectedPath,
                             menus = emptyMap(),
                             onSelect = {}
+                            onOpenInspector = {}
                         )
                     }
                 }
