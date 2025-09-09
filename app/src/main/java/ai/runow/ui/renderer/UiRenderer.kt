@@ -5,6 +5,8 @@
 
 package ai.runow.ui.renderer
 
+import androidx.compose.ui.graphics.Color
+import android.graphics.Color as AndroidColor
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -14,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Arrangement
@@ -22,8 +23,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Text
-import androidx.compose.ui.unit.dp
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
@@ -33,14 +32,12 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.tween
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
@@ -48,20 +45,15 @@ import android.net.Uri
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -71,11 +63,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -96,7 +86,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -110,6 +99,16 @@ import kotlin.math.round
 /* =========================================================
  * ENTRY ROOT CHIAMATA DA MainActivity
  * ========================================================= */
+
+
+private fun luminance(c: Color): Double {
+    // sRGB luminance approx.
+    fun ch(x: Double) = if (x <= 0.03928) x / 12.92 else Math.pow((x + 0.055) / 1.055, 2.4)
+    val r = ch(c.red.toDouble())
+    val g = ch(c.green.toDouble())
+    val b = ch(c.blue.toDouble())
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
 
 @Composable
 private fun AddBarItemButtons(
@@ -3577,30 +3576,39 @@ private fun NamedIconEx(name: String?, contentDescription: String?) {
 /* ---- Color parsing / pickers ---- */
 
 @Composable
-private fun parseColorOrRole(value: String?): Color? {
-    if (value.isNullOrBlank()) return null
-    val v = value.trim()
-    if (v.equals("transparent", ignoreCase = true)) return Color.Transparent
-
-    if (v.startsWith("#") && (v.length == 7 || v.length == 9)) {
-        return try { Color(android.graphics.Color.parseColor(v)) } catch (_: Exception) { null }
-    }
-
+private fun parseColorOrRole(raw: String?): Color? {
+    val v = raw?.trim().orEmpty()
+    if (v.isEmpty()) return null
     val cs = MaterialTheme.colorScheme
-    return when (v) {
-        "primary"        -> cs.primary
-        "onPrimary"      -> cs.onPrimary
-        "secondary"      -> cs.secondary
-        "onSecondary"    -> cs.onSecondary
-        "tertiary"       -> cs.tertiary
-        "onTertiary"     -> cs.onTertiary
-        "error"          -> cs.error
-        "onError"        -> cs.onError
-        "surface"        -> cs.surface
-        "surfaceVariant" -> cs.surfaceVariant
-        "onSurface"      -> cs.onSurface
-        "outline"        -> cs.outline
-        else -> null
+    return when (v.lowercase()) {
+        // ruoli Material 3 più comuni (aggiungine altri se ti servono)
+        "primary" -> cs.primary
+        "onprimary" -> cs.onPrimary
+        "secondary" -> cs.secondary
+        "onsecondary" -> cs.onSecondary
+        "tertiary" -> cs.tertiary
+        "ontertiary" -> cs.onTertiary
+        "surface" -> cs.surface
+        "onsurface" -> cs.onSurface
+        "surfacevariant" -> cs.surfaceVariant
+        "onsurfacevariant" -> cs.onSurfaceVariant
+        "background" -> cs.background
+        "onbackground" -> cs.onBackground
+        "error" -> cs.error
+        "onerror" -> cs.onError
+        "outline" -> cs.outline
+        "outlinevariant" -> cs.outlineVariant
+        "inverseprimary" -> cs.inversePrimary
+        "inverseonsurface" -> cs.inverseOnSurface
+        "scrim" -> cs.scrim
+        else -> {
+            try {
+                val str = if (v.startsWith("#")) v else "#$v"
+                Color(AndroidColor.parseColor(str))
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }
     }
 }
 
@@ -3689,12 +3697,9 @@ private fun NamedColorPickerPlus(
     }
 }
 
-/* ---- Readability helper ---- */
-private fun bestOnColor(bg: Color): Color {
-    val l = 0.2126f * bg.red + 0.7152f * bg.green + 0.0722f * bg.blue
-    return if (l < 0.5f) Color.White else Color.Black
-}
-
+@Composable
+private fun bestOnColor(bg: Color): Color =
+    if (luminance(bg) < 0.5) Color.White else Color.Black
 /* =========================================================
  * JSON utils
  * ========================================================= */
