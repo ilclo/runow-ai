@@ -471,9 +471,12 @@ fun UiScreen(
     var previewRoot: JSONObject? by remember { mutableStateOf(null) }
     fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
         val out = JSONObject(base.toString())
-        listOf("page", "topBar").forEach { k -> if (preview.has(k)) out.put(k, preview.opt(k)) }
+        listOf("page", "topBar", "bottomBar", "fab", "scroll").forEach { k ->
+            if (preview.has(k)) out.put(k, preview.opt(k))
+        }
         return out
     }
+
     val effectiveLayout = remember(layout, previewRoot) {
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
