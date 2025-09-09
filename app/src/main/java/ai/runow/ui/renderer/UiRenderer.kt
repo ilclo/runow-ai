@@ -5,7 +5,8 @@
 
 package ai.runow.ui.renderer
 
-// Animations
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -139,13 +140,12 @@ internal fun RenderSidePanelsOverlay(
         .firstOrNull { it.optString("id") == openPanelId }
         ?: return
 
-    val side = panel.optString("side", "left")
-    val width = panel.optDouble("widthDp", 320.0).toFloat().dp
+    val side   = panel.optString("side", "left")
+    val width  = panel.optDouble("widthDp", 320.0).toFloat().dp
     val height = panel.optDouble("heightDp", 0.0).toFloat().let { if (it > 0) it.dp else Dp.Unspecified }
-    val items = panel.optJSONArray("items") ?: JSONArray()
+    val items  = panel.optJSONArray("items") ?: JSONArray()
 
-    val baseScrimAlpha = panel.optDouble("scrimAlpha", 0.25).toFloat().coerceIn(0f, 1f)
-    val scrimAlpha = if (dimBehind) baseScrimAlpha else 0f
+    val scrimAlpha = (if (dimBehind) panel.optDouble("scrimAlpha", 0.25) else 0.0).toFloat().coerceIn(0f,1f)
     val scrimColor = Color.Black.copy(alpha = scrimAlpha)
     val ms = panel.optInt("animMs", 240).coerceIn(120, 600)
 
@@ -464,29 +464,38 @@ private fun BoxScope.DesignSwitchKnob(
     }
 }
 
-// --- aggiunte: SizeMode + nuovi campi in ResolvedContainer ---
+// --- Container primitives (UNA SOLA COPIA) ---
+
 private enum class BorderMode { None, Full, TopBottom }
-private enum class SizeMode { Wrap, Fill, FixedDp, Fraction }
+private enum class SizeMode  { Wrap, Fill, FixedDp, Fraction }
+
+private data class BgImage(
+    val resId: Int?,          // preferito se presente
+    val uriString: String?,   // alternativamente URI (content:/file:/http…)
+    val scale: ContentScale,
+    val alpha: Float
+)
 
 private data class ResolvedContainer(
-    val background: Color,
+    val background: Color,         // SEMPRE non nullo
     val contentColor: Color,
     val shape: Shape,
     val elevation: Dp,
     val borderColor: Color,
     val borderWidth: Dp,
     val borderMode: BorderMode,
-    val brush: Brush?,
-    val bgImage: BgImage?,
-    // new:
-    val bgAlpha: Float,
-    val widthMode: SizeMode,
-    val widthDp: Dp,
-    val widthFraction: Float,
-    val heightMode: SizeMode,
-    val heightDp: Dp
+    val brush: Brush?,             // gradiente opzionale
+    val bgImage: BgImage?,         // immagine opzionale
+    val bgAlpha: Float = 1f,       // opacità sfondo (colore/gradiente)
+    // larghezze/altezze opzionali per i menù a tendina
+    val widthMode: SizeMode = SizeMode.Wrap,
+    val widthDp: Dp = Dp.Unspecified,
+    val widthFraction: Float = 1f,
+    val heightMode: SizeMode = SizeMode.Wrap,
+    val heightDp: Dp = Dp.Unspecified,
 )
 
+// Colori base per stile+tinta (usa il tuo parseColorOrRole/bestOnColor se già presenti)
 @Composable
 private fun mapContainerColors(style: String, tint: String, customHex: String?): Triple<Color, Color, Color> {
     val cs = MaterialTheme.colorScheme
@@ -521,6 +530,7 @@ private fun mapContainerColors(style: String, tint: String, customHex: String?):
     customHex?.let { hex ->
         parseColorOrRole(hex)?.let { c ->
             container = c
+            // se non hai già bestOnColor(c), puoi scegliere onPrimary/onSurface come fallback
             content = bestOnColor(c)
         }
     }
@@ -533,9 +543,10 @@ private fun mapContainerColors(style: String, tint: String, customHex: String?):
     return Triple(container, content, defaultBorder)
 }
 
+
 @Composable
 private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
-    val style   = cfg?.optString("style", "surface") ?: "surface"
+    val style   = cfg?.optString("style", "surface") ?: "surface"   // "primary","tonal","outlined","text","surface"
     val tint    = cfg?.optString("tint", "default") ?: "default"
     val custom  = cfg?.optString("customColor","")?.takeIf { it.isNotBlank() }
     val (bg, content, defaultBorder) = mapContainerColors(style, tint, custom)
@@ -551,53 +562,49 @@ private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
     val defaultElev = when (style) { "surface","primary","tonal" -> 1.0; else -> 0.0 }
     val elevation = Dp((cfg?.optDouble("elevationDp", defaultElev) ?: defaultElev).toFloat())
 
-    val borderMode = when (cfg?.optString("borderMode","")) {
-        "topBottom" -> BorderMode.TopBottom
-        "full"      -> BorderMode.Full
-        "none"      -> BorderMode.None
-        else        -> if (style == "outlined") BorderMode.Full else BorderMode.None
+    val borderMode = when (cfg?.optString("borderMode","none")) {
+        "full"       -> BorderMode.Full
+        "topBottom"  -> BorderMode.TopBottom
+        else         -> BorderMode.None
     }
-    val borderColor = parseColorOrRole(cfg?.optString("borderColor","")) ?: defaultBorder
-    val borderW = Dp((cfg?.optDouble("borderThicknessDp", if (borderMode != BorderMode.None) 1.0 else 0.0) ?: 0.0).toFloat())
+    val borderW = Dp(cfg?.optDouble("borderThicknessDp", 1.0)?.toFloat() ?: 1f)
+    val borderColor = parseColorOrRole(cfg?.optString("borderColor","outline") ?: "outline") ?: defaultBorder
 
-    // --- NEW: alpha (opacità sfondo) ---
-    val bgAlpha = (cfg?.optDouble("alpha", 1.0) ?: 1.0).toFloat().coerceIn(0f, 1f)
+    val bgAlpha = cfg?.optDouble("opacity", 1.0)?.toFloat()?.coerceIn(0f,1f) ?: 1f
 
-    // --- NEW: dimensioni ---
+    // Larghezza/Altezza da menù a tendina
     val widthMode = when (cfg?.optString("widthMode","wrap")) {
-        "fill"      -> SizeMode.Fill
-        "fixed_dp"  -> SizeMode.FixedDp
-        "fraction"  -> SizeMode.Fraction
-        else        -> SizeMode.Wrap
+        "fill" -> SizeMode.Fill
+        "dp"   -> SizeMode.FixedDp
+        "frac" -> SizeMode.Fraction
+        else   -> SizeMode.Wrap
     }
-    val widthDp = Dp((cfg?.optDouble("widthDp", 0.0) ?: 0.0).toFloat())
-    val widthFraction = (cfg?.optDouble("widthFraction", 1.0) ?: 1.0).toFloat().coerceIn(0.1f, 1f)
+    val widthDp       = Dp(cfg?.optDouble("widthDp", 0.0)?.toFloat() ?: 0f)
+    val widthFraction = cfg?.optDouble("widthFraction", 1.0)?.toFloat()?.coerceIn(0f,1f) ?: 1f
 
     val heightMode = when (cfg?.optString("heightMode","wrap")) {
-        "fixed_dp" -> SizeMode.FixedDp
-        else       -> SizeMode.Wrap
+        "dp"   -> SizeMode.FixedDp
+        else   -> SizeMode.Wrap
     }
-    val heightDp = Dp((cfg?.optDouble("heightDp", 0.0) ?: 0.0).toFloat())
+    val heightDp = Dp(cfg?.optDouble("heightDp", 0.0)?.toFloat() ?: 0f)
 
-    // Gradient opzionale
+    // Gradiente opzionale
     val brush = cfg?.optJSONObject("gradient")?.let { g ->
         val arr = g.optJSONArray("colors")
-        val cols = (0 until (arr?.length() ?: 0))
-            .mapNotNull { i -> parseColorOrRole(arr!!.optString(i)).takeIf { it.alpha > 0f } }
+        val cols = (0 until (arr?.length() ?: 0)).mapNotNull { i -> parseColorOrRole(arr!!.optString(i)) }
         if (cols.size >= 2) {
-            // default orizzontale richiesto per i contenitori
-            if (g.optString("direction","horizontal") == "horizontal") Brush.horizontalGradient(cols)
+            if (g.optString("direction","vertical") == "horizontal") Brush.horizontalGradient(cols)
             else Brush.verticalGradient(cols)
         } else null
     }
 
-    // Immagine opzionale (res: o uri:/content:/file:)
+    // Immagine opzionale (res:/uri:/content:/file:)
     val bgImage = cfg?.optJSONObject("image")?.let { img ->
         val src = img.optString("source", "")
         val scale = when (img.optString("contentScale","crop")) {
-            "fit" -> ContentScale.Fit
+            "fit"  -> ContentScale.Fit
             "fill" -> ContentScale.FillBounds
-            else -> ContentScale.Crop
+            else   -> ContentScale.Crop
         }
         val alpha = img.optDouble("alpha", 1.0).toFloat().coerceIn(0f, 1f)
         if (src.startsWith("res:")) {
@@ -610,21 +617,21 @@ private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
     }
 
     return ResolvedContainer(
-        background   = bg,
-        contentColor = content,
-        shape        = shape,
-        elevation    = elevation,
-        borderColor  = borderColor,
-        borderWidth  = borderW,
-        borderMode   = borderMode,
-        brush        = if (style == "text") null else brush,
-        bgImage      = if (style == "text") null else bgImage,
-        bgAlpha      = bgAlpha,
-        widthMode    = widthMode,
-        widthDp      = widthDp,
-        widthFraction= widthFraction,
-        heightMode   = heightMode,
-        heightDp     = heightDp
+        background    = bg,                  // <-- non nullo
+        contentColor  = content,
+        shape         = shape,
+        elevation     = elevation,
+        borderColor   = borderColor,
+        borderWidth   = borderW,
+        borderMode    = borderMode,
+        brush         = if (style == "text") null else brush,    // "text" resta trasparente
+        bgImage       = if (style == "text") null else bgImage,
+        bgAlpha       = bgAlpha,
+        widthMode     = widthMode,
+        widthDp       = widthDp,
+        widthFraction = widthFraction,
+        heightMode    = heightMode,
+        heightDp      = heightDp
     )
 }
 
@@ -635,6 +642,7 @@ private fun Modifier.topBottomBorder(color: Color, thickness: Dp): Modifier = dr
     drawLine(color, Offset(0f, yTop), Offset(size.width, yTop), strokeWidth = sw)
     drawLine(color, Offset(0f, yBot), Offset(size.width, yBot), strokeWidth = sw)
 }
+
 
 @Composable
 private fun StyledContainer(
@@ -647,23 +655,22 @@ private fun StyledContainer(
     val r = resolveContainer(cfg)
 
     var base = modifier
-    // Width
+    // larghezza
     base = when (r.widthMode) {
-        SizeMode.Fill      -> base.fillMaxWidth()
-        SizeMode.FixedDp   -> base.width(r.widthDp)
-        SizeMode.Fraction  -> base.fillMaxWidth(r.widthFraction)
-        else               -> base
+        SizeMode.Fill     -> base.fillMaxWidth()
+        SizeMode.FixedDp  -> base.width(r.widthDp)
+        SizeMode.Fraction -> base.fillMaxWidth(r.widthFraction)
+        else              -> base
     }
-    // Height
+    // altezza
     base = when (r.heightMode) {
-        SizeMode.FixedDp   -> base.height(r.heightDp)
-        else               -> base
+        SizeMode.FixedDp  -> base.height(r.heightDp)
+        else              -> base
     }
 
     base = base
         .shadow(r.elevation, r.shape, clip = false)
         .clip(r.shape)
-        // se non c'è gradient, applico direttamente il colore con alpha
         .background(if (r.brush == null) r.background.copy(alpha = r.bgAlpha) else Color.Transparent)
         .then(
             when (r.borderMode) {
@@ -676,7 +683,7 @@ private fun StyledContainer(
 
     CompositionLocalProvider(LocalContentColor provides r.contentColor) {
         Box(base) {
-            // Gradient sotto al contenuto con alpha separato
+            // Gradiente (se presente) sotto al contenuto
             r.brush?.let { br ->
                 Box(
                     Modifier
@@ -685,14 +692,15 @@ private fun StyledContainer(
                         .graphicsLayer { alpha = r.bgAlpha }
                 )
             }
-            // Immagine sotto al contenuto
+
+            // Immagine (se presente) sotto al contenuto
             r.bgImage?.let { bg ->
                 if (bg.resId != null) {
                     Image(
                         painter = painterResource(bg.resId),
                         contentDescription = null,
                         contentScale = bg.scale,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.matchParentSize(),
                         alpha = bg.alpha
                     )
                 } else if (!bg.uriString.isNullOrBlank()) {
@@ -702,19 +710,20 @@ private fun StyledContainer(
                             bitmap = bmp,
                             contentDescription = null,
                             contentScale = bg.scale,
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.matchParentSize(),
                             alpha = bg.alpha
                         )
                     }
                 }
             }
-            Column(Modifier.padding(contentPadding)) {
+
+            // Contenuto del blocco
+            Column(Modifier.matchParentSize().padding(contentPadding)) {
                 content()
             }
         }
     }
 }
-
 
 /* =========================================================
  * PAGE BACKGROUND (colore/gradient/immagine a tutta pagina)
