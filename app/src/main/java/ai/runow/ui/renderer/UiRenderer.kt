@@ -197,7 +197,7 @@ internal fun RenderBlock(
     onOpenInspector: (String) -> Unit
 ) {
     // --- Intercettori per menu centrale/sidepanel ---
-    when (block.optString("type")) {
+    when (block.optString("type")) {    when (block.optString("type")) {
         "IconButton" -> {
             val icon = block.optString("icon", "more_vert")
             val openMenuId = block.optString("openMenuId", "")
@@ -224,7 +224,45 @@ internal fun RenderBlock(
                 }
             }
             return
-                when (block.optString("type")) {
+        }
+    }
+
+    // --- qui sotto resta il TUO corpo stabile già funzionante ---
+    // ...
+}
+
+    // --- Intercettori per menu centrale/sidepanel ---
+    when (block.optString("type")) {    when (block.optString("type")) {
+        "IconButton" -> {
+            val icon = block.optString("icon", "more_vert")
+            val openMenuId = block.optString("openMenuId", "")
+            val actionId = block.optString("actionId", "")
+
+            IconButton(onClick = {
+                when {
+                    openMenuId.isNotBlank() -> dispatch("open_menu:$openMenuId")
+                    actionId.startsWith("open_menu:") -> dispatch(actionId)
+                    else -> if (actionId.isNotBlank()) dispatch(actionId)
+                }
+            }) { NamedIconEx(icon, null) }
+            return
+        }
+        "Menu" -> {
+            // Il contenuto del menu viene reso dal Center Overlay.
+            // In designer mostriamo un chip cliccabile che apre l’overlay per anteprima rapida.
+            if (designerMode) {
+                val id = block.optString("id","(menu)")
+                TextButton(onClick = { if (id.isNotBlank()) dispatch("open_menu:$id") }) {
+                    NamedIconEx("more_vert", null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Menu: $id")
+                }
+            }
+            return
+        }
+    }
+
+    when (block.optString("type")) {
         "SectionHeader" -> {
             val title = block.optString("title","")
             val subtitle = block.optString("subtitle","")
@@ -455,11 +493,7 @@ internal fun RenderBlock(
 
         else -> { /* fallback semplice */ }
     }
-
-    // --- qui sotto resta il TUO corpo stabile già funzionante ---
-    // ...
 }
-
 
 @Composable
 internal fun CenteredSheet(
