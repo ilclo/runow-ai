@@ -379,8 +379,8 @@ internal fun RenderSidePanelsOverlay(
                                 designerMode = false,
                                 path = path,
                                 menus = menus,
-                                onSelect = {},                 // aggiunto
-                                onOpenInspector = {}           // aggiunto
+                                onSelect = {},
+                                onOpenInspector = {}
                             )
                         }
                     }
@@ -538,6 +538,7 @@ fun UiScreen(
                 onRootLivePreview = { previewRoot = it }
             )
         }
+
         // Knob laterale
         DesignSwitchKnob(
             isDesigner = designMode,
@@ -1566,7 +1567,71 @@ private fun BoxScope.DesignerOverlay(
                     ContainerEditorSection(bb, key = "container", title = "BottomBar – Contenitore", onChange = onChange)
                     BarItemsEditor(owner = bb, arrayKey = "items", title = "BottomBar – Items", onChange = onChange)
                 }
-
+                Divider(); Text("Side Panels", style = MaterialTheme.typography.titleMedium)
+                
+                val panels = working.optJSONArray("sidePanels") ?: JSONArray().also { working.put("sidePanels", it) }
+                
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = {
+                        val id = "sp_" + System.currentTimeMillis().toString().takeLast(4)
+                        panels.put(JSONObject().apply {
+                            put("id", id)
+                            put("title", "Panel")
+                            put("side", "left")            // left | right | top
+                            put("widthDp", 320)
+                            put("heightDp", 0)             // solo per top
+                            put("scrimAlpha", 0.25)
+                            put("corner", 16)
+                            put("items", JSONArray())
+                        })
+                        onChange()
+                    }) { Text("+ Aggiungi panel") }
+                }
+                
+                // editor semplice per ciascun panel
+                for (i in 0 until panels.length()) {
+                    val p = panels.getJSONObject(i)
+                    ElevatedCard {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("Panel ${i+1} – ${p.optString("id")}", style = MaterialTheme.typography.labelLarge)
+                                Row {
+                                    IconButton(onClick = { moveInArray(panels, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                                    IconButton(onClick = { moveInArray(panels, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                                    IconButton(onClick = { removeAt(panels, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
+                                }
+                            }
+                
+                            // side
+                            var side by remember { mutableStateOf(p.optString("side","left")) }
+                            ExposedDropdown(
+                                value = side, label = "side",
+                                options = listOf("left","right","top")
+                            ) { sel -> side = sel; p.put("side", sel); onChange() }
+                
+                            // dimensioni
+                            val w = remember { mutableStateOf(p.optDouble("widthDp",320.0).toInt().toString()) }
+                            OutlinedTextField(w.value, { v -> w.value = v; p.put("widthDp", v.toDoubleOrNull() ?: 320.0); onChange() }, label = { Text("widthDp") })
+                
+                            val h = remember { mutableStateOf(p.optDouble("heightDp",0.0).toInt().toString()) }
+                            OutlinedTextField(h.value, { v -> h.value = v; p.put("heightDp", v.toDoubleOrNull() ?: 0.0); onChange() }, label = { Text("heightDp (solo top)") })
+                
+                            val scr = remember { mutableStateOf(p.optDouble("scrimAlpha",0.25).toString()) }
+                            OutlinedTextField(scr.value, { v -> scr.value = v; p.put("scrimAlpha", v.toDoubleOrNull()?.coerceIn(0.0,1.0) ?: 0.25); onChange() }, label = { Text("scrimAlpha (0..1)") })
+                
+                            val corner = remember { mutableStateOf(p.optDouble("corner",16.0).toString()) }
+                            OutlinedTextField(corner.value, { v -> corner.value = v; p.put("corner", v.toDoubleOrNull() ?: 16.0); onChange() }, label = { Text("corner (dp)") })
+                
+                            // Items (semplice demo)
+                            val items = p.optJSONArray("items") ?: JSONArray().also { p.put("items", it) }
+                            Button(onClick = {
+                                items.put(JSONObject("""{"type":"SectionHeader","title":"Nuovo elemento"}"""))
+                                onChange()
+                            }) { Text("+ Aggiungi elemento") }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
                 // VARI – Scroll on/off, FAB (il resto del root)
                 Divider(); RootInspectorPanel(working, onChange)
 
