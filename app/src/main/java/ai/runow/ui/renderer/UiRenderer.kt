@@ -5,6 +5,18 @@
 
 package ai.runow.ui.renderer
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Button
@@ -285,12 +297,16 @@ internal fun RenderCenterMenuOverlay(
     val cornerDp   = cfg.optDouble("corner", 18.0).toFloat().dp
     val alphaBox   = cfg.optDouble("alpha", 0.88).toFloat().coerceIn(0.35f, 1f)
     val scrimAlpha = cfg.optDouble("scrimAlpha", 0.08).toFloat().coerceIn(0f, 0.35f)
-    val baseColor  = parseColorOrRole(cfg.optString("containerColor","surface")) ?: MaterialTheme.colorScheme.surface
-    val textColor  = parseColorOrRole(cfg.optString("textColor","")) ?: bestOnColor(baseColor)
+    val baseColor  = parseColorOrRole(cfg.optString("containerColor", "surface"))
+        ?: MaterialTheme.colorScheme.surface
+    val textColor  = parseColorOrRole(cfg.optString("textColor", ""))
+        ?: bestOnColor(baseColor)
+    val title      = cfg.optString("title", "")
 
     BackHandler(enabled = true) { onClose() }
 
     Box(Modifier.fillMaxSize()) {
+        // scrim cliccabile per chiudere
         if (scrimAlpha > 0f) {
             Box(
                 Modifier
@@ -322,13 +338,16 @@ internal fun RenderCenterMenuOverlay(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val title = cfg.optString("title","")
-                    Text(if (title.isNotBlank()) title else openMenuId, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (title.isNotBlank()) title else openMenuId,
+                        style = MaterialTheme.typography.titleMedium
+                    )
                     IconButton(onClick = onClose) { NamedIconEx("close", "Chiudi menu") }
                 }
 
                 Spacer(Modifier.height(6.dp))
 
+                // voci del menu
                 for (i in 0 until items.length()) {
                     val it = items.optJSONObject(i) ?: continue
                     val label = it.optString("label", "")
@@ -342,6 +361,7 @@ internal fun RenderCenterMenuOverlay(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .clickable {
+                                // resta aperto solo se sto aprendo una sidebar
                                 val keepOpen = act.startsWith("sidepanel:open:")
                                 if (!keepOpen) onClose()
                                 if (act.isNotBlank()) dispatch(act)
@@ -356,6 +376,7 @@ internal fun RenderCenterMenuOverlay(
         }
     }
 }
+
 
 
 @Composable
