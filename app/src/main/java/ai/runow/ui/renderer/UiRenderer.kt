@@ -106,16 +106,11 @@ internal fun RenderCenterMenuOverlay(
     val scrimAlpha = cfg.optDouble("scrimAlpha", 0.08).toFloat().coerceIn(0f, 0.35f)
     val baseColor  = parseColorOrRole(cfg.optString("containerColor","surface")) ?: MaterialTheme.colorScheme.surface
     val textColor  = parseColorOrRole(cfg.optString("textColor","")) ?: bestOnColor(baseColor)
-    val title      = cfg.optString("title","")
-    val keepOpen = act.startsWith("sidepanel:open:")
-    if (!keepOpen) onClose()
-    if (act.isNotBlank()) dispatch(act)
-
 
     BackHandler(enabled = true) { onClose() }
 
     Box(Modifier.fillMaxSize()) {
-        // leggero scrim per catturare il tap fuori e dare focus al menu, senza coprire la sidebar dietro
+        // scrim leggero
         if (scrimAlpha > 0f) {
             Box(
                 Modifier
@@ -128,7 +123,7 @@ internal fun RenderCenterMenuOverlay(
         }
 
         Surface(
-            color = baseColor.copy(alpha = alphaBox),        // semitrasparente: si intravede il background
+            color = baseColor.copy(alpha = alphaBox),
             contentColor = textColor,
             shape = RoundedCornerShape(cornerDp),
             tonalElevation = 6.dp,
@@ -147,16 +142,13 @@ internal fun RenderCenterMenuOverlay(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        if (title.isNotBlank()) title else openMenuId,
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    val title = cfg.optString("title","")
+                    Text(if (title.isNotBlank()) title else openMenuId, style = MaterialTheme.typography.titleMedium)
                     IconButton(onClick = onClose) { NamedIconEx("close", "Chiudi menu") }
                 }
 
                 Spacer(Modifier.height(6.dp))
 
-                // voci del menu
                 for (i in 0 until items.length()) {
                     val it = items.optJSONObject(i) ?: continue
                     val label = it.optString("label", "")
@@ -171,7 +163,7 @@ internal fun RenderCenterMenuOverlay(
                             .clip(RoundedCornerShape(12.dp))
                             .clickable {
                                 val keepOpen = act.startsWith("sidepanel:open:")
-                                if (!keepOpen) onClose()           // resta aperto se sto aprendo una sidebar
+                                if (!keepOpen) onClose()
                                 if (act.isNotBlank()) dispatch(act)
                             }
                             .padding(vertical = 2.dp, horizontal = 4.dp)
@@ -196,79 +188,49 @@ internal fun RenderBlock(
     onSelect: (String) -> Unit,
     onOpenInspector: (String) -> Unit
 ) {
-    // --- Intercettori per menu centrale/sidepanel ---
-    when (block.optString("type")) {    when (block.optString("type")) {
-        "IconButton" -> {
-            val icon = block.optString("icon", "more_vert")
-            val openMenuId = block.optString("openMenuId", "")
-            val actionId = block.optString("actionId", "")
-
-            IconButton(onClick = {
-                when {
-                    openMenuId.isNotBlank() -> dispatch("open_menu:$openMenuId")
-                    actionId.startsWith("open_menu:") -> dispatch(actionId)
-                    else -> if (actionId.isNotBlank()) dispatch(actionId)
-                }
-            }) { NamedIconEx(icon, null) }
-            return
-        }
-        "Menu" -> {
-            // Il contenuto del menu viene reso dal Center Overlay.
-            // In designer mostriamo un chip cliccabile che apre l’overlay per anteprima rapida.
-            if (designerMode) {
-                val id = block.optString("id","(menu)")
-                TextButton(onClick = { if (id.isNotBlank()) dispatch("open_menu:$id") }) {
-                    NamedIconEx("more_vert", null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Menu: $id")
-                }
-            }
-            return
-        }
-    }
-
-    // --- Intercettori per menu centrale/sidepanel ---
-    when (block.optString("type")) {    when (block.optString("type")) {
-        "IconButton" -> {
-            val icon = block.optString("icon", "more_vert")
-            val openMenuId = block.optString("openMenuId", "")
-            val actionId = block.optString("actionId", "")
-
-            IconButton(onClick = {
-                when {
-                    openMenuId.isNotBlank() -> dispatch("open_menu:$openMenuId")
-                    actionId.startsWith("open_menu:") -> dispatch(actionId)
-                    else -> if (actionId.isNotBlank()) dispatch(actionId)
-                }
-            }) { NamedIconEx(icon, null) }
-            return
-        }
-        "Menu" -> {
-            // Il contenuto del menu viene reso dal Center Overlay.
-            // In designer mostriamo un chip cliccabile che apre l’overlay per anteprima rapida.
-            if (designerMode) {
-                val id = block.optString("id","(menu)")
-                TextButton(onClick = { if (id.isNotBlank()) dispatch("open_menu:$id") }) {
-                    NamedIconEx("more_vert", null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Menu: $id")
-                }
-            }
-            return
-        }
-    }
-
+    // Gestione rapida dei due tipi "di servizio"
     when (block.optString("type")) {
+        "IconButton" -> {
+            val icon = block.optString("icon", "more_vert")
+            val openMenuId = block.optString("openMenuId", "")
+            val actionId = block.optString("actionId", "")
+            IconButton(onClick = {
+                when {
+                    openMenuId.isNotBlank()               -> dispatch("open_menu:$openMenuId")
+                    actionId.startsWith("open_menu:")     -> dispatch(actionId)
+                    actionId.isNotBlank()                 -> dispatch(actionId)
+                }
+            }) { NamedIconEx(icon, null) }
+            return
+        }
+        "Menu" -> {
+            // In designer mostriamo un chip per aprire l’overlay centrale
+            if (designerMode) {
+                val id = block.optString("id", "(menu)")
+                TextButton(onClick = { if (id.isNotBlank()) dispatch("open_menu:$id") }) {
+                    NamedIconEx("more_vert", null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Menu: $id")
+                }
+            }
+            return
+        }
+    }
+
+    // Tutti gli altri tipi “normali”
+    when (block.optString("type")) {
+
         "SectionHeader" -> {
-            val title = block.optString("title","")
-            val subtitle = block.optString("subtitle","")
-            val style = mapTextStyle(block.optString("style","titleMedium"))
+            val title = block.optString("title", "")
+            val subtitle = block.optString("subtitle", "")
+            val style = mapTextStyle(block.optString("style", "titleMedium"))
             val st = applyTextStyleOverrides(block, style)
-            val align = mapTextAlign(block.optString("align","start"))
+            val align = mapTextAlign(block.optString("align", "start"))
             Column(Modifier.fillMaxWidth()) {
                 Text(title, style = st, textAlign = align)
-                if (subtitle.isNotBlank())
+                if (subtitle.isNotBlank()) {
                     Text(subtitle, style = MaterialTheme.typography.labelMedium, textAlign = align)
+                }
             }
         }
 
@@ -279,20 +241,28 @@ internal fun RenderBlock(
         "Divider" -> Divider()
 
         "DividerV" -> {
-            val h = Dp(block.optDouble("height",24.0).toFloat())
-            val th = Dp(block.optDouble("thickness",1.0).toFloat())
-            Box(Modifier.height(h).width(th).background(MaterialTheme.colorScheme.outlineVariant))
+            val h = Dp(block.optDouble("height", 24.0).toFloat())
+            val th = Dp(block.optDouble("thickness", 1.0).toFloat())
+            Box(
+                Modifier
+                    .height(h)
+                    .width(th)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
+            )
         }
 
         "Card" -> {
-            val clickAction = block.optString("clickActionId","")
+            val clickAction = block.optString("clickActionId", "")
             StyledContainer(block.optJSONObject("container")) {
                 ElevatedCard(
                     onClick = { if (clickAction.isNotBlank()) dispatch(clickAction) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     val children = block.optJSONArray("blocks") ?: JSONArray()
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         for (i in 0 until children.length()) {
                             RenderBlock(
                                 block = children.getJSONObject(i),
@@ -311,25 +281,47 @@ internal fun RenderBlock(
         }
 
         "Image" -> {
-            val src = block.optString("source","")
-            val corner = Dp(block.optDouble("corner",12.0).toFloat())
-            val h = Dp(block.optDouble("heightDp",160.0).toFloat())
-            val scale = when (block.optString("contentScale","fit")) {
+            val src = block.optString("source", "")
+            val corner = Dp(block.optDouble("corner", 12.0).toFloat())
+            val h = Dp(block.optDouble("heightDp", 160.0).toFloat())
+            val scale = when (block.optString("contentScale", "fit")) {
                 "crop" -> ContentScale.Crop
                 "fill" -> ContentScale.FillBounds
                 else   -> ContentScale.Fit
             }
             val shape = RoundedCornerShape(corner)
-            Box(Modifier.fillMaxWidth().height(h).clip(shape)) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(h)
+                    .clip(shape)
+            ) {
                 when {
                     src.startsWith("res:") -> {
                         val ctx = LocalContext.current
-                        val id = ctx.resources.getIdentifier(src.removePrefix("res:"), "drawable", ctx.packageName)
-                        if (id != 0) Image(painterResource(id), null, Modifier.fillMaxSize(), scale)
+                        val id = ctx.resources.getIdentifier(
+                            src.removePrefix("res:"),
+                            "drawable",
+                            ctx.packageName
+                        )
+                        if (id != 0) {
+                            Image(
+                                painter = painterResource(id),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = scale
+                            )
+                        }
                     }
                     src.startsWith("uri:") || src.startsWith("content:") || src.startsWith("file:") -> {
-                        rememberImageBitmapFromUri(src.removePrefix("uri:"))?.let { bmp ->
-                            Image(bmp, null, Modifier.fillMaxSize(), scale)
+                        val bmp = rememberImageBitmapFromUri(src.removePrefix("uri:"))
+                        if (bmp != null) {
+                            Image(
+                                bitmap = bmp,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = scale
+                            )
                         }
                     }
                 }
@@ -341,9 +333,9 @@ internal fun RenderBlock(
             Column(Modifier.fillMaxWidth()) {
                 for (i in 0 until items.length()) {
                     val it = items.getJSONObject(i)
-                    val title = it.optString("title","")
-                    val subtitle = it.optString("subtitle","")
-                    val action = it.optString("actionId","")
+                    val title = it.optString("title", "")
+                    val subtitle = it.optString("subtitle", "")
+                    val action = it.optString("actionId", "")
                     ListItem(
                         headlineContent = { Text(title) },
                         supportingContent = { if (subtitle.isNotBlank()) Text(subtitle) },
@@ -355,21 +347,21 @@ internal fun RenderBlock(
         }
 
         "Progress" -> {
-            val label = block.optString("label","")
-            val v = block.optDouble("value",0.0).toFloat() / 100f
+            val label = block.optString("label", "")
+            val v = block.optDouble("value", 0.0).toFloat() / 100f
             val show = block.optBoolean("showPercent", true)
             Column {
                 if (label.isNotBlank()) Text(label)
                 LinearProgressIndicator(progress = v)
-                if (show) Text("${(v*100).toInt()}%")
+                if (show) Text("${(v * 100).toInt()}%")
             }
         }
 
         "Alert" -> {
-            val sev = block.optString("severity","info")
-            val title = block.optString("title","")
-            val msg = block.optString("message","")
-            val action = block.optString("actionId","")
+            val sev = block.optString("severity", "info")
+            val title = block.optString("title", "")
+            val msg = block.optString("message", "")
+            val action = block.optString("actionId", "")
             val (bg, fg) = when (sev) {
                 "success" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
                 "warning" -> Color(0xFFFFF3CD) to Color(0xFF664D03)
@@ -377,16 +369,21 @@ internal fun RenderBlock(
                 else      -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
             }
             Surface(color = bg, contentColor = fg, shape = RoundedCornerShape(12.dp)) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(
+                    Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     if (title.isNotBlank()) Text(title, style = MaterialTheme.typography.titleMedium)
                     if (msg.isNotBlank()) Text(msg)
-                    if (action.isNotBlank()) TextButton(onClick = { dispatch(action) }) { Text("Azione") }
+                    if (action.isNotBlank()) {
+                        TextButton(onClick = { dispatch(action) }) { Text("Azione") }
+                    }
                 }
             }
         }
 
         "ButtonRow" -> {
-            val align = when (block.optString("align","center")) {
+            val align = when (block.optString("align", "center")) {
                 "start" -> Arrangement.Start
                 "end" -> Arrangement.End
                 "space_between" -> Arrangement.SpaceBetween
@@ -398,13 +395,13 @@ internal fun RenderBlock(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = align) {
                 for (i in 0 until buttons.length()) {
                     val b = buttons.getJSONObject(i)
-                    val label = b.optString("label","")
-                    val action = b.optString("actionId","")
-                    when (b.optString("style","text")) {
-                        "outlined" -> OutlinedButton(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon","")) }
-                        "tonal"    -> FilledTonalButton(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon","")) }
-                        "primary"  -> Button(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon","")) }
-                        else       -> TextButton(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon","")) }
+                    val label = b.optString("label", "")
+                    val action = b.optString("actionId", "")
+                    when (b.optString("style", "text")) {
+                        "outlined" -> OutlinedButton(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon", "")) }
+                        "tonal"    -> FilledTonalButton(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon", "")) }
+                        "primary"  -> Button(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon", "")) }
+                        else       -> TextButton(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon", "")) }
                     }
                 }
             }
@@ -412,29 +409,32 @@ internal fun RenderBlock(
 
         "ChipRow" -> {
             val chips = block.optJSONArray("chips") ?: JSONArray()
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 for (i in 0 until chips.length()) {
                     val c = chips.getJSONObject(i)
                     AssistChip(
                         onClick = { /* no-op demo */ },
-                        label = { Text(c.optString("label","")) }
+                        label = { Text(c.optString("label", "")) }
                     )
                 }
             }
         }
 
         "Slider" -> {
-            val bind = block.optString("bind","value_1")
-            val min = block.optDouble("min",0.0).toFloat()
-            val max = block.optDouble("max",10.0).toFloat()
-            val step = block.optDouble("step",1.0).toFloat()
+            val bind = block.optString("bind", "value_1")
+            val min = block.optDouble("min", 0.0).toFloat()
+            val max = block.optDouble("max", 10.0).toFloat()
+            val step = block.optDouble("step", 1.0).toFloat()
             val v = remember { mutableStateOf((uiState[bind] as? Float) ?: min) }
             Column {
-                Text(block.optString("label",""))
+                Text(block.optString("label", ""))
                 Slider(
                     value = v.value,
                     onValueChange = {
-                        val snapped = ((it - min)/step).toInt() * step + min
+                        val snapped = ((it - min) / step).toInt() * step + min
                         v.value = snapped.coerceIn(min, max)
                         uiState[bind] = v.value
                     },
@@ -444,11 +444,28 @@ internal fun RenderBlock(
         }
 
         "Toggle" -> {
-            val bind = block.optString("bind","toggle_1")
+            val bind = block.optString("bind", "toggle_1")
             val v = remember { mutableStateOf((uiState[bind] as? Boolean) ?: false) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(checked = v.value, onCheckedChange = {
                     v.value = it; uiState[bind] = it
                 })
                 Spacer(Modifier.width(8.dp))
-                Text(block.optString("label","
+                Text(block.optString("label", ""))
+            }
+        }
+
+        "Tabs" -> {
+            val tabs = block.optJSONArray("tabs") ?: JSONArray()
+            var index by remember {
+                mutableStateOf(
+                    block.optInt("initialIndex", 0)
+                        .coerceIn(0, tabs.length().coerceAtLeast(1) - 1)
+                )
+            }
+            val labels = (0 until tabs.length()).map { i ->
+                tabs.getJSONObject(i).optString("label", "Tab ${i + 1}")
+            }
+            TabRow(selectedTabIndex = index) {
+                labels.forEachIndexed { i, lbl ->
+                    Tab(selected = index == i, onClick = { index = i }, te
