@@ -107,6 +107,10 @@ internal fun RenderCenterMenuOverlay(
     val baseColor  = parseColorOrRole(cfg.optString("containerColor","surface")) ?: MaterialTheme.colorScheme.surface
     val textColor  = parseColorOrRole(cfg.optString("textColor","")) ?: bestOnColor(baseColor)
     val title      = cfg.optString("title","")
+    val keepOpen = act.startsWith("sidepanel:open:")
+    if (!keepOpen) onClose()
+    if (act.isNotBlank()) dispatch(act)
+
 
     BackHandler(enabled = true) { onClose() }
 
@@ -220,7 +224,236 @@ internal fun RenderBlock(
                 }
             }
             return
+                when (block.optString("type")) {
+        "SectionHeader" -> {
+            val title = block.optString("title","")
+            val subtitle = block.optString("subtitle","")
+            val style = mapTextStyle(block.optString("style","titleMedium"))
+            val st = applyTextStyleOverrides(block, style)
+            val align = mapTextAlign(block.optString("align","start"))
+            Column(Modifier.fillMaxWidth()) {
+                Text(title, style = st, textAlign = align)
+                if (subtitle.isNotBlank())
+                    Text(subtitle, style = MaterialTheme.typography.labelMedium, textAlign = align)
+            }
         }
+
+        "Spacer" -> {
+            Spacer(Modifier.height(Dp(block.optDouble("height", 8.0).toFloat())))
+        }
+
+        "Divider" -> Divider()
+
+        "DividerV" -> {
+            val h = Dp(block.optDouble("height",24.0).toFloat())
+            val th = Dp(block.optDouble("thickness",1.0).toFloat())
+            Box(Modifier.height(h).width(th).background(MaterialTheme.colorScheme.outlineVariant))
+        }
+
+        "Card" -> {
+            val clickAction = block.optString("clickActionId","")
+            StyledContainer(block.optJSONObject("container")) {
+                ElevatedCard(
+                    onClick = { if (clickAction.isNotBlank()) dispatch(clickAction) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val children = block.optJSONArray("blocks") ?: JSONArray()
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (i in 0 until children.length()) {
+                            RenderBlock(
+                                block = children.getJSONObject(i),
+                                dispatch = dispatch,
+                                uiState = uiState,
+                                designerMode = designerMode,
+                                path = "$path/blocks/$i",
+                                menus = menus,
+                                onSelect = onSelect,
+                                onOpenInspector = onOpenInspector
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        "Image" -> {
+            val src = block.optString("source","")
+            val corner = Dp(block.optDouble("corner",12.0).toFloat())
+            val h = Dp(block.optDouble("heightDp",160.0).toFloat())
+            val scale = when (block.optString("contentScale","fit")) {
+                "crop" -> ContentScale.Crop
+                "fill" -> ContentScale.FillBounds
+                else   -> ContentScale.Fit
+            }
+            val shape = RoundedCornerShape(corner)
+            Box(Modifier.fillMaxWidth().height(h).clip(shape)) {
+                when {
+                    src.startsWith("res:") -> {
+                        val ctx = LocalContext.current
+                        val id = ctx.resources.getIdentifier(src.removePrefix("res:"), "drawable", ctx.packageName)
+                        if (id != 0) Image(painterResource(id), null, Modifier.fillMaxSize(), scale)
+                    }
+                    src.startsWith("uri:") || src.startsWith("content:") || src.startsWith("file:") -> {
+                        rememberImageBitmapFromUri(src.removePrefix("uri:"))?.let { bmp ->
+                            Image(bmp, null, Modifier.fillMaxSize(), scale)
+                        }
+                    }
+                }
+            }
+        }
+
+        "List" -> {
+            val items = block.optJSONArray("items") ?: JSONArray()
+            Column(Modifier.fillMaxWidth()) {
+                for (i in 0 until items.length()) {
+                    val it = items.getJSONObject(i)
+                    val title = it.optString("title","")
+                    val subtitle = it.optString("subtitle","")
+                    val action = it.optString("actionId","")
+                    ListItem(
+                        headlineContent = { Text(title) },
+                        supportingContent = { if (subtitle.isNotBlank()) Text(subtitle) },
+                        modifier = Modifier.clickable { if (action.isNotBlank()) dispatch(action) }
+                    )
+                    Divider()
+                }
+            }
+        }
+
+        "Progress" -> {
+            val label = block.optString("label","")
+            val v = block.optDouble("value",0.0).toFloat() / 100f
+            val show = block.optBoolean("showPercent", true)
+            Column {
+                if (label.isNotBlank()) Text(label)
+                LinearProgressIndicator(progress = v)
+                if (show) Text("${(v*100).toInt()}%")
+            }
+        }
+
+        "Alert" -> {
+            val sev = block.optString("severity","info")
+            val title = block.optString("title","")
+            val msg = block.optString("message","")
+            val action = block.optString("actionId","")
+            val (bg, fg) = when (sev) {
+                "success" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+                "warning" -> Color(0xFFFFF3CD) to Color(0xFF664D03)
+                "error"   -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+                else      -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Surface(color = bg, contentColor = fg, shape = RoundedCornerShape(12.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (title.isNotBlank()) Text(title, style = MaterialTheme.typography.titleMedium)
+                    if (msg.isNotBlank()) Text(msg)
+                    if (action.isNotBlank()) TextButton(onClick = { dispatch(action) }) { Text("Azione") }
+                }
+            }
+        }
+
+        "ButtonRow" -> {
+            val align = when (block.optString("align","center")) {
+                "start" -> Arrangement.Start
+                "end" -> Arrangement.End
+                "space_between" -> Arrangement.SpaceBetween
+                "space_around" -> Arrangement.SpaceAround
+                "space_evenly" -> Arrangement.SpaceEvenly
+                else -> Arrangement.Center
+            }
+            val buttons = block.optJSONArray("buttons") ?: JSONArray()
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = align) {
+                for (i in 0 until buttons.length()) {
+                    val b = buttons.getJSONObject(i)
+                    val label = b.optString("label","")
+                    val action = b.optString("actionId","")
+                    when (b.optString("style","text")) {
+                        "outlined" -> OutlinedButton(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon","")) }
+                        "tonal"    -> FilledTonalButton(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon","")) }
+                        "primary"  -> Button(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon","")) }
+                        else       -> TextButton(onClick = { if (action.isNotBlank()) dispatch(action) }) { IconText(label, b.optString("icon","")) }
+                    }
+                }
+            }
+        }
+
+        "ChipRow" -> {
+            val chips = block.optJSONArray("chips") ?: JSONArray()
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (i in 0 until chips.length()) {
+                    val c = chips.getJSONObject(i)
+                    AssistChip(
+                        onClick = { /* no-op demo */ },
+                        label = { Text(c.optString("label","")) }
+                    )
+                }
+            }
+        }
+
+        "Slider" -> {
+            val bind = block.optString("bind","value_1")
+            val min = block.optDouble("min",0.0).toFloat()
+            val max = block.optDouble("max",10.0).toFloat()
+            val step = block.optDouble("step",1.0).toFloat()
+            val v = remember { mutableStateOf((uiState[bind] as? Float) ?: min) }
+            Column {
+                Text(block.optString("label",""))
+                Slider(
+                    value = v.value,
+                    onValueChange = {
+                        val snapped = ((it - min)/step).toInt() * step + min
+                        v.value = snapped.coerceIn(min, max)
+                        uiState[bind] = v.value
+                    },
+                    valueRange = min..max
+                )
+            }
+        }
+
+        "Toggle" -> {
+            val bind = block.optString("bind","toggle_1")
+            val v = remember { mutableStateOf((uiState[bind] as? Boolean) ?: false) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(checked = v.value, onCheckedChange = {
+                    v.value = it; uiState[bind] = it
+                })
+                Spacer(Modifier.width(8.dp))
+                Text(block.optString("label",""))
+            }
+        }
+
+        "Tabs" -> {
+            val tabs = block.optJSONArray("tabs") ?: JSONArray()
+            var index by remember { mutableStateOf(block.optInt("initialIndex", 0).coerceIn(0, tabs.length().coerceAtLeast(1)-1)) }
+            val labels = (0 until tabs.length()).map { i -> tabs.getJSONObject(i).optString("label", "Tab ${i+1}") }
+            TabRow(selectedTabIndex = index) {
+                labels.forEachIndexed { i, lbl ->
+                    Tab(selected = index == i, onClick = { index = i }, text = { Text(lbl) })
+                }
+            }
+            val page = tabs.optJSONObject(index)?.optJSONArray("blocks") ?: JSONArray()
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (i in 0 until page.length()) {
+                    RenderBlock(
+                        block = page.getJSONObject(i),
+                        dispatch = dispatch,
+                        uiState = uiState,
+                        designerMode = designerMode,
+                        path = "$path/tabs/$index/blocks/$i",
+                        menus = menus,
+                        onSelect = onSelect,
+                        onOpenInspector = onOpenInspector
+                    )
+                }
+            }
+        }
+
+        "MetricsGrid" -> {
+            val cols = block.optInt("columns",2).coerceIn(1,3)
+            val tiles = block.optJSONArray("tiles") ?: JSONArray()
+            GridSection(tiles, cols, uiState)
+        }
+
+        else -> { /* fallback semplice */ }
     }
 
     // --- qui sotto resta il TUO corpo stabile già funzionante ---
@@ -866,7 +1099,7 @@ private fun RenderRootScaffold(
     val bottomBarCfg = bottomBarNode?.optJSONObject("container")
     val bottomBarItems = bottomBarNode?.optJSONArray("items")
     val fab = layout.optJSONObject("fab")
-    val scroll = layout.optBoolean("scroll", true)
+    val scroll = layout.optBoolean("scroll", false)
     val topBarConf = layout.optJSONObject("topBar")
 
     val topScrollBehavior = when (topBarConf?.optString("scroll", "none")) {
@@ -900,10 +1133,10 @@ private fun RenderRootScaffold(
                                     val openMenuId  = a.optString("openMenuId", "")
                                     IconButton(onClick = {
                                         when {
-                                            openMenuId.isNotBlank()               -> dispatch("open_menu:$openMenuId")
-                                            actionId.startsWith("open_menu:")     -> dispatch(actionId)
-                                            actionId.startsWith("sidepanel:open:")-> dispatch(actionId)
-                                            actionId.isNotBlank()                 -> dispatch(actionId)
+                                            openMenuId.isNotBlank()                -> dispatch("open_menu:$openMenuId")
+                                            actionId.startsWith("open_menu:")      -> dispatch(actionId)
+                                            actionId.startsWith("sidepanel:open:") -> dispatch(actionId)
+                                            actionId.isNotBlank()                  -> dispatch(actionId)
                                         }
                                     }) { NamedIconEx(icon, null) }
                                 }
@@ -1414,10 +1647,12 @@ private fun BoxScope.DesignerOverlay(
         val working = remember { JSONObject(layout.toString()) }
         var dummyTick by remember { mutableStateOf(0) }
 
-        // onChange: aggiorna live preview di page/topBar
         val onChange: () -> Unit = {
             dummyTick++
-            onRootLivePreview(working) // <-- live preview
+            onRootLivePreview(working) // preview live
+            // --- APPLICA SUBITO ANCHE AL LAYOUT REALE ---
+            val keys = listOf("page","topBar","bottomBar","fab","scroll")
+            keys.forEach { k -> layout.put(k, working.opt(k)) }
         }
 
         BackHandler(enabled = true) {
