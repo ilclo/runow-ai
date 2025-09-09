@@ -92,6 +92,37 @@ import kotlin.math.round
  * ENTRY ROOT CHIAMATA DA MainActivity
  * ========================================================= */
 
+@Composable
+private fun AddBarItemButtons(
+    arr: JSONArray,
+    onChange: () -> Unit
+) {
+    androidx.compose.foundation.layout.Row(
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+    ) {
+        androidx.compose.material3.Button(
+            onClick = {
+                arr.put(JSONObject("""{"type":"icon","icon":"more_vert","actionId":""}"""))
+                onChange()
+            }
+        ) { androidx.compose.material3.Text("+ Icon") }
+
+        androidx.compose.material3.OutlinedButton(
+            onClick = {
+                arr.put(JSONObject("""{"type":"button","label":"Azione","style":"text","actionId":""}"""))
+                onChange()
+            }
+        ) { androidx.compose.material3.Text("+ Button") }
+
+        androidx.compose.material3.TextButton(
+            onClick = {
+                arr.put(JSONObject("""{"type":"spacer","mode":"fixed","widthDp":16}"""))
+                onChange()
+            }
+        ) { androidx.compose.material3.Text("+ Spacer") }
+    }
+}
+
 internal fun collectSidePanelIds(layout: JSONObject): List<String> {
     val arr = layout.optJSONArray("sidePanels") ?: return emptyList()
     val out = mutableListOf<String>()
@@ -2341,10 +2372,8 @@ private fun BarItemsEditor(
         Spacer(Modifier.height(8.dp))
     }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { arr.put(JSONObject("""{"type":"icon","icon":"more_vert","actionId":""}""")); onChange() }) { Text("+ Icon") }
-        OutlinedButton(onClick = { arr.put(JSONObject("""{"type":"button","label":"Azione","style":"text","actionId":""}""")); onChange() }) { Text("+ Button") }
-        TextButton(onClick = { arr.put(JSONObject("""{"type":"spacer","mode":"fixed","widthDp":16}""")); onChange() }) { Text("+ Spacer") }
+    AddBarItemButtons(arr = arr, onChange = onChange)
+
     }
 }
 
