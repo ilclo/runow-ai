@@ -227,10 +227,6 @@ internal fun RenderBlock(
         }
     }
 
-    // --- qui sotto resta il TUO corpo stabile già funzionante ---
-    // ...
-}
-
     // --- Intercettori per menu centrale/sidepanel ---
     when (block.optString("type")) {    when (block.optString("type")) {
         "IconButton" -> {
