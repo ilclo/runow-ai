@@ -1,48 +1,33 @@
 @file:OptIn(
-    androidx.compose.material3.ExperimentalMaterial3Api::class
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.ui.unit.ExperimentalUnitApi::class
 )
 
 package ai.runow.ui.renderer
 
-// Kotlin/Std
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.round
-
-// Android / system
+// --- Android base ---
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 
-// JSON
-import org.json.JSONArray
-import org.json.JSONObject
+// --- Activity/Back & Activity Results ---
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
-// Compose runtime
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.produceState
-
-// Compose animation (visibilità e transizioni usate nel file)
+// --- Animations ---
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 
-// Activity/Result
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-
-// Foundation
+// --- Foundation ---
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -51,76 +36,35 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.BorderStroke
 
-// Material3 (solo Material3, niente Material2)
+// --- Material Icons & Material3 ---
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFloatingActionButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.*
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenu
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 
-// UI base
+// --- Runtime/State ---
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.produceState
+
+// --- UI Core ---
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
@@ -135,7 +79,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -148,80 +91,119 @@ import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+// --- Coroutines ---
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+// --- JSON ---
+import org.json.JSONArray
+import org.json.JSONObject
+
+// --- Kotlin utils ---
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.round
+
 
 // --- Composable minimi -------------------------------------------------------
+private val DEFAULT_COLOR_SWATCH = listOf(
+    "#000000","#333333","#666666","#999999","#CCCCCC","#FFFFFF",
+    "#E53935","#FB8C00","#FDD835","#43A047","#1E88E5","#8E24AA"
+)
 
 @Composable
 fun LabeledField(
     label: String,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    Column(Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.labelMedium)
+    Column(modifier = modifier.padding(vertical = 6.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = LocalContentColor.current.copy(alpha = 0.78f)
+        )
         Spacer(Modifier.height(6.dp))
         content()
-        Spacer(Modifier.height(12.dp))
     }
 }
+
 
 @Composable
 fun SegmentedButtons(
     options: List<String>,
     selected: String,
-    onSelected: (String) -> Unit
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { opt ->
             FilterChip(
-                selected = (opt == selected),
-                onClick = { onSelected(opt) },
+                selected = opt == selected,
+                onClick = { onSelect(opt) },
                 label = { Text(opt) }
             )
         }
     }
 }
 
+// Overload compatibile con value/onValueChange
+@Composable
+fun SegmentedButtons(
+    options: List<String>,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) = SegmentedButtons(options = options, selected = value, onSelect = onValueChange, modifier = modifier)
+
+
 @Composable
 fun ColorRow(
-    current: String,
-    onPick: (String) -> Unit
+    colors: List<Color>,
+    selected: Color?,
+    onSelect: (Color) -> Unit,
+    modifier: Modifier = Modifier,
+    swatchSize: Dp = 28.dp
 ) {
-    var text by remember(current) { mutableStateOf(current) }
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        OutlinedTextField(
-            value = text,
-            onValueChange = { v ->
-                text = v
-                onPick(v)
-            },
-            singleLine = true,
-            label = { Text("hex o ruolo (es. #RRGGBB)") },
-            modifier = Modifier.weight(1f)
-        )
-
-        // Preview colore
-        val preview = parseHexColorOrNull(text)
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(CircleShape)
-                .background(preview ?: Color.Transparent)
-                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-        )
-
-        TextButton(onClick = { text = ""; onPick("") }) {
-            Text("Clear")
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        colors.forEach { c ->
+            val isSel = selected != null && c.toHex() == selected.toHex()
+            Box(
+                Modifier
+                    .size(swatchSize)
+                    .clip(CircleShape)
+                    .background(c)
+                    .border(
+                        width = if (isSel) 3.dp else 1.dp,
+                        color  = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                        shape  = CircleShape
+                    )
+                    .clickable { onSelect(c) }
+            )
         }
     }
 }
+
+// Overload con hex stringhe
+@Composable
+fun ColorRow(
+    colorHexList: List<String>,
+    selectedHex: String?,
+    onSelectHex: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    swatchSize: Dp = 28.dp
+) {
+    val colors = colorHexList.mapNotNull { colorFromHex(it) }
+    val selected = colorFromHex(selectedHex)
+    ColorRow(
+        colors = colors,
+        selected = selected,
+        onSelect = { onSelectHex(it.toHex()) },
+        modifier = modifier,
+        swatchSize = swatchSize
+    )
+}
+
 
 // Helpers colore
 private fun parseHexColorOrNull(s: String): Color? {
@@ -246,156 +228,200 @@ private fun parseHexColorOrNull(s: String): Color? {
     } catch (_: Throwable) { null }
 }
 
-private val FONT_FAMILY_OPTIONS: List<String> = listOf(
-    "",                  // "" = default (nessuna font family esplicita)
-    "inter",
-    "urbanist",
-    "poppins",
-    "manrope",
-    "mulish",
-    "rubik",
-    "space_grotesk",
-    "ibm_plex_sans",
-    "ibm_plex_mono",
-    "jetbrains_mono"
+private val FONT_FAMILY_OPTIONS: List<String> =
+    listOf("Default", "SansSerif", "Serif", "Monospace", "Cursive")
+
+    private fun fontFamilyFor(name: String): FontFamily = when (name) {
+    "SansSerif" -> FontFamily.SansSerif
+    "Serif"     -> FontFamily.Serif
+    "Monospace" -> FontFamily.Monospace
+    "Cursive"   -> FontFamily.Cursive
+    else        -> FontFamily.Default
+}
+
+private val FONT_WEIGHT_OPTIONS: List<Pair<String, FontWeight>> = listOf(
+    "Thin" to FontWeight.Thin,
+    "ExtraLight" to FontWeight.ExtraLight,
+    "Light" to FontWeight.Light,
+    "Normal" to FontWeight.Normal,
+    "Medium" to FontWeight.Medium,
+    "SemiBold" to FontWeight.SemiBold,
+    "Bold" to FontWeight.Bold,
+    "ExtraBold" to FontWeight.ExtraBold,
+    "Black" to FontWeight.Black
 )
+
+private fun labelOfWeight(w: FontWeight): String =
+    FONT_WEIGHT_OPTIONS.firstOrNull { it.second == w }?.first ?: "Normal"
+
+// Colori: conversione sicura <-> hex
+private fun colorFromHex(hex: String?): Color? {
+    if (hex.isNullOrBlank()) return null
+    val h = hex.trim().removePrefix("#")
+    return try {
+        when (h.length) {
+            6 -> Color(("ff$h").toLong(16))
+            8 -> Color(h.toLong(16))
+            else -> null
+        }
+    } catch (_: Throwable) { null }
+}
+
+private fun Color.toHex(withAlpha: Boolean = false): String {
+    val a = (alpha * 255).toInt().coerceIn(0, 255)
+    val r = (red   * 255).toInt().coerceIn(0, 255)
+    val g = (green * 255).toInt().coerceIn(0, 255)
+    val b = (blue  * 255).toInt().coerceIn(0, 255)
+    return if (withAlpha) String.format("#%02X%02X%02X%02X", a, r, g, b)
+    else String.format("#%02X%02X%02X", r, g, b)
+}
 
 // --- Pannello unificato -------------------------------------------------------
 @Composable
 fun SimpleTextInspectorPanel(
-    working: JSONObject,
-    onChange: () -> Unit
+    value: JSONObject,
+    onChange: (JSONObject) -> Unit
 ) {
-    // Stato locale inizializzato dai valori correnti del JSON
-    var txt by remember { mutableStateOf(working.optString("text", "")) }
-    var align by remember { mutableStateOf(working.optString("textAlign", "start")) } // start|center|end
-    // tieni vuoto se assente, altrimenti stringa con numero intero
-    var sizeText by remember {
-        val v = working.optDouble("textSizeSp", Double.NaN)
-        mutableStateOf(if (v.isNaN()) "" else v.toInt().toString())
+    // Stato iniziale letto dal JSON
+    var text by remember { mutableStateOf(value.optString("text", "")) }
+    var sizeSp by remember { mutableStateOf(value.optDouble("sizeSp", 16.0).toFloat()) }
+    var familyName by remember { mutableStateOf(value.optString("family", "Default")) }
+    var weight by remember { mutableStateOf(
+        runCatching {
+            val label = value.optString("weightLabel", "Normal")
+            FONT_WEIGHT_OPTIONS.firstOrNull { it.first == label }?.second ?: FontWeight.Normal
+        }.getOrDefault(FontWeight.Normal)
+    ) }
+    var italic by remember { mutableStateOf(value.optBoolean("italic", false)) }
+    var align by remember { mutableStateOf(value.optString("align", "Start")) }
+    var colorHex by remember { mutableStateOf(value.optString("color", "#000000")) }
+
+    fun commit() {
+        // Copia JSON e scrive valori con tipo esplicito (niente Any! -> risolta ambiguità put)
+        val next = JSONObject(value.toString())
+        next.put("text", text as String)
+        next.put("sizeSp", sizeSp.toDouble())
+        next.put("family", familyName as String)
+        next.put("weightLabel", labelOfWeight(weight) as String)
+        next.put("italic", italic as Boolean)
+        next.put("align", align as String)
+        next.put("color", colorHex as String)
+        onChange(next)
     }
-    var weightKey by remember { mutableStateOf(working.optString("fontWeight", "w400")) } // w300..w900
-    var familyKey by remember { mutableStateOf(working.optString("fontFamily", "")) }     // "" default
-    var colorStr by remember { mutableStateOf(working.optString("textColor", "")) }       // "" = default
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-    ) {
-        // Testo
-        LabeledField("text") {
+    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LabeledField("Testo") {
             OutlinedTextField(
-                value = txt,
-                onValueChange = {
-                    txt = it
-                    working.put("text", it); onChange()
-                },
+                value = text,
+                onValueChange = { text = it; commit() },
+                modifier = Modifier.fillMaxWidth(),
                 singleLine = false,
-                modifier = Modifier.fillMaxWidth()
+                maxLines = 6
             )
         }
 
-        // Allineamento
-        LabeledField("alignment") {
-            SegmentedButtons(
-                options = listOf("start", "center", "end"),
-                selected = align,
-                onSelected = { sel ->
-                    align = sel
-                    working.put("textAlign", sel); onChange()
-                }
-            )
+        LabeledField("Dimensione (sp)") {
+            Column {
+                Slider(
+                    value = sizeSp,
+                    onValueChange = { sizeSp = it; commit() },
+                    valueRange = 8f..72f
+                )
+                Text("${sizeSp.toInt()} sp", style = MaterialTheme.typography.labelSmall)
+            }
         }
 
-        // Dimensione in sp (chips + custom)
-        LabeledField("size (sp)") {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val presets = listOf("12","14","16","18","20","24","28","32","36")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                    items(presets) { p ->
-                        FilterChip(
-                            selected = (sizeText == p),
-                            onClick = {
-                                sizeText = p
-                                working.put("textSizeSp", p.toDouble()); onChange()
-                            },
-                            label = { Text(p) }
-                        )
+        LabeledField("Famiglia") {
+            // Dropdown semplice senza ExposedDropdownMenu (compatibile con tutte le versioni Material3)
+            var expanded by remember { mutableStateOf(false) }
+            OutlinedTextField(
+                value = familyName,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = {
+                    IconButton(onClick = { expanded = !expanded }) {
+                        Icon(imageVector = if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown, contentDescription = null)
                     }
-                }
-                OutlinedTextField(
-                    value = sizeText,
-                    onValueChange = { v ->
-                        sizeText = v.filter { it.isDigit() }
-                        if (sizeText.isBlank()) {
-                            working.remove("textSizeSp")
-                        } else {
-                            working.put("textSizeSp", sizeText.toDouble())
+                },
+                modifier = Modifier.fillMaxWidth().clickable { expanded = true }
+            )
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                FONT_FAMILY_OPTIONS.forEach { name ->
+                    DropdownMenuItem(
+                        text = { Text(name) },
+                        onClick = {
+                            familyName = name
+                            expanded = false
+                            commit()
                         }
-                        onChange()
-                    },
-                    label = { Text("custom") },
-                    singleLine = true,
-                    modifier = Modifier.width(96.dp)
+                    )
+                }
+            }
+        }
+
+        LabeledField("Grassetto / Corsivo") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                SegmentedButtons(
+                    options = FONT_WEIGHT_OPTIONS.map { it.first },
+                    selected = labelOfWeight(weight),
+                    onSelect = { lbl ->
+                        weight = FONT_WEIGHT_OPTIONS.first { it.first == lbl }.second
+                        commit()
+                    }
+                )
+                FilterChip(
+                    selected = italic,
+                    onClick = { italic = !italic; commit() },
+                    label = { Text("Italic") }
                 )
             }
         }
 
-        // Peso (w300..w900)
-        LabeledField("weight") {
-            val weights = listOf("w300","w400","w500","w600","w700","w800","w900")
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(weights) { w ->
-                    FilterChip(
-                        selected = (weightKey == w),
-                        onClick = {
-                            weightKey = w
-                            working.put("fontWeight", w); onChange()
-                        },
-                        label = { Text(w) }
-                    )
-                }
-            }
+        LabeledField("Allineamento") {
+            val alignOptions = listOf("Start", "Center", "End", "Justify")
+            SegmentedButtons(
+                options = alignOptions,
+                selected = align,
+                onSelect = { align = it; commit() }
+            )
         }
 
-        // Font family ("" = default)
-        LabeledField("font") {
-            val opts = FONT_FAMILY_OPTIONS
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(opts) { k ->
-                    val label = if (k.isBlank()) "(default)" else k
-                    FilterChip(
-                        selected = (familyKey == k),
-                        onClick = {
-                            familyKey = k
-                            if (k.isBlank()) working.remove("fontFamily")
-                            else working.put("fontFamily", k)
-                            onChange()
-                        },
-                        label = { Text(label) }
-                    )
-                }
-            }
-        }
-
-        // Colore testo (hex o ruolo)
-        LabeledField("text color") {
+        LabeledField("Colore") {
+            // palette base
+            val swatch = listOf("#000000","#333333","#666666","#999999","#CCCCCC","#FFFFFF",
+                "#E53935","#FB8C00","#FDD835","#43A047","#1E88E5","#8E24AA")
             ColorRow(
-                current = colorStr,
-                onPick = { picked ->
-                    colorStr = picked
-                    if (picked.isBlank()) working.remove("textColor")
-                    else working.put("textColor", picked)
-                    onChange()
-                }
+                colorHexList = swatch,
+                selectedHex = colorHex,
+                onSelectHex = { colorHex = it; commit() }
+            )
+        }
+
+        // Preview con lo stile scelto
+        val fam = fontFamilyFor(familyName)
+        val style = TextStyle(
+            fontSize = sizeSp.sp,
+            fontFamily = fam,
+            fontWeight = weight,
+            fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
+            textAlign = when (align) {
+                "Center"  -> TextAlign.Center
+                "End"     -> TextAlign.End
+                "Justify" -> TextAlign.Justify
+                else      -> TextAlign.Start
+            },
+            color = colorFromHex(colorHex) ?: LocalContentColor.current
+        )
+        Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(12.dp)) {
+            Text(
+                text = if (text.isBlank()) "Anteprima" else text,
+                style = style,
+                modifier = Modifier.fillMaxWidth().padding(12.dp)
             )
         }
     }
 }
+
 
 private fun resolveTextColor(working: JSONObject): Color? =
     parseColorOrRole(working.optString("textColor", ""))
