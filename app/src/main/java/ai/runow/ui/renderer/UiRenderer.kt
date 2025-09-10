@@ -1,68 +1,155 @@
 @file:OptIn(
-    androidx.compose.material3.ExperimentalMaterial3Api::class,
-    androidx.compose.ui.unit.ExperimentalUnitApi::class
+    androidx.compose.material3.ExperimentalMaterial3Api::class
 )
 
 package ai.runow.ui.renderer
 
-// Compose base
+// Kotlin/Std
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.round
+
+// Android / system
+import android.content.Intent
+import android.graphics.BitmapFactory
+import android.net.Uri
+
+// JSON
+import org.json.JSONArray
+import org.json.JSONObject
+
+// Compose runtime
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.produceState
+
+// Compose animation (visibilità e transizioni usate nel file)
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+
+// Activity/Result
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 // Foundation
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
 
-// Material 3
+// Material3 (solo Material3, niente Material2)
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeFloatingActionButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 
-// UI utils
+// UI base
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
-
-// JSON
-import org.json.JSONObject
+import androidx.compose.ui.unit.sp
 
 
-
-private val FONT_FAMILY_OPTIONS: List<String> = listOf(
-    "",                 // "" = default
-    "inter",
-    "urbanist",
-    "poppins",
-    "manrope",
-    "mulish",
-    "rubik",
-    "space_grotesk",
-    "ibm_plex_sans",
-    "ibm_plex_mono",
-    "jetbrains_mono"
-)
-
+// --- Composable minimi -------------------------------------------------------
 
 @Composable
 fun LabeledField(
@@ -103,6 +190,7 @@ fun ColorRow(
     onPick: (String) -> Unit
 ) {
     var text by remember(current) { mutableStateOf(current) }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -112,7 +200,7 @@ fun ColorRow(
             value = text,
             onValueChange = { v ->
                 text = v
-                onPick(v)       // propaghiamo sempre verso l'alto
+                onPick(v)
             },
             singleLine = true,
             label = { Text("hex o ruolo (es. #RRGGBB)") },
@@ -135,6 +223,7 @@ fun ColorRow(
     }
 }
 
+// Helpers colore
 private fun parseHexColorOrNull(s: String): Color? {
     val hex = s.trim().removePrefix("#")
     return try {
@@ -157,7 +246,21 @@ private fun parseHexColorOrNull(s: String): Color? {
     } catch (_: Throwable) { null }
 }
 
+private val FONT_FAMILY_OPTIONS: List<String> = listOf(
+    "",                  // "" = default (nessuna font family esplicita)
+    "inter",
+    "urbanist",
+    "poppins",
+    "manrope",
+    "mulish",
+    "rubik",
+    "space_grotesk",
+    "ibm_plex_sans",
+    "ibm_plex_mono",
+    "jetbrains_mono"
+)
 
+// --- Pannello unificato -------------------------------------------------------
 @Composable
 fun SimpleTextInspectorPanel(
     working: JSONObject,
@@ -166,13 +269,14 @@ fun SimpleTextInspectorPanel(
     // Stato locale inizializzato dai valori correnti del JSON
     var txt by remember { mutableStateOf(working.optString("text", "")) }
     var align by remember { mutableStateOf(working.optString("textAlign", "start")) } // start|center|end
+    // tieni vuoto se assente, altrimenti stringa con numero intero
     var sizeText by remember {
         val v = working.optDouble("textSizeSp", Double.NaN)
         mutableStateOf(if (v.isNaN()) "" else v.toInt().toString())
     }
     var weightKey by remember { mutableStateOf(working.optString("fontWeight", "w400")) } // w300..w900
-    var familyKey by remember { mutableStateOf(working.optString("fontFamily", "")) }
-    var colorStr by remember { mutableStateOf(working.optString("textColor", "")) }
+    var familyKey by remember { mutableStateOf(working.optString("fontFamily", "")) }     // "" default
+    var colorStr by remember { mutableStateOf(working.optString("textColor", "")) }       // "" = default
 
     Column(
         modifier = Modifier
@@ -204,9 +308,12 @@ fun SimpleTextInspectorPanel(
             )
         }
 
-        // Dimensione in sp (niente ExposedDropdown: numero o chips rapidi)
+        // Dimensione in sp (chips + custom)
         LabeledField("size (sp)") {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 val presets = listOf("12","14","16","18","20","24","28","32","36")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
                     items(presets) { p ->
@@ -255,7 +362,7 @@ fun SimpleTextInspectorPanel(
             }
         }
 
-        // Font family (lista coerente con i TTF che hai in res/font)
+        // Font family ("" = default)
         LabeledField("font") {
             val opts = FONT_FAMILY_OPTIONS
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -275,7 +382,7 @@ fun SimpleTextInspectorPanel(
             }
         }
 
-        // Colore testo (hex/ruolo)
+        // Colore testo (hex o ruolo)
         LabeledField("text color") {
             ColorRow(
                 current = colorStr,
@@ -289,14 +396,6 @@ fun SimpleTextInspectorPanel(
         }
     }
 }
-
-
-
-private val FONT_FAMILY_OPTIONS = listOf(
-    "(default)",
-    "inter", "urbanist", "poppins", "manrope", "mulish", "rubik", "space_grotesk",
-    "ibm_plex_sans", "ibm_plex_mono", "jetbrains_mono"
-)
 
 private fun resolveTextColor(working: JSONObject): Color? =
     parseColorOrRole(working.optString("textColor", ""))
