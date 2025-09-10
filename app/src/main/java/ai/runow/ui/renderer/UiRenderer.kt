@@ -2,6 +2,7 @@
 
 package ai.runow.ui.renderer
 
+
 import androidx.compose.foundation.shape.RoundedCornerShape
 
 // --- Compose runtime / UI base ---
@@ -58,7 +59,6 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 
@@ -73,15 +73,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 
 // --- Android / IO utili ---
-import android.content.Intent
 import android.net.Uri
 import android.graphics.BitmapFactory
 
 // --- Immagini / painter ---
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 
 // --- JSON & coroutines ---
 import org.json.JSONArray
@@ -91,7 +88,6 @@ import kotlinx.coroutines.withContext
 
 // --- Risorse font del modulo app ---
 import ai.runow.R
-
 
 
 
