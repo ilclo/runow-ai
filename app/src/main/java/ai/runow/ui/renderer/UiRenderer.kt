@@ -133,63 +133,92 @@ import kotlin.math.min
 import kotlin.math.round
 
 @Composable
-fun SimpleTextInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("Testo – Proprietà", style = MaterialTheme.typography.titleMedium)
+fun SimpleTextInspectorPanel(
+    working: JSONObject,
+    onChange: () -> Unit
+) {
+    // Stato locale inizializzato dai valori correnti
+    var txt by remember { mutableStateOf(working.optString("text", "")) }
+    var align by remember { mutableStateOf(working.optString("textAlign", "start")) } // start|center|end
+    var sizeSp by remember { mutableStateOf(working.optDouble("textSizeSp", 16.0).toFloat()) }
+    var weightKey by remember { mutableStateOf(working.optString("fontWeight", "w400")) } // w300..w900
+    var familyKey by remember { mutableStateOf(working.optString("fontFamily", "")) }
+    var colorStr by remember { mutableStateOf(working.optString("textColor", "")) }
 
-    // size (sp)
-    val textSize = remember { mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }) }
-    ExposedDropdown(
-        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
-        label = "textSize (sp)",
-        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        textSize.value = v
-        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
-        onChange()
-    }
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        // Testo
+        LabeledField("text") {
+            TextField(
+                value = txt,
+                onValueChange = {
+                    txt = it
+                    working.put("text", it); onChange()
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
 
-    // allineamento
-    var align by remember { mutableStateOf(working.optString("align","start")) }
-    ExposedDropdown(
-        value = align, label = "align",
-        options = listOf("start","center","end")
-    ) { sel -> align = sel; working.put("align", sel); onChange() }
+        // Allineamento
+        LabeledField("alignment") {
+            SegmentedButtons(
+                options = listOf("start","center","end"),
+                selected = align
+            ) { sel ->
+                align = sel
+                working.put("textAlign", sel); onChange()
+            }
+        }
 
-    // font family (esteso)
-    var fontFamily by remember { mutableStateOf(working.optString("fontFamily", "")) }
-    ExposedDropdown(
-        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
-        label = "fontFamily",
-        options = FONT_FAMILY_OPTIONS
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        fontFamily = v
-        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
-        onChange()
-    }
+        // Dimensione (sp)
+        LabeledField("size (sp)") {
+            ExposedDropdown(
+                label = "size",
+                options = listOf(12,14,16,18,20,24,28,32,36).map { it.toString() },
+                selected = sizeSp.toInt().toString()
+            ) { sel ->
+                sizeSp = sel.toFloat()
+                working.put("textSizeSp", sizeSp); onChange()
+            }
+        }
 
-    // weight
-    var fontWeight by remember { mutableStateOf(working.optString("fontWeight", "")) }
-    ExposedDropdown(
-        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
-        label = "fontWeight",
-        options = listOf("(default)", "w300","w400","w500","w600","w700","w800","w900")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        fontWeight = v
-        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
-        onChange()
-    }
+        // Peso
+        LabeledField("weight") {
+            ExposedDropdown(
+                label = "weight",
+                options = listOf("w300","w400","w500","w600","w700","w800","w900"),
+                selected = weightKey
+            ) { sel ->
+                weightKey = sel
+                working.put("fontWeight", sel); onChange()
+            }
+        }
 
-    // colore testo
-    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
-    NamedColorPickerPlus(current = textColor.value, label = "textColor") { hex ->
-        textColor.value = hex
-        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
-        onChange()
+        // Font family
+        LabeledField("font") {
+            ExposedDropdown(
+                label = "font",
+                options = FONT_FAMILY_OPTIONS,
+                selected = familyKey
+            ) { sel ->
+                familyKey = sel
+                working.put("fontFamily", sel); onChange()
+            }
+        }
+
+        // Colore testo
+        LabeledField("text color") {
+            ColorRow(
+                current = colorStr
+            ) { picked ->
+                colorStr = picked
+                if (picked.isBlank()) working.remove("textColor")
+                else working.put("textColor", picked)
+                onChange()
+            }
+        }
     }
 }
+
 
 private val FONT_FAMILY_OPTIONS = listOf(
     "(default)",
@@ -974,117 +1003,174 @@ private fun Modifier.topBottomBorder(width: Dp, color: Color) = this.then(
  * StyledContainer: applica stile/shape/border/bg/gradient/size/align
  * - NESSUNA animazione (per evitare errori di import nelle prime prove)
  */
+// --- StyledContainer: contenitore unificato per tutti i blocchi ---
 @Composable
 fun StyledContainer(
-    cfg: JSONObject?,
+    cfg: JSONObject,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(0.dp),
-    content: @Composable () -> Unit
+    contentPadding: PaddingValues? = null,
+    content: @Composable BoxScope.() -> Unit
 ) {
-    // ====== Defaults ======
-    val style = cfg?.optString("style", "outlined") ?: "outlined" // default outlined
-    val shapeKey = cfg?.optString("shape", "rounded") ?: "rounded"
-    val cornerDp = cfg?.optDouble("cornerDp", 12.0)?.toFloat() ?: 12f
-    val elevationDp = cfg?.optDouble("elevationDp", 0.0)?.toFloat() ?: 0f
+    // --- Lettura configurazione ---
+    val style = cfg.optString("style", "outlined") // "text" | "outlined" | "tonal" | "primary"
+    val borderMode = cfg.optString("borderMode", "full") // "none" | "full" | "topBottom"
+    val corner = cfg.optString("corner", "rounded")       // "rounded" | "cut"
+    val cornerRadius = cfg.optDouble("cornerRadiusDp", 12.0).toFloat()
 
-    val widthMode = cfg?.optString("widthMode", "wrap") ?: "wrap"   // wrap | match | fixed | fraction
-    val heightMode = cfg?.optString("heightMode", "wrap") ?: "wrap" // wrap | match | fixed | fraction
-    val widthDp = cfg?.optDouble("widthDp", 160.0)?.toFloat() ?: 160f    // default richiesto
-    val heightDp = cfg?.optDouble("heightDp", 48.0)?.toFloat() ?: 48f
-    val widthFraction = cfg?.optDouble("widthFraction", 1.0)?.toFloat() ?: 1f
-    val heightFraction = cfg?.optDouble("heightFraction", 0.0)?.toFloat() ?: 0f
+    val widthMode = cfg.optString("widthMode", "wrap")    // "wrap" | "match" | "fixed"
+    val widthDp = cfg.optDouble("widthDp", 160.0).toFloat() // default 160dp
+    val heightMode = cfg.optString("heightMode", "wrap")  // "wrap" | "fixed"
+    val heightDp = cfg.optDouble("heightDp", 0.0).toFloat()
 
-    val hAlign = when (cfg?.optString("hAlign", "start")) {
+    val hAlign = when (cfg.optString("hAlign", "start")) {
         "center" -> Alignment.CenterHorizontally
-        "end" -> Alignment.End
-        else -> Alignment.Start
+        "end"    -> Alignment.End
+        else     -> Alignment.Start
+    }
+    val vAlign = when (cfg.optString("vAlign", "center")) {
+        "top"    -> Alignment.Top
+        "bottom" -> Alignment.Bottom
+        else     -> Alignment.CenterVertically
     }
 
-    // Bordo
-    val borderMode = cfg?.optString("borderMode", "none") ?: "none" // none | normal | hr2
-    val borderThickness = cfg?.optString("borderThickness", "thin") ?: "thin" // thin|medium|thick
-    val borderWidth = when (borderThickness) { "thick" -> 3.dp; "medium" -> 2.dp; else -> 1.dp }
-    val borderColor = parseColorOrRole(cfg?.optString("borderColor", "")) ?: Color.Black
+    // Colori e gradiente
+    val bgAlpha = cfg.optDouble("bgAlpha", 1.0).toFloat().coerceIn(0f, 1f)
+    val color1 = cfg.optString("color1", "#FFFFFF")
+    val color2 = cfg.optString("color2", "") // se vuoto = colore singolo
+    val isGradient = color2.isNotBlank()
 
-    // Colori/gradiente/opacità
-    val bgOpacity = cfg?.optDouble("opacity", 1.0)?.toFloat() ?: 1f
-    val bgSolid = parseColorOrRole(cfg?.optString("bgColor", "")) ?: Color.Transparent
-
-    val grad = cfg?.optJSONObject("gradient")
-    val gradColor1 = parseColorOrRole(grad?.optString("color1", "")) ?: bgSolid
-    val gradColor2 = parseColorOrRole(grad?.optString("color2", "")) // può essere null per “nessun gradiente”
-    val gradDir = grad?.optString("direction", "horizontal") ?: "horizontal"
-
-    val brush: Brush? = if (gradColor2 != null) {
-        if (gradDir == "vertical") Brush.verticalGradient(listOf(gradColor1, gradColor2))
-        else Brush.horizontalGradient(listOf(gradColor1, gradColor2))
+    val containerColor = Color(android.graphics.Color.parseColor(color1))
+    val containerBrush: Brush? = if (isGradient) {
+        val c2 = Color(android.graphics.Color.parseColor(color2))
+        val dir = cfg.optString("gradientDirection", "horizontal") // "horizontal"|"vertical"
+        if (dir == "vertical") Brush.verticalGradient(listOf(containerColor, c2))
+        else Brush.horizontalGradient(listOf(containerColor, c2))
     } else null
 
-    // shape
-    val shape: Shape = when (shapeKey) {
-        "cut" -> CutCornerShape(cornerDp.dp)
-        "circle" -> RoundedCornerShape(50)
-        else -> RoundedCornerShape(cornerDp.dp)
+    // Bordi
+    val borderThicknessDp = cfg.optDouble("borderThicknessDp", 1.0).toFloat()
+    val borderColorStr = cfg.optString("borderColor", "#000000")
+    val borderColor = Color(android.graphics.Color.parseColor(borderColorStr))
+
+    val shape = when (corner) {
+        "cut" -> CutCornerShape(cornerRadius.dp)
+        else  -> RoundedCornerShape(cornerRadius.dp)
     }
 
-    // style mapping: background/border/tonal
-    val (containerBg, showBorder) = when (style) {
-        "text" -> Color.Transparent to false    // NO riempimento, niente bordo
-        "outlined" -> Color.Transparent to true // bordo visibile, no riempimento
-        "tonal" -> MaterialTheme.colorScheme.surfaceVariant to false
-        "elevated" -> MaterialTheme.colorScheme.surface to false
-        else -> MaterialTheme.colorScheme.surface to false // "filled"
-    }
+    // Elevazione e ombra
+    val elevationDp = cfg.optDouble("elevationDp", 0.0).toFloat().coerceAtLeast(0f)
 
-    val bgFinal = if (brush == null) containerBg.copy(alpha = bgOpacity) else Color.Transparent
-    val contentColor = parseColorOrRole(cfg?.optString("contentColor", "")) ?: bestOnColor(
-        if (bgFinal != Color.Transparent) bgFinal else (gradColor2 ?: gradColor1)
-    )
+    // Opacità
+    val opacity = cfg.optDouble("opacity", 1.0).toFloat().coerceIn(0f,1f)
 
-    // width/height
+    // --- Modifiche misura ---
     var m = modifier
+
     m = when (widthMode) {
         "match" -> m.fillMaxWidth()
         "fixed" -> m.width(widthDp.dp)
-        "fraction" -> m.fillMaxWidth(widthFraction.coerceIn(0f, 1f))
-        else -> m
+        else    -> m // wrap
     }
     m = when (heightMode) {
-        "match" -> m.fillMaxHeight()
         "fixed" -> m.height(heightDp.dp)
-        "fraction" -> if (heightFraction > 0f) m.fillMaxHeight(heightFraction.coerceIn(0f, 1f)) else m
-        else -> m
+        else    -> m // wrap
     }
-    if (elevationDp > 0f) m = m.shadow(elevationDp.dp, shape)
 
-    // sola doppia linea orizzontale (bordermode = hr2)
-    val drawHr2 = borderMode == "hr2"
+    // --- Stile: text / outlined / altri ---
+    val showFill = when (style) {
+        "text"     -> false
+        "outlined" -> false
+        else       -> true
+    }
+    val showBorder = when (style) {
+        "text"     -> false
+        "outlined" -> true
+        else       -> borderThicknessDp > 0f
+    }
 
-    Surface(
-        modifier = m
-            .then(if (brush != null) Modifier.background(brush, shape) else Modifier.background(bgFinal, shape))
-            .then(
-                if (drawHr2) Modifier.drawBehind {
-                    val yTop = 0f + borderWidth.toPx() / 2f
-                    val yBottom = size.height - borderWidth.toPx() / 2f
-                    drawLine(borderColor, Offset(0f, yTop), Offset(size.width, yTop), borderWidth.toPx())
-                    drawLine(borderColor, Offset(0f, yBottom), Offset(size.width, yBottom), borderWidth.toPx())
-                } else Modifier
-            ),
-        shape = shape,
-        border = if (showBorder && !drawHr2) BorderStroke(borderWidth, borderColor) else null,
-        color = Color.Transparent,
-        contentColor = contentColor
+    val borderStroke = if (showBorder && borderMode == "full" && borderThicknessDp > 0f)
+        BorderStroke(borderThicknessDp.dp, borderColor)
+    else null
+
+    // Disegno righe top/bottom se richiesto
+    val drawSeparators = (borderMode == "topBottom" && borderThicknessDp > 0f)
+
+    val base = if (elevationDp > 0f) {
+        m.shadow(elevationDp.dp, shape, clip = false)
+    } else m
+
+    val fillModifier =
+        if (drawSeparators) {
+            base.drawBehind {
+                val strokePx = borderThicknessDp * density
+                // Top line
+                drawLine(
+                    color = borderColor,
+                    start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                    end = androidx.compose.ui.geometry.Offset(size.width, 0f),
+                    strokeWidth = strokePx
+                )
+                // Bottom line
+                drawLine(
+                    color = borderColor,
+                    start = androidx.compose.ui.geometry.Offset(0f, size.height - strokePx),
+                    end = androidx.compose.ui.geometry.Offset(size.width, size.height - strokePx),
+                    strokeWidth = strokePx
+                )
+            }
+        } else base
+
+    val bgModifier =
+        if (showFill) {
+            if (containerBrush != null)
+                fillModifier.background(brush = containerBrush, shape = shape)
+            else
+                fillModifier.background(color = containerColor.copy(alpha = bgAlpha), shape = shape)
+        } else fillModifier
+
+    val borderModifier = if (borderStroke != null) {
+        bgModifier.border(borderStroke, shape)
+    } else bgModifier
+
+    val clipModifier = borderModifier.clip(shape).then(Modifier.alpha(opacity))
+
+    Box(
+        modifier = clipModifier,
+        contentAlignment = Alignment.Center
     ) {
-        // allineamento orizzontale del contenuto
-        Column(
-            Modifier.padding(contentPadding).fillMaxWidth(),
-            horizontalAlignment = hAlign
+        val inner = contentPadding?.let { Modifier.padding(it) } ?: Modifier
+        Box(
+            modifier = inner.fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            content()
+            Box(
+                modifier = Modifier
+                    .align(
+                        when (hAlign) {
+                            Alignment.CenterHorizontally -> vAlign.let { when (it) {
+                                Alignment.Top -> Alignment.TopCenter
+                                Alignment.Bottom -> Alignment.BottomCenter
+                                else -> Alignment.Center
+                            } }
+                            Alignment.End -> vAlign.let { when (it) {
+                                Alignment.Top -> Alignment.TopEnd
+                                Alignment.Bottom -> Alignment.BottomEnd
+                                else -> Alignment.CenterEnd
+                            } }
+                            else -> vAlign.let { when (it) {
+                                Alignment.Top -> Alignment.TopStart
+                                Alignment.Bottom -> Alignment.BottomStart
+                                else -> Alignment.CenterStart
+                            } }
+                        }
+                    )
+            ) {
+                content()
+            }
         }
     }
 }
+
 
 /* =========================================================
  * PAGE BACKGROUND (colore/gradient/immagine a tutta pagina)
