@@ -2,110 +2,99 @@
 
 package ai.runow.ui.renderer
 
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-// Foundation
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import ai.runow.R
-
-import android.net.Uri
-import android.graphics.BitmapFactory
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
-
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.rememberScrollState
+package ai.runow.ui.renderer
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CutCornerShape
-import androidx.compose.foundation.verticalScroll
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-
+// --- Compose runtime / UI base ---
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.TextUnitType
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.*
+import androidx.compose.ui.draw.*
+// gesture & pointer
+import androidx.compose.ui.input.pointer.pointerInput
 
-// Compose runtime e UI di base
-import androidx.compose.ui.draw.alpha
+// nested scroll
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 
+// layout callbacks
+import androidx.compose.ui.layout.onGloballyPositioned
+
+// text overflow
+import androidx.compose.ui.text.style.TextOverflow
+
+// immagini bitmap
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+
+// offset per il FAB trascinabile
+import androidx.compose.ui.unit.IntOffset
+
+// shape astratta usata in ResolvedContainer
+import androidx.compose.foundation.shape.CornerBasedShape
+
+// Intent usato nel picker immagini
+import android.content.Intent
+
+// math usato dallo Slider e dallo stepper
+import kotlin.math.round
+import kotlin.math.min
+import kotlin.math.max
+
+// --- Foundation ---
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.shape.RoundedCornerShape // se lo usi
 
-// Material3
+// --- Material 3 ---
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 
-// Icons (se usi frecce/menu ecc.)
+// --- Activity / back / picker ---
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
-// Grafica & unità
-import androidx.compose.ui.graphics.Brush       // se usi Brush
-import androidx.compose.ui.unit.*
+// --- Android / IO utili ---
+import android.content.Intent
+import android.net.Uri
+import android.graphics.BitmapFactory
 
-// JSON & coroutines (visti negli errori)
+// --- Immagini / painter ---
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+
+// --- JSON & coroutines ---
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-// UI / draw
+// --- Risorse font del modulo app ---
+import ai.runow.R
 
-
-// Icons (opzionale ma utile per il caret del dropdown)
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDropUp
-
-// Color & unit
-
-// Testo
-
-// JSON
-import androidx.compose.foundation.layout.offset
-
-// --- IMPORT NECESSARI ---
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
 
 
 
@@ -125,14 +114,27 @@ fun ExposedDropdown(
     value: String,
     label: String,
     options: List<String>,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
+
+    // compat: la maggior parte dei call site usa la lambda finale
+    onSelect: (String) -> Unit = {},
+
+    // ordine tenuto intenzionalmente così: chi usa la trailing lambda continua a funzionare
+    modifier: Modifier = Modifier,
+
+    // compat: se hai call site vecchi con 'onValueChange = { }'
+    onValueChange: ((String) -> Unit)? = null
 ) {
+    val handler: (String) -> Unit = onValueChange ?: onSelect
     var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }, modifier = modifier) {
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
         OutlinedTextField(
             value = value,
-            onValueChange = {},
+            onValueChange = {}, // readOnly
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
@@ -142,12 +144,13 @@ fun ExposedDropdown(
             options.forEach { opt ->
                 DropdownMenuItem(
                     text = { Text(opt) },
-                    onClick = { onSelect(opt); expanded = false }
+                    onClick = { handler(opt); expanded = false }
                 )
             }
         }
     }
 }
+
 
 
 @Composable
@@ -1516,7 +1519,7 @@ private fun RenderRootScaffold(
 
             if (items != null && items.length() > 0) {
                 StyledContainer(
-                    cfg = bottomBarCfg, // se null -> surface di default
+                    cfg = bottomBarCfg ?: JSONObject(), 
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
                     Row(
@@ -1594,7 +1597,7 @@ private fun RowScope.RenderBarItemsRow(items: JSONArray, dispatch: (String) -> U
             "spacer" -> {
                 when (it.optString("mode","fixed")) {
                     "expand" -> Spacer(Modifier.weight(1f))
-                    else -> Spacer(Modifier.width(Dp(it.optDouble("widthDp", 16.0).toFloat())))
+                    else -> Spacer(Modifier.width((it.optDouble("widthDp", 16.0).toFloat().dp)))
                 }
             }
             "button" -> {
@@ -1652,8 +1655,8 @@ private fun RenderTopBar(
 
     val rounded = RoundedCornerShape(
         topStart = 0.dp, topEnd = 0.dp,
-        bottomStart = Dp(cfg.optDouble("roundedBottomStart", 0.0).toFloat()),
-        bottomEnd   = Dp(cfg.optDouble("roundedBottomEnd",   0.0).toFloat())
+        bottomStart = (cfg.optDouble("roundedBottomStart", 0.0).toFloat()).dp,
+        bottomEnd   = (cfg.optDouble("roundedBottomEnd",   0.0).toFloat()).dp
     )
 
     // Container unificato con fallback dai campi legacy
@@ -2060,7 +2063,7 @@ private fun BoxScope.DesignerOverlay(
                             }
                         }
                     }
-                    StyledContainer(cont, Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
+                    StyledContainer(cont ?: JSONObject(), Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             RenderBarItemsRow(items) { /* anteprima: no-op */ }
                         }
@@ -2387,8 +2390,8 @@ private fun RenderBlock(
 
         "Image" -> Wrapper {
             val source = block.optString("source","")
-            val height = Dp(block.optDouble("heightDp", 160.0).toFloat())
-            val corner = Dp(block.optDouble("corner", 12.0).toFloat())
+            val height = (block.optDouble("heightDp", 160.0).toFloat()).dp
+            val corner = (block.optDouble("corner", 12.0).toFloat()).dp
             val scale = when (block.optString("contentScale","fit")) {
                 "crop" -> ContentScale.Crop
                 "fill" -> ContentScale.FillBounds
@@ -2687,20 +2690,20 @@ private fun RenderBlock(
         }
 
         "Divider" -> {
-            val thick = Dp(block.optDouble("thickness", 1.0).toFloat())
-            val padStart = Dp(block.optDouble("padStart", 0.0).toFloat())
-            val padEnd = Dp(block.optDouble("padEnd", 0.0).toFloat())
+            val thick = (block.optDouble("thickness", 1.0).toFloat()).dp
+            val padStart = (block.optDouble("padStart", 0.0).toFloat()).dp
+            val padEnd = (block.optDouble("padEnd", 0.0).toFloat()).dp
             Divider(modifier = Modifier.padding(start = padStart, end = padEnd), thickness = thick)
         }
 
         "DividerV" -> {
-            val thickness = Dp(block.optDouble("thickness", 1.0).toFloat())
-            val height = Dp(block.optDouble("height", 24.0).toFloat())
+            val thickness = (block.optDouble("thickness", 1.0).toFloat()).dp
+            val height = (block.optDouble("height", 24.0).toFloat()).dp
             VerticalDivider(modifier = Modifier.height(height), thickness = thickness)
         }
 
         "Spacer" -> {
-            Spacer(Modifier.height(Dp(block.optDouble("height", 8.0).toFloat())))
+            Spacer(Modifier.height((block.optDouble("height", 8.0).toFloat().dp)))
         }
 
         "Menu" -> {
@@ -2930,8 +2933,10 @@ private fun BarItemsEditor(
                         val action = remember { mutableStateOf(it.optString("actionId","")) }
                         OutlinedTextField(action.value, { v -> action.value = v; it.put("actionId", v); onChange() }, label = { Text("actionId") })
                         var style by remember { mutableStateOf(it.optString("style","text")) }
+// ✅ corretto
                         ExposedDropdown(
-                            value = style, l,
+                            value = style,
+                            label = "style",
                             options = listOf("text","outlined","tonal","primary")
                         ) { sel -> style = sel; it.put("style", sel); onChange() }
                     }
