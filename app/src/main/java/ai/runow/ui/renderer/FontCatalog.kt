@@ -1,80 +1,86 @@
 package ai.runow.ui.renderer
 
-import androidx.compose.ui.text.font.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import ai.runow.R
 
 object FontCatalog {
-    val FONT_FAMILY_OPTIONS = listOf("(default)", "Inter", "Manrope", "Poppins", "Urbanist", "Mulish", "Rubik", "Space Grotesk", "JetBrains Mono", "IBM Plex Sans", "IBM Plex Mono")
-    fun resolveFontFamily(name: String?): FontFamily? {
-        val k = name?.trim().orEmpty()
-        return when (k) {
-            "Inter" -> FontFamily(
-                Font(R.font.inter_regular),
-                Font(R.font.inter_medium, weight = FontWeight.Medium),
-                Font(R.font.inter_semibold, weight = FontWeight.SemiBold),
-                Font(R.font.inter_bold, weight = FontWeight.Bold),
-                Font(R.font.inter_italic, style = FontStyle.Italic)
-            )
-            "Manrope" -> FontFamily(
-                Font(R.font.manrope_regular),
-                Font(R.font.manrope_medium, weight = FontWeight.Medium),
-                Font(R.font.manrope_semibold, weight = FontWeight.SemiBold),
-                Font(R.font.manrope_bold, weight = FontWeight.Bold)
-            )
-            "Poppins" -> FontFamily(
-                Font(R.font.poppins_regular),
-                Font(R.font.poppins_medium, weight = FontWeight.Medium),
-                Font(R.font.poppins_semibold, weight = FontWeight.SemiBold),
-                Font(R.font.poppins_bold, weight = FontWeight.Bold),
-                Font(R.font.poppins_italic, style = FontStyle.Italic)
-            )
-            "Urbanist" -> FontFamily(
-                Font(R.font.urbanist_regular),
-                Font(R.font.urbanist_medium, weight = FontWeight.Medium),
-                Font(R.font.urbanist_semibold, weight = FontWeight.SemiBold),
-                Font(R.font.urbanist_bold, weight = FontWeight.Bold),
-                Font(R.font.urbanist_italic, style = FontStyle.Italic)
-            )
-            "Mulish" -> FontFamily(
-                Font(R.font.mulish_regular),
-                Font(R.font.mulish_medium, weight = FontWeight.Medium),
-                Font(R.font.mulish_semibold, weight = FontWeight.SemiBold),
-                Font(R.font.mulish_bold, weight = FontWeight.Bold),
-                Font(R.font.mulish_italic, style = FontStyle.Italic)
-            )
-            "Rubik" -> FontFamily(
-                Font(R.font.rubik_regular),
-                Font(R.font.rubik_medium, weight = FontWeight.Medium),
-                Font(R.font.rubik_semibold, weight = FontWeight.SemiBold),
-                Font(R.font.rubik_bold, weight = FontWeight.Bold),
-                Font(R.font.rubik_italic, style = FontStyle.Italic)
-            )
-            "Space Grotesk" -> FontFamily(
-                Font(R.font.space_grotesk_regular),
-                Font(R.font.space_grotesk_medium, weight = FontWeight.Medium),
-                Font(R.font.space_grotesk_semibold, weight = FontWeight.SemiBold),
-                Font(R.font.space_grotesk_bold, weight = FontWeight.Bold)
-            )
-            "JetBrains Mono" -> FontFamily(
-                Font(R.font.jetbrains_mono_regular),
-                Font(R.font.jetbrains_mono_medium, weight = FontWeight.Medium),
-                Font(R.font.jetbrains_mono_bold, weight = FontWeight.Bold),
-                Font(R.font.jetbrains_mono_italic, style = FontStyle.Italic)
-            )
-            "IBM Plex Sans" -> FontFamily(
-                Font(R.font.ibm_plex_sans_regular),
-                Font(R.font.ibm_plex_sans_medium, weight = FontWeight.Medium),
-                Font(R.font.ibm_plex_sans_semibold, weight = FontWeight.SemiBold),
-                Font(R.font.ibm_plex_sans_bold, weight = FontWeight.Bold),
-                Font(R.font.ibm_plex_sans_italic, style = FontStyle.Italic)
-            )
-            "IBM Plex Mono" -> FontFamily(
-                Font(R.font.ibm_plex_mono_regular),
-                Font(R.font.ibm_plex_mono_medium, weight = FontWeight.Medium),
-                Font(R.font.ibm_plex_mono_bold, weight = FontWeight.Bold),
-                Font(R.font.ibm_plex_mono_italic, style = FontStyle.Italic)
-            )
-            else -> null
-        }
+
+    // Opzioni da mostrare nei dropdown
+    val FONT_FAMILY_OPTIONS = listOf(
+        "inter", "manrope", "mulish", "poppins", "rubik", "space_grotesk", "urbanist",
+        "ibm_plex_sans", "ibm_plex_mono", "jetbrains_mono"
+    )
+
+    @Composable
+    fun resolveFontFamily(key: String?): FontFamily? = when (key?.lowercase()) {
+        "inter" -> FontFamily(
+            Font(R.font.inter_regular),
+            Font(R.font.inter_medium),
+            Font(R.font.inter_semibold),
+            Font(R.font.inter_bold),
+            Font(R.font.inter_italic)
+        )
+        "manrope" -> FontFamily(
+            Font(R.font.manrope_regular),
+            Font(R.font.manrope_medium),
+            Font(R.font.manrope_semibold),
+            Font(R.font.manrope_bold)
+        )
+        "mulish" -> FontFamily(
+            Font(R.font.mulish_regular),
+            Font(R.font.mulish_medium),
+            Font(R.font.mulish_semibold),
+            Font(R.font.mulish_bold),
+            Font(R.font.mulish_italic)
+        )
+        "poppins" -> FontFamily(
+            Font(R.font.poppins_regular),
+            Font(R.font.poppins_medium),
+            Font(R.font.poppins_semibold),
+            Font(R.font.poppins_bold),
+            Font(R.font.poppins_italic)
+        )
+        "rubik" -> FontFamily(
+            Font(R.font.rubik_regular),
+            Font(R.font.rubik_medium),
+            Font(R.font.rubik_semibold),
+            Font(R.font.rubik_bold),
+            Font(R.font.rubik_italic)
+        )
+        "space_grotesk" -> FontFamily(
+            Font(R.font.space_grotesk_regular),
+            Font(R.font.space_grotesk_medium),
+            Font(R.font.space_grotesk_semibold),
+            Font(R.font.space_grotesk_bold)
+        )
+        "urbanist" -> FontFamily(
+            Font(R.font.urbanist_regular),
+            Font(R.font.urbanist_medium),
+            Font(R.font.urbanist_semibold),
+            Font(R.font.urbanist_bold),
+            Font(R.font.urbanist_italic)
+        )
+        "ibm_plex_sans" -> FontFamily(
+            Font(R.font.ibm_plex_sans_regular),
+            Font(R.font.ibm_plex_sans_medium),
+            Font(R.font.ibm_plex_sans_semibold),
+            Font(R.font.ibm_plex_sans_bold),
+            Font(R.font.ibm_plex_sans_italic)
+        )
+        "ibm_plex_mono" -> FontFamily(
+            Font(R.font.ibm_plex_mono_regular),
+            Font(R.font.ibm_plex_mono_medium),
+            Font(R.font.ibm_plex_mono_bold),
+            Font(R.font.ibm_plex_mono_italic)
+        )
+        "jetbrains_mono" -> FontFamily(
+            Font(R.font.jetbrains_mono_regular),
+            Font(R.font.jetbrains_mono_medium),
+            Font(R.font.jetbrains_mono_bold),
+            Font(R.font.jetbrains_mono_italic)
+        )
+        else -> null
     }
 }
