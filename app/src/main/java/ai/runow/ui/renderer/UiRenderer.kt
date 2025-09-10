@@ -2,9 +2,6 @@
 
 package ai.runow.ui.renderer
 
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
-package ai.runow.ui.renderer
 import androidx.compose.foundation.shape.RoundedCornerShape
 
 // --- Compose runtime / UI base ---
