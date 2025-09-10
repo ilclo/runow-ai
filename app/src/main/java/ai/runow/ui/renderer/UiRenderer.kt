@@ -978,57 +978,113 @@ private fun Modifier.topBottomBorder(width: Dp, color: Color) = this.then(
 fun StyledContainer(
     cfg: JSONObject?,
     modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
-    content: @Composable BoxScope.() -> Unit
+    content: @Composable () -> Unit
 ) {
-    val r = resolveContainer(cfg)
+    // ====== Defaults ======
+    val style = cfg?.optString("style", "outlined") ?: "outlined" // default outlined
+    val shapeKey = cfg?.optString("shape", "rounded") ?: "rounded"
+    val cornerDp = cfg?.optDouble("cornerDp", 12.0)?.toFloat() ?: 12f
+    val elevationDp = cfg?.optDouble("elevationDp", 0.0)?.toFloat() ?: 0f
 
-    var m = modifier
-        .then(
-            when (r.widthMode) {
-                "fill"      -> Modifier.fillMaxWidth()
-                "fixed_dp"  -> Modifier.width(r.widthDp)
-                "fraction"  -> r.widthFraction?.let { Modifier.fillMaxWidth(it) } ?: Modifier
-                else        -> Modifier
-            }
-        )
-        .then(
-            when (r.heightMode) {
-                "fixed_dp"  -> Modifier.height(r.heightDp)
-                else        -> Modifier
-            }
-        )
-        .shadow(if (r.elevation > 0.dp) r.elevation else 0.dp, r.shape, clip = false)
+    val widthMode = cfg?.optString("widthMode", "wrap") ?: "wrap"   // wrap | match | fixed | fraction
+    val heightMode = cfg?.optString("heightMode", "wrap") ?: "wrap" // wrap | match | fixed | fraction
+    val widthDp = cfg?.optDouble("widthDp", 160.0)?.toFloat() ?: 160f    // default richiesto
+    val heightDp = cfg?.optDouble("heightDp", 48.0)?.toFloat() ?: 48f
+    val widthFraction = cfg?.optDouble("widthFraction", 1.0)?.toFloat() ?: 1f
+    val heightFraction = cfg?.optDouble("heightFraction", 0.0)?.toFloat() ?: 0f
 
-    // BorderMode “topBottom” = due linee
-    m = if (r.borderMode == "topBottom" && r.border != null) {
-        m.topBottomBorder(r.border.width, (r.border.brush as? SolidColor)?.value ?: Color.Black)
-    } else m
-
-    val box = @Composable {
-        CompositionLocalProvider(LocalContentColor provides r.contentColor) {
-            Box(
-                modifier = Modifier
-                    .then(if (r.bgBrush != null && r.bgAlpha > 0f) Modifier.background(r.bgBrush, r.shape).graphicsLayer { alpha = r.bgAlpha } else Modifier)
-                    .then(if (r.border != null && r.borderMode == "full") Modifier.border(r.border, r.shape) else Modifier)
-                    .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-                    .padding(contentPadding),
-                contentAlignment = Alignment.CenterStart,
-                content = content
-            )
-        }
+    val hAlign = when (cfg?.optString("hAlign", "start")) {
+        "center" -> Alignment.CenterHorizontally
+        "end" -> Alignment.End
+        else -> Alignment.Start
     }
 
-    // Se lo shape è non-zero e c’è bg/border conviene ritagliare
-    Surface(
-        color = Color.Transparent,
-        shape = r.shape,
-        content = { box() },
-        modifier = m
-    )
-}
+    // Bordo
+    val borderMode = cfg?.optString("borderMode", "none") ?: "none" // none | normal | hr2
+    val borderThickness = cfg?.optString("borderThickness", "thin") ?: "thin" // thin|medium|thick
+    val borderWidth = when (borderThickness) { "thick" -> 3.dp; "medium" -> 2.dp; else -> 1.dp }
+    val borderColor = parseColorOrRole(cfg?.optString("borderColor", "")) ?: Color.Black
 
+    // Colori/gradiente/opacità
+    val bgOpacity = cfg?.optDouble("opacity", 1.0)?.toFloat() ?: 1f
+    val bgSolid = parseColorOrRole(cfg?.optString("bgColor", "")) ?: Color.Transparent
+
+    val grad = cfg?.optJSONObject("gradient")
+    val gradColor1 = parseColorOrRole(grad?.optString("color1", "")) ?: bgSolid
+    val gradColor2 = parseColorOrRole(grad?.optString("color2", "")) // può essere null per “nessun gradiente”
+    val gradDir = grad?.optString("direction", "horizontal") ?: "horizontal"
+
+    val brush: Brush? = if (gradColor2 != null) {
+        if (gradDir == "vertical") Brush.verticalGradient(listOf(gradColor1, gradColor2))
+        else Brush.horizontalGradient(listOf(gradColor1, gradColor2))
+    } else null
+
+    // shape
+    val shape: Shape = when (shapeKey) {
+        "cut" -> CutCornerShape(cornerDp.dp)
+        "circle" -> RoundedCornerShape(50)
+        else -> RoundedCornerShape(cornerDp.dp)
+    }
+
+    // style mapping: background/border/tonal
+    val (containerBg, showBorder) = when (style) {
+        "text" -> Color.Transparent to false    // NO riempimento, niente bordo
+        "outlined" -> Color.Transparent to true // bordo visibile, no riempimento
+        "tonal" -> MaterialTheme.colorScheme.surfaceVariant to false
+        "elevated" -> MaterialTheme.colorScheme.surface to false
+        else -> MaterialTheme.colorScheme.surface to false // "filled"
+    }
+
+    val bgFinal = if (brush == null) containerBg.copy(alpha = bgOpacity) else Color.Transparent
+    val contentColor = parseColorOrRole(cfg?.optString("contentColor", "")) ?: bestOnColor(
+        if (bgFinal != Color.Transparent) bgFinal else (gradColor2 ?: gradColor1)
+    )
+
+    // width/height
+    var m = modifier
+    m = when (widthMode) {
+        "match" -> m.fillMaxWidth()
+        "fixed" -> m.width(widthDp.dp)
+        "fraction" -> m.fillMaxWidth(widthFraction.coerceIn(0f, 1f))
+        else -> m
+    }
+    m = when (heightMode) {
+        "match" -> m.fillMaxHeight()
+        "fixed" -> m.height(heightDp.dp)
+        "fraction" -> if (heightFraction > 0f) m.fillMaxHeight(heightFraction.coerceIn(0f, 1f)) else m
+        else -> m
+    }
+    if (elevationDp > 0f) m = m.shadow(elevationDp.dp, shape)
+
+    // sola doppia linea orizzontale (bordermode = hr2)
+    val drawHr2 = borderMode == "hr2"
+
+    Surface(
+        modifier = m
+            .then(if (brush != null) Modifier.background(brush, shape) else Modifier.background(bgFinal, shape))
+            .then(
+                if (drawHr2) Modifier.drawBehind {
+                    val yTop = 0f + borderWidth.toPx() / 2f
+                    val yBottom = size.height - borderWidth.toPx() / 2f
+                    drawLine(borderColor, Offset(0f, yTop), Offset(size.width, yTop), borderWidth.toPx())
+                    drawLine(borderColor, Offset(0f, yBottom), Offset(size.width, yBottom), borderWidth.toPx())
+                } else Modifier
+            ),
+        shape = shape,
+        border = if (showBorder && !drawHr2) BorderStroke(borderWidth, borderColor) else null,
+        color = Color.Transparent,
+        contentColor = contentColor
+    ) {
+        // allineamento orizzontale del contenuto
+        Column(
+            Modifier.padding(contentPadding).fillMaxWidth(),
+            horizontalAlignment = hAlign
+        ) {
+            content()
+        }
+    }
+}
 
 /* =========================================================
  * PAGE BACKGROUND (colore/gradient/immagine a tutta pagina)
@@ -3261,17 +3317,68 @@ private fun ImageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
 }
 
 @Composable
-private fun SectionHeaderInspectorPanel(node: JSONObject) {
-    val textNode = node.optJSONObject("text") ?: JSONObject()
-    val base = MaterialTheme.typography.titleMedium  // base neutra
-    val style = applyTextStyleOverrides(base, textNode)
+private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+    Text("SectionHeader – Proprietà", style = MaterialTheme.typography.titleMedium)
 
-    StyledContainer(cfg = node.optJSONObject("container")) {
-        Text(
-            text  = textNode.optString("text", "Section header"),
-            style = style,
-            modifier = Modifier.fillMaxWidth()
-        )
+    val title = remember { mutableStateOf(working.optString("title","")) }
+    OutlinedTextField(
+        value = title.value,
+        onValueChange = { title.value = it; working.put("title", it); onChange() },
+        label = { Text("title") }
+    )
+
+    // allineamento
+    var align by remember { mutableStateOf(working.optString("align","start")) }
+    ExposedDropdown(
+        value = align, label = "align",
+        options = listOf("start","center","end")
+    ) { sel -> align = sel; working.put("align", sel); onChange() }
+
+    // font size (sp)
+    val textSize = remember {
+        mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() })
+    }
+    ExposedDropdown(
+        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
+        label = "textSize (sp)",
+        options = listOf("(default)","14","16","18","20","22","24","28","32","36")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        textSize.value = v
+        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
+        onChange()
+    }
+
+    // peso + famiglia + colore
+    var fontWeight by remember { mutableStateOf(working.optString("fontWeight","")) }
+    ExposedDropdown(
+        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+        label = "fontWeight",
+        options = listOf("w300","w400","w500","w600","w700","(default)")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontWeight = v
+        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
+        onChange()
+    }
+
+    var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) }
+    ExposedDropdown(
+        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+        label = "fontFamily",
+        options = FontCatalog.FONT_FAMILY_OPTIONS
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontFamily = v
+        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
+        onChange()
+    }
+
+    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
+    NamedColorPickerPlus(current = textColor.value, label = "textColor") { hex ->
+        textColor.value = hex
+        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
+        onChange()
     }
 }
 
@@ -4020,25 +4127,52 @@ private fun newList() = JSONObject(
 /* =========================================================
  * TEXT STYLE OVERRIDES
  * ========================================================= */
+private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
+    var st = base
 
-/** Applica override dal JSON al TextStyle base */
-private fun applyTextStyleOverrides(base: TextStyle, overrides: JSONObject): TextStyle {
-    var s = base
-    // size
-    overrides.optDouble("textSizeSp", Double.NaN).takeIf { !it.isNaN() }?.let {
-        s = s.copy(fontSize = it.toFloat().sp)
+    // dimensione (sp)
+    val size = node.optDouble("textSizeSp", Double.NaN)
+    if (!size.isNaN()) st = st.copy(fontSize = TextUnit(size.toFloat(), TextUnitType.Sp))
+
+    // peso
+    when (node.optString("fontWeight", "")) {
+        "w100" -> st = st.copy(fontWeight = FontWeight.Thin)
+        "w200" -> st = st.copy(fontWeight = FontWeight.ExtraLight)
+        "w300" -> st = st.copy(fontWeight = FontWeight.Light)
+        "w400" -> st = st.copy(fontWeight = FontWeight.Normal)
+        "w500" -> st = st.copy(fontWeight = FontWeight.Medium)
+        "w600" -> st = st.copy(fontWeight = FontWeight.SemiBold)
+        "w700" -> st = st.copy(fontWeight = FontWeight.Bold)
+        "w800" -> st = st.copy(fontWeight = FontWeight.ExtraBold)
+        "w900" -> st = st.copy(fontWeight = FontWeight.Black)
     }
-    // weight
-    parseFontWeight(overrides.optString("fontWeight", "").ifBlank { null })?.let {
-        s = s.copy(fontWeight = it)
+
+    // italic (compat sia con flag "italic": true che con stringa "fontStyle": "italic")
+    val styleKey = node.optString("fontStyle", "")
+    val italicFlag = node.optBoolean("italic", false)
+    st = st.copy(fontStyle = if (styleKey == "italic" || italicFlag) FontStyle.Italic else FontStyle.Normal)
+
+    // famiglia font: ruoli + risorse .ttf in res/font tramite FontCatalog
+    val familyKey = node.optString("fontFamily", "")
+    val family = when (familyKey) {
+        "" -> null
+        "serif" -> FontFamily.Serif
+        "monospace" -> FontFamily.Monospace
+        "cursive" -> FontFamily.Cursive
+        "sans" -> FontFamily.SansSerif
+        else -> FontCatalog.resolveFontFamily(familyKey) // <— risorse .ttf
     }
-    // family
-    resolveFontFamily(overrides.optString("fontFamily", "").ifBlank { null })?.let {
-        s = s.copy(fontFamily = it)
-    }
-    return s
+    if (family != null) st = st.copy(fontFamily = family)
+
+    // letterSpacing / lineHeight (sp)
+    val letterSp = node.optDouble("letterSpacingSp", Double.NaN)
+    if (!letterSp.isNaN()) st = st.copy(letterSpacing = TextUnit(letterSp.toFloat(), TextUnitType.Sp))
+
+    val lineSp = node.optDouble("lineHeightSp", Double.NaN)
+    if (!lineSp.isNaN()) st = st.copy(lineHeight = TextUnit(lineSp.toFloat(), TextUnitType.Sp))
+
+    // colore testo
+    parseColorOrRole(node.optString("textColor", ""))?.let { st = st.copy(color = it) }
+
+    return st
 }
-
-/** Overload per compatibilità con chiamate esistenti (JSONObject, TextStyle) */
-private fun applyTextStyleOverrides(overrides: JSONObject, base: TextStyle): TextStyle =
-    applyTextStyleOverrides(base, overrides)
