@@ -113,7 +113,7 @@ fun ExposedDropdown(
 
     // ordine tenuto intenzionalmente così: chi usa la trailing lambda continua a funzionare
     modifier: Modifier = Modifier,
-
+    onSelect: (String) -> Unit = {},
     // compat: se hai call site vecchi con 'onValueChange = { }'
     onValueChange: ((String) -> Unit)? = null
 ) {
@@ -145,47 +145,6 @@ fun ExposedDropdown(
 }
 
 
-
-@Composable
-fun SimpleDropdown(
-    label: String,
-    options: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    OutlinedTextField(
-        value = selected,
-        onValueChange = {},            // readOnly
-        readOnly = true,
-        label = { Text(label) },
-        trailingIcon = {
-            IconButton(onClick = { expanded = !expanded }) {
-                Icon(
-                    imageVector = if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                    contentDescription = null
-                )
-            }
-        },
-        modifier = modifier.fillMaxWidth().clickable { expanded = true }
-    )
-
-    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-        options.forEach { opt ->
-            DropdownMenuItem(
-                text = { Text(opt) },
-                onClick = {
-                    onSelect(opt)
-                    expanded = false
-                }
-            )
-        }
-    }
-}
-
-
 @Composable
 fun LabeledField(
     label: String,
@@ -207,8 +166,8 @@ fun LabeledField(
 fun SegmentedButtons(
     options: List<String>,
     selected: String,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSelect: (String) -> Unit
 ) {
     Row(
         modifier = modifier
@@ -242,8 +201,8 @@ fun SegmentedButtons(
 @Composable
 fun ColorRow(
     current: String,
-    onPick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPick: (String) -> Unit
 ) {
     val swatches = listOf(
         "#000000", "#333333", "#666666", "#999999", "#CCCCCC", "#FFFFFF",
