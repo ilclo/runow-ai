@@ -2,7 +2,7 @@
 
 package ai.runow.ui.renderer
 
-
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -23,6 +23,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.draw.*
 // gesture & pointer
+// Android
+import android.content.Intent
+
+// Compose graphics & text
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.input.pointer.pointerInput // used with detectVerticalDragGestures
+import androidx.compose.ui.unit.IntOffset
+// Math helpers
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.round
 import androidx.compose.ui.input.pointer.pointerInput
 // Animation
 import androidx.compose.animation.AnimatedVisibility
@@ -33,29 +46,18 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-
 // Pointer & nested scroll
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 // Layout callbacks
 import androidx.compose.ui.layout.onGloballyPositioned
 // Text overflow
-import androidx.compose.ui.text.style.TextOverflow
 // Image bitmap utils
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 // Intent flags usati nell'image picker
-import android.content.Intent
 // Shape (evita import doppi "RoundedCornerShape")
 // (se serve) altre shape:
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CutCornerShape
-// Math helpers
-import kotlin.math.round
-import kotlin.math.max
-import kotlin.math.min
-
-import androidx.compose.ui.unit.IntOffset
 // shape astratta usata in ResolvedContainer
 import androidx.compose.foundation.shape.CornerBasedShape
 // Intent usato nel picker immagini
