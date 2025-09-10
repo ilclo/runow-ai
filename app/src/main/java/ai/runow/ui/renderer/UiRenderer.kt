@@ -759,11 +759,22 @@ private fun StyledContainer(
         .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
 
     // Wrapper per allineamento orizzontale
-    val wrapAlign: @Composable (@Composable () -> Unit) -> Unit = when (r.hAlign) {
-        "center" -> { child -> { Box(Modifier.fillMaxWidth()) { Box(Modifier.align(Alignment.Center)) { child() } } } }
-        "end"    -> { child -> { Box(Modifier.fillMaxWidth()) { Box(Modifier.align(Alignment.CenterEnd)) { child() } } } }
-        else     -> { child -> { child() } } // start
-    }
+    val wrapAlign: @Composable (content: @Composable () -> Unit) -> Unit =
+        when (r.hAlign) {
+            "center" -> { content: @Composable () -> Unit ->
+                Box(Modifier.fillMaxWidth()) {
+                    Box(Modifier.align(Alignment.Center)) { content() }
+                }
+            }
+            "end" -> { content: @Composable () -> Unit ->
+                Box(Modifier.fillMaxWidth()) {
+                    Box(Modifier.align(Alignment.CenterEnd)) { content() }
+                }
+            }
+            else -> { content: @Composable () -> Unit ->
+                content()
+            }
+        }
 
     CompositionLocalProvider(LocalContentColor provides r.contentColor) {
         wrapAlign {
@@ -2401,7 +2412,6 @@ private fun BarItemsEditor(
 
     AddBarItemButtons(arr = arr, onChange = onChange)
 
-    }
 }
 
 /* =========================================================
