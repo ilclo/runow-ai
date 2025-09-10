@@ -103,28 +103,146 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
+
+private val FONT_FAMILY_OPTIONS: List<String> = listOf(
+    "",                 // "" = default
+    "inter",
+    "urbanist",
+    "poppins",
+    "manrope",
+    "mulish",
+    "rubik",
+    "space_grotesk",
+    "ibm_plex_sans",
+    "ibm_plex_mono",
+    "jetbrains_mono"
+)
+
+
+@Composable
+fun LabeledField(
+    label: String,
+    content: @Composable () -> Unit
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        Spacer(Modifier.height(6.dp))
+        content()
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+fun SegmentedButtons(
+    options: List<String>,
+    selected: String,
+    onSelected: (String) -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        options.forEach { opt ->
+            FilterChip(
+                selected = (opt == selected),
+                onClick = { onSelected(opt) },
+                label = { Text(opt) }
+            )
+        }
+    }
+}
+
+@Composable
+fun ColorRow(
+    current: String,
+    onPick: (String) -> Unit
+) {
+    var text by remember(current) { mutableStateOf(current) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { v ->
+                text = v
+                onPick(v)       // propaghiamo sempre verso l'alto
+            },
+            singleLine = true,
+            label = { Text("hex o ruolo (es. #RRGGBB)") },
+            modifier = Modifier.weight(1f)
+        )
+
+        // Preview colore
+        val preview = parseHexColorOrNull(text)
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(preview ?: Color.Transparent)
+                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+        )
+
+        TextButton(onClick = { text = ""; onPick("") }) {
+            Text("Clear")
+        }
+    }
+}
+
+private fun parseHexColorOrNull(s: String): Color? {
+    val hex = s.trim().removePrefix("#")
+    return try {
+        when (hex.length) {
+            6 -> {
+                val r = hex.substring(0, 2).toInt(16)
+                val g = hex.substring(2, 4).toInt(16)
+                val b = hex.substring(4, 6).toInt(16)
+                Color(r, g, b)
+            }
+            8 -> {
+                val a = hex.substring(0, 2).toInt(16)
+                val r = hex.substring(2, 4).toInt(16)
+                val g = hex.substring(4, 6).toInt(16)
+                val b = hex.substring(6, 8).toInt(16)
+                Color(r, g, b, a)
+            }
+            else -> null
+        }
+    } catch (_: Throwable) { null }
+}
+
+
 @Composable
 fun SimpleTextInspectorPanel(
     working: JSONObject,
     onChange: () -> Unit
 ) {
-    // Stato locale inizializzato dai valori correnti
+    // Stato locale inizializzato dai valori correnti del JSON
     var txt by remember { mutableStateOf(working.optString("text", "")) }
     var align by remember { mutableStateOf(working.optString("textAlign", "start")) } // start|center|end
-    var sizeSp by remember { mutableStateOf(working.optDouble("textSizeSp", 16.0).toFloat()) }
+    var sizeText by remember {
+        val v = working.optDouble("textSizeSp", Double.NaN)
+        mutableStateOf(if (v.isNaN()) "" else v.toInt().toString())
+    }
     var weightKey by remember { mutableStateOf(working.optString("fontWeight", "w400")) } // w300..w900
     var familyKey by remember { mutableStateOf(working.optString("fontFamily", "")) }
     var colorStr by remember { mutableStateOf(working.optString("textColor", "")) }
 
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+    ) {
         // Testo
         LabeledField("text") {
-            TextField(
+            OutlinedTextField(
                 value = txt,
                 onValueChange = {
                     txt = it
                     working.put("text", it); onChange()
                 },
+                singleLine = false,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -132,63 +250,101 @@ fun SimpleTextInspectorPanel(
         // Allineamento
         LabeledField("alignment") {
             SegmentedButtons(
-                options = listOf("start","center","end"),
-                selected = align
-            ) { sel ->
-                align = sel
-                working.put("textAlign", sel); onChange()
-            }
+                options = listOf("start", "center", "end"),
+                selected = align,
+                onSelected = { sel ->
+                    align = sel
+                    working.put("textAlign", sel); onChange()
+                }
+            )
         }
 
-        // Dimensione (sp)
+        // Dimensione in sp (niente ExposedDropdown: numero o chips rapidi)
         LabeledField("size (sp)") {
-            ExposedDropdown(
-                label = "size",
-                options = listOf(12,14,16,18,20,24,28,32,36).map { it.toString() },
-                selected = sizeSp.toInt().toString()
-            ) { sel ->
-                sizeSp = sel.toFloat()
-                working.put("textSizeSp", sizeSp); onChange()
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val presets = listOf("12","14","16","18","20","24","28","32","36")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                    items(presets) { p ->
+                        FilterChip(
+                            selected = (sizeText == p),
+                            onClick = {
+                                sizeText = p
+                                working.put("textSizeSp", p.toDouble()); onChange()
+                            },
+                            label = { Text(p) }
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = sizeText,
+                    onValueChange = { v ->
+                        sizeText = v.filter { it.isDigit() }
+                        if (sizeText.isBlank()) {
+                            working.remove("textSizeSp")
+                        } else {
+                            working.put("textSizeSp", sizeText.toDouble())
+                        }
+                        onChange()
+                    },
+                    label = { Text("custom") },
+                    singleLine = true,
+                    modifier = Modifier.width(96.dp)
+                )
             }
         }
 
-        // Peso
+        // Peso (w300..w900)
         LabeledField("weight") {
-            ExposedDropdown(
-                label = "weight",
-                options = listOf("w300","w400","w500","w600","w700","w800","w900"),
-                selected = weightKey
-            ) { sel ->
-                weightKey = sel
-                working.put("fontWeight", sel); onChange()
+            val weights = listOf("w300","w400","w500","w600","w700","w800","w900")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(weights) { w ->
+                    FilterChip(
+                        selected = (weightKey == w),
+                        onClick = {
+                            weightKey = w
+                            working.put("fontWeight", w); onChange()
+                        },
+                        label = { Text(w) }
+                    )
+                }
             }
         }
 
-        // Font family
+        // Font family (lista coerente con i TTF che hai in res/font)
         LabeledField("font") {
-            ExposedDropdown(
-                label = "font",
-                options = FONT_FAMILY_OPTIONS,
-                selected = familyKey
-            ) { sel ->
-                familyKey = sel
-                working.put("fontFamily", sel); onChange()
+            val opts = FONT_FAMILY_OPTIONS
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(opts) { k ->
+                    val label = if (k.isBlank()) "(default)" else k
+                    FilterChip(
+                        selected = (familyKey == k),
+                        onClick = {
+                            familyKey = k
+                            if (k.isBlank()) working.remove("fontFamily")
+                            else working.put("fontFamily", k)
+                            onChange()
+                        },
+                        label = { Text(label) }
+                    )
+                }
             }
         }
 
-        // Colore testo
+        // Colore testo (hex/ruolo)
         LabeledField("text color") {
             ColorRow(
-                current = colorStr
-            ) { picked ->
-                colorStr = picked
-                if (picked.isBlank()) working.remove("textColor")
-                else working.put("textColor", picked)
-                onChange()
-            }
+                current = colorStr,
+                onPick = { picked ->
+                    colorStr = picked
+                    if (picked.isBlank()) working.remove("textColor")
+                    else working.put("textColor", picked)
+                    onChange()
+                }
+            )
         }
     }
 }
+
 
 
 private val FONT_FAMILY_OPTIONS = listOf(
