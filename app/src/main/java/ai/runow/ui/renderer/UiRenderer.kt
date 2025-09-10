@@ -5,6 +5,41 @@
 
 package ai.runow.ui.renderer
 
+import ai.runow.R
+import android.annotation.SuppressLint
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerBasedShape
+import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.*
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.*
+import org.json.JSONArray
+import org.json.JSONObject
 import ai.runow.ui.renderer.FontCatalog
 import androidx.compose.ui.graphics.Color
 import android.graphics.Color as AndroidColor
@@ -97,12 +132,176 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
-// Bridge: risolve una FontFamily a partire dalla chiave salvata nel JSON
+@Composable
+fun SimpleTextInspectorPanel(working: JSONObject, onChange: () -> Unit) {
+    Text("Testo – Proprietà", style = MaterialTheme.typography.titleMedium)
+
+    // size (sp)
+    val textSize = remember { mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() }) }
+    ExposedDropdown(
+        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
+        label = "textSize (sp)",
+        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        textSize.value = v
+        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
+        onChange()
+    }
+
+    // allineamento
+    var align by remember { mutableStateOf(working.optString("align","start")) }
+    ExposedDropdown(
+        value = align, label = "align",
+        options = listOf("start","center","end")
+    ) { sel -> align = sel; working.put("align", sel); onChange() }
+
+    // font family (esteso)
+    var fontFamily by remember { mutableStateOf(working.optString("fontFamily", "")) }
+    ExposedDropdown(
+        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
+        label = "fontFamily",
+        options = FONT_FAMILY_OPTIONS
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontFamily = v
+        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
+        onChange()
+    }
+
+    // weight
+    var fontWeight by remember { mutableStateOf(working.optString("fontWeight", "")) }
+    ExposedDropdown(
+        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
+        label = "fontWeight",
+        options = listOf("(default)", "w300","w400","w500","w600","w700","w800","w900")
+    ) { sel ->
+        val v = if (sel == "(default)") "" else sel
+        fontWeight = v
+        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
+        onChange()
+    }
+
+    // colore testo
+    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
+    NamedColorPickerPlus(current = textColor.value, label = "textColor") { hex ->
+        textColor.value = hex
+        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
+        onChange()
+    }
+}
+
+private val FONT_FAMILY_OPTIONS = listOf(
+    "(default)",
+    "inter", "urbanist", "poppins", "manrope", "mulish", "rubik", "space_grotesk",
+    "ibm_plex_sans", "ibm_plex_mono", "jetbrains_mono"
+)
+
+private fun resolveTextColor(working: JSONObject): Color? =
+    parseColorOrRole(working.optString("textColor", ""))
+
+private fun parseFontWeight(v: String?): FontWeight? = when (v?.lowercase()) {
+    "w100" -> FontWeight.W100
+    "w200" -> FontWeight.W200
+    "w300" -> FontWeight.W300
+    "w400" -> FontWeight.W400
+    "w500" -> FontWeight.W500
+    "w600" -> FontWeight.W600
+    "w700" -> FontWeight.W700
+    "w800" -> FontWeight.W800
+    "w900" -> FontWeight.W900
+    else   -> null
+}
+
+@Composable
+private fun colorsFallback() = MaterialTheme.colorScheme
+
 @Composable
 private fun resolveFontFamilyRes(key: String?): FontFamily? {
     if (key.isNullOrBlank()) return null
     return FontCatalog.resolveFontFamily(key)
 }
+
+private fun resolveFontFamily(name: String?): FontFamily? = when (name?.lowercase()) {
+    // INTER
+    "inter" -> FontFamily(
+        Font(R.font.inter_regular, FontWeight.Normal, FontStyle.Normal),
+        Font(R.font.inter_medium,  FontWeight.Medium, FontStyle.Normal),
+        Font(R.font.inter_semibold,FontWeight.SemiBold, FontStyle.Normal),
+        Font(R.font.inter_bold,    FontWeight.Bold,   FontStyle.Normal),
+        Font(R.font.inter_italic,  FontWeight.Normal, FontStyle.Italic)
+    )
+    // URBANIST
+    "urbanist" -> FontFamily(
+        Font(R.font.urbanist_regular, FontWeight.Normal, FontStyle.Normal),
+        Font(R.font.urbanist_medium,  FontWeight.Medium, FontStyle.Normal),
+        Font(R.font.urbanist_semibold,FontWeight.SemiBold, FontStyle.Normal),
+        Font(R.font.urbanist_bold,    FontWeight.Bold,   FontStyle.Normal),
+        Font(R.font.urbanist_italic,  FontWeight.Normal, FontStyle.Italic)
+    )
+    // POPPINS
+    "poppins" -> FontFamily(
+        Font(R.font.poppins_regular, FontWeight.Normal, FontStyle.Normal),
+        Font(R.font.poppins_medium,  FontWeight.Medium, FontStyle.Normal),
+        Font(R.font.poppins_semibold,FontWeight.SemiBold, FontStyle.Normal),
+        Font(R.font.poppins_bold,    FontWeight.Bold,   FontStyle.Normal),
+        Font(R.font.poppins_italic,  FontWeight.Normal, FontStyle.Italic)
+    )
+    // MANROPE
+    "manrope" -> FontFamily(
+        Font(R.font.manrope_regular, FontWeight.Normal, FontStyle.Normal),
+        Font(R.font.manrope_medium,  FontWeight.Medium, FontStyle.Normal),
+        Font(R.font.manrope_semibold,FontWeight.SemiBold, FontStyle.Normal),
+        Font(R.font.manrope_bold,    FontWeight.Bold,   FontStyle.Normal)
+    )
+    // MULISH
+    "mulish" -> FontFamily(
+        Font(R.font.mulish_regular, FontWeight.Normal, FontStyle.Normal),
+        Font(R.font.mulish_medium,  FontWeight.Medium, FontStyle.Normal),
+        Font(R.font.mulish_semibold,FontWeight.SemiBold, FontStyle.Normal),
+        Font(R.font.mulish_bold,    FontWeight.Bold,   FontStyle.Normal),
+        Font(R.font.mulish_italic,  FontWeight.Normal, FontStyle.Italic)
+    )
+    // RUBIK
+    "rubik" -> FontFamily(
+        Font(R.font.rubik_regular, FontWeight.Normal, FontStyle.Normal),
+        Font(R.font.rubik_medium,  FontWeight.Medium, FontStyle.Normal),
+        Font(R.font.rubik_semibold,FontWeight.SemiBold, FontStyle.Normal),
+        Font(R.font.rubik_bold,    FontWeight.Bold,   FontStyle.Normal),
+        Font(R.font.rubik_italic,  FontWeight.Normal, FontStyle.Italic)
+    )
+    // SPACE GROTESK
+    "space_grotesk" -> FontFamily(
+        Font(R.font.space_grotesk_regular, FontWeight.Normal, FontStyle.Normal),
+        Font(R.font.space_grotesk_medium,  FontWeight.Medium, FontStyle.Normal),
+        Font(R.font.space_grotesk_semibold,FontWeight.SemiBold, FontStyle.Normal),
+        Font(R.font.space_grotesk_bold,    FontWeight.Bold,   FontStyle.Normal)
+    )
+    // IBM PLEX SANS
+    "ibm_plex_sans" -> FontFamily(
+        Font(R.font.ibm_plex_sans_regular, FontWeight.Normal, FontStyle.Normal),
+        Font(R.font.ibm_plex_sans_medium,  FontWeight.Medium, FontStyle.Normal),
+        Font(R.font.ibm_plex_sans_semibold,FontWeight.SemiBold, FontStyle.Normal),
+        Font(R.font.ibm_plex_sans_bold,    FontWeight.Bold,   FontStyle.Normal),
+        Font(R.font.ibm_plex_sans_italic,  FontWeight.Normal, FontStyle.Italic)
+    )
+    // IBM PLEX MONO
+    "ibm_plex_mono" -> FontFamily(
+        Font(R.font.ibm_plex_mono_regular, FontWeight.Normal, FontStyle.Normal),
+        Font(R.font.ibm_plex_mono_medium,  FontWeight.Medium, FontStyle.Normal),
+        Font(R.font.ibm_plex_mono_bold,    FontWeight.Bold,   FontStyle.Normal),
+        Font(R.font.ibm_plex_mono_italic,  FontWeight.Normal, FontStyle.Italic)
+    )
+    // JETBRAINS MONO
+    "jetbrains_mono" -> FontFamily(
+        Font(R.font.jetbrains_mono_regular, FontWeight.Normal, FontStyle.Normal),
+        Font(R.font.jetbrains_mono_medium,  FontWeight.Medium, FontStyle.Normal),
+        Font(R.font.jetbrains_mono_bold,    FontWeight.Bold,   FontStyle.Normal),
+        Font(R.font.jetbrains_mono_italic,  FontWeight.Normal, FontStyle.Italic)
+    )
+    else -> null
+}
+
 
 @Composable
 private fun TextInspectorPanel(working: JSONObject, onChange: () -> Unit) {
@@ -663,184 +862,171 @@ private fun mapContainerColors(style: String, cfg: JSONObject?): ContainerColors
     return ContainerColors(background, onBackground, defaultBorder)
 }
 
+// ====================== CONTENITORE UNIFICATO RUNTIME ======================
 private data class ResolvedContainer(
-    val background: Color,
-    val contentColor: Color,
-    val shape: Shape,
-    val elevation: Dp,
-    val borderColor: Color,
-    val borderWidth: Dp,
-    val borderMode: BorderMode,
-    val brush: Brush?,
-    val bgImage: BgImage?,
-
-    // Layout/opzioni aggiuntive
+    val shape: CornerBasedShape,
+    val bgBrush: Brush?,             // null -> trasparente
     val bgAlpha: Float,
-    val widthMode: SizeMode,
+    val border: BorderStroke?,       // null -> nessun bordo
+    val elevation: Dp,               // ombra
+    val widthMode: String,
+    val heightMode: String,
     val widthDp: Dp,
-    val widthFraction: Float,
-    val heightMode: SizeMode,
     val heightDp: Dp,
-    val hAlign: String // "start" | "center" | "end"
+    val widthFraction: Float?,
+    val contentColor: Color,
+    val borderMode: String
 )
-
+    
 @Composable
 private fun resolveContainer(cfg: JSONObject?): ResolvedContainer {
-    val style = (cfg?.optString("style", "outlined") ?: "outlined").lowercase()
-    val colors = mapContainerColors(style, cfg)
+    val cs = colorsFallback()   // palette m3
+    val style = cfg?.optString("style", "surface") ?: "surface"  // text | outlined | tonal | primary | surface
+    val shapeName = cfg?.optString("shape", "rounded") ?: "rounded"
+    val corner = cfg?.optDouble("corner", 12.0)?.toFloat() ?: 12f
+    val elevationDp = cfg?.optDouble("elevationDp", if (style in listOf("surface","primary","tonal")) 1.0 else 0.0)?.toFloat() ?: 0f
 
-    // Forma e corner
-    val shapeName = (cfg?.optString("shape", "rounded") ?: "rounded").lowercase()
-    val corner = Dp((cfg?.optDouble("corner", 16.0) ?: 16.0).toFloat())
-    val shape = when (shapeName) {
-        "pill" -> RoundedCornerShape(50)
-        "cut"  -> CutCornerShape(corner)
-        else   -> RoundedCornerShape(corner)
+    val shape: CornerBasedShape = when (shapeName) {
+        "pill"    -> RoundedCornerShape(percent = 50)
+        "cut"     -> CutCornerShape(corner.dp)
+        else      -> RoundedCornerShape(corner.dp)
     }
 
-    // Elevation (default 0 per text/outlined)
-    val elevation = Dp((cfg?.optDouble("elevation",
-        if (style == "text" || style == "outlined") 0.0 else 1.0
-    ) ?: 0.0).toFloat())
+    // base bg color in base allo style
+    val baseBg = when (style) {
+        "text"    -> Color.Transparent
+        "outlined"-> Color.Transparent
+        "tonal"   -> cs.surfaceVariant
+        "primary" -> cs.primary
+        else      -> cs.surface
+    }
 
-    // Border mode + thickness (accetta borderWidth o borderThicknessDp)
-    val bm = borderModeOf(cfg?.optString("borderMode", if (style == "outlined") "full" else "none"))
-    val borderThickness = (cfg?.optDouble("borderWidth",
-        cfg?.optDouble("borderThicknessDp",
-            if (style == "outlined") 1.0 else 0.0
-        ) ?: 0.0
-    ) ?: 0.0).coerceAtLeast(0.0)
+    // eventuale customColor (hex o ruolo) – per ruoli null => fallback a baseBg
+    val customColor = parseColorOrRole(cfg?.optString("customColor",""))
+    val bgColor = customColor ?: baseBg
 
-    val borderColor = parseColorOrRole(cfg?.optString("borderColor", "") ?: "")
-        ?: if (style == "outlined") Color.Black else colors.defaultBorder
+    // gradiente (grad2 opzionale, default a singolo colore)
+    val g1 = parseColorOrRole(cfg?.optString("gradient1","")) ?: bgColor
+    val g2 = parseColorOrRole(cfg?.optString("gradient2",""))
+    val orientation = cfg?.optString("gradientOrientation","horizontal") ?: "horizontal"
+    val bgBrush: Brush? = if (style == "text") {
+        null
+    } else if (g2 != null) {
+        if (orientation == "vertical") Brush.linearGradient(listOf(g1, g2), start = Offset(0f,0f), end = Offset(0f,1000f))
+        else Brush.linearGradient(listOf(g1, g2), start = Offset(0f,0f), end = Offset(1000f,0f))
+    } else {
+        SolidColor(g1)
+    }
 
-    // Gradient: disabilitato se text/outlined
-    val g1 = if (style == "text" || style == "outlined") null else parseColorOrRole(cfg?.optString("gradient1", "") ?: "")
-    val g2 = if (style == "text" || style == "outlined") null else parseColorOrRole(cfg?.optString("gradient2", "") ?: "")
-    val gradDir = (cfg?.optString("gradientDirection", "horizontal") ?: "horizontal").lowercase()
-    val brush = when {
-        g1 != null && g2 != null -> {
-            if (gradDir == "vertical")
-                Brush.verticalGradient(listOf(g1, g2))
-            else
-                Brush.horizontalGradient(listOf(g1, g2))
+    val bgAlpha = cfg?.optDouble("bgAlpha", 1.0)?.toFloat()?.coerceIn(0f,1f) ?: 1f
+
+    // border
+    val borderMode = cfg?.optString("borderMode", if (style=="outlined") "full" else "none") ?: "none"
+    val borderThickness = cfg?.optDouble("borderThicknessDp", if (borderMode!="none") 1.0 else 0.0)?.toFloat() ?: 0f
+    val borderColor = parseColorOrRole(cfg?.optString("borderColor","")) ?: Color.Black
+    val border: BorderStroke? = if (style == "text" || borderMode == "none" || borderThickness <= 0f) null
+                                else BorderStroke(borderThickness.dp, borderColor)
+
+    // content color
+    val contentColor = if (style == "text") LocalContentColor.current
+        else if (customColor != null || g2 != null) bestOnColor(g1)
+        else when (style) {
+            "primary" -> cs.onPrimary
+            "tonal"   -> cs.onSurface
+            else      -> cs.onSurface
         }
-        else -> null
-    }
 
-    // Larghezza/Altezza + default 160dp per fixed
-    val widthMode = (cfg?.optString("widthMode", "wrap") ?: "wrap").lowercase()
-    val widthDp = Dp((cfg?.optDouble("widthDp",
-        if (widthMode == "fixed_dp") 160.0 else 0.0   // <--- default 160
-    ) ?: 0.0).toFloat())
-    val widthFraction = (cfg?.optDouble("widthFraction", 0.0) ?: 0.0).toFloat().coerceIn(0f, 1f)
-
-    val heightMode = (cfg?.optString("heightMode", "wrap") ?: "wrap").lowercase()
-    val heightDp = Dp((cfg?.optDouble("heightDp", 0.0) ?: 0.0).toFloat())
-    val heightFraction = (cfg?.optDouble("heightFraction", 0.0) ?: 0.0).toFloat().coerceIn(0f, 1f)
-
-    // Allineamento orizzontale (sx/centro/dx)
-    val hAlign = when ((cfg?.optString("hAlign", "start") ?: "start").lowercase()) {
-        "center" -> Alignment.CenterHorizontally
-        "end"    -> Alignment.End
-        else     -> Alignment.Start
-    }
+    // dimensioni
+    val widthMode = cfg?.optString("widthMode","wrap") ?: "wrap"     // wrap | fill | fixed_dp | fraction
+    val heightMode = cfg?.optString("heightMode","wrap") ?: "wrap"   // wrap | fixed_dp
+    val widthDp = (cfg?.optDouble("widthDp", 160.0) ?: 160.0).toFloat().dp  // default 160 come richiesto
+    val heightDp = (cfg?.optDouble("heightDp", 48.0) ?: 48.0).toFloat().dp
+    val widthFraction = cfg?.optDouble("widthFraction", Double.NaN)?.takeIf { !it.isNaN() }?.toFloat()
 
     return ResolvedContainer(
-        style = style,
         shape = shape,
-        background = colors.background,   // già trasparente per text/outlined
-        brush = brush,
-        elevation = elevation,
-        borderMode = bm,
-        borderWidth = Dp(borderThickness.toFloat()),
-        borderColor = borderColor,
+        bgBrush = if (style == "outlined") null else bgBrush,
+        bgAlpha = if (style == "text") 0f else bgAlpha,
+        border = border,
+        elevation = elevationDp.dp,
         widthMode = widthMode,
-        widthDp = widthDp,
-        widthFraction = widthFraction,
         heightMode = heightMode,
+        widthDp = widthDp,
         heightDp = heightDp,
-        heightFraction = heightFraction,
-        hAlign = hAlign
+        widthFraction = widthFraction,
+        contentColor = contentColor,
+        borderMode = borderMode
     )
 }
 
 
-private fun Modifier.topBottomBorder(color: Color, thickness: Dp): Modifier = drawBehind {
-    val sw = thickness.toPx().coerceAtLeast(1f)
-    val yTop = sw / 2f
-    val yBot = size.height - sw / 2f
-    drawLine(color, Offset(0f, yTop), Offset(size.width, yTop), strokeWidth = sw)
-    drawLine(color, Offset(0f, yBot), Offset(size.width, yBot), strokeWidth = sw)
-}
+private fun Modifier.topBottomBorder(width: Dp, color: Color) = this.then(
+    Modifier.drawBehind {
+        val w = width.toPx()
+        // top
+        drawLine(color, start = Offset(0f, 0f + w/2f), end = Offset(size.width, 0f + w/2f), strokeWidth = w)
+        // bottom
+        drawLine(color, start = Offset(0f, size.height - w/2f), end = Offset(size.width, size.height - w/2f), strokeWidth = w)
+    }
+)
 
 /**
  * StyledContainer: applica stile/shape/border/bg/gradient/size/align
  * - NESSUNA animazione (per evitare errori di import nelle prime prove)
  */
 @Composable
-private fun StyledContainer(
+fun StyledContainer(
     cfg: JSONObject?,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     contentPadding: PaddingValues = PaddingValues(0.dp),
-    content: @Composable () -> Unit
+    content: @Composable BoxScope.() -> Unit
 ) {
     val r = resolveContainer(cfg)
 
     var m = modifier
+        .then(
+            when (r.widthMode) {
+                "fill"      -> Modifier.fillMaxWidth()
+                "fixed_dp"  -> Modifier.width(r.widthDp)
+                "fraction"  -> r.widthFraction?.let { Modifier.fillMaxWidth(it) } ?: Modifier
+                else        -> Modifier
+            }
+        )
+        .then(
+            when (r.heightMode) {
+                "fixed_dp"  -> Modifier.height(r.heightDp)
+                else        -> Modifier
+            }
+        )
+        .shadow(if (r.elevation > 0.dp) r.elevation else 0.dp, r.shape, clip = false)
 
-    // Width
-    m = when (r.widthMode) {
-        "fill"     -> m.fillMaxWidth()
-        "fixed_dp" -> m.width(r.widthDp)
-        "fraction" -> m.fillMaxWidth(r.widthFraction)
-        else       -> m // wrap
-    }
-    // Height
-    m = when (r.heightMode) {
-        "fill"     -> m.fillMaxHeight()
-        "fixed_dp" -> m.height(r.heightDp)
-        "fraction" -> m.fillMaxHeight(r.heightFraction)
-        else       -> m
-    }
+    // BorderMode “topBottom” = due linee
+    m = if (r.borderMode == "topBottom" && r.border != null) {
+        m.topBottomBorder(r.border.width, (r.border.brush as? SolidColor)?.value ?: Color.Black)
+    } else m
 
-    // Background (se non text/outlined è già trasparente, ma tenerlo qui è idempotente)
-    m = if (r.brush != null) {
-        m.background(r.brush!!, r.shape)
-    } else {
-        m.background(r.background, r.shape)
-    }
-
-    // Clip alla forma
-    m = m.clip(r.shape)
-
-    // Border completo
-    if (r.borderMode == BorderMode.Full && r.borderWidth > 0.dp) {
-        m = m.border(BorderStroke(r.borderWidth, r.borderColor), r.shape)
-    }
-
-    // Solo linee Top/Bottom
-    if (r.borderMode == BorderMode.TopBottom && r.borderWidth > 0.dp) {
-        m = m.drawBehind {
-            val strokeWidthPx = r.borderWidth.toPx()
-            val yTop = strokeWidthPx / 2f
-            val yBottom = size.height - strokeWidthPx / 2f
-            drawLine(r.borderColor, Offset(0f, yTop), Offset(size.width, yTop), strokeWidth = strokeWidthPx)
-            drawLine(r.borderColor, Offset(0f, yBottom), Offset(size.width, yBottom), strokeWidth = strokeWidthPx)
+    val box = @Composable {
+        CompositionLocalProvider(LocalContentColor provides r.contentColor) {
+            Box(
+                modifier = Modifier
+                    .then(if (r.bgBrush != null && r.bgAlpha > 0f) Modifier.background(r.bgBrush, r.shape).graphicsLayer { alpha = r.bgAlpha } else Modifier)
+                    .then(if (r.border != null && r.borderMode == "full") Modifier.border(r.border, r.shape) else Modifier)
+                    .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+                    .padding(contentPadding),
+                contentAlignment = Alignment.CenterStart,
+                content = content
+            )
         }
     }
 
-    // Elevation “soft” (solo ombra, niente tint)
-    val container = @Composable {
-        Box(m.padding(contentPadding)) { content() }
-    }
-    if (r.elevation > 0.dp) {
-        Surface(tonalElevation = 0.dp, shadowElevation = r.elevation, shape = r.shape, color = Color.Transparent) {
-            container()
-        }
-    } else {
-        container()
-    }
+    // Se lo shape è non-zero e c’è bg/border conviene ritagliare
+    Surface(
+        color = Color.Transparent,
+        shape = r.shape,
+        content = { box() },
+        modifier = m
+    )
 }
 
 
@@ -2515,7 +2701,7 @@ private fun CardInspectorPanel(working: JSONObject, onChange: () -> Unit) {
  * ========================================================= */
 
 @Composable
-private fun ContainerEditorSection(
+fun ContainerEditorSection(
     owner: JSONObject,
     key: String = "container",
     title: String = "Contenitore",
@@ -2523,33 +2709,17 @@ private fun ContainerEditorSection(
 ) {
     Divider()
     Text(title, style = MaterialTheme.typography.titleSmall)
-
     var enabled by remember { mutableStateOf(owner.optJSONObject(key) != null) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Switch(checked = enabled, onCheckedChange = {
             enabled = it
             if (it) owner.put(key, owner.optJSONObject(key) ?: JSONObject().apply {
-                // default richiesti: outlined + bordo nero + rounded
-                put("style","outlined")
-                put("borderMode","full")
-                put("borderColor","#000000")
-                put("borderWidth",1)
-                put("shape","rounded")
-                put("corner",16)
-                put("alpha",1.0)
-                put("widthMode","wrap")
-                put("heightMode","wrap")
-                put("hAlign","start")
-                put("gradient", JSONObject().apply {
-                    put("colors", JSONArray().put("primary")) // solo color1 → no gradient
-                    put("direction","horizontal")
-                })
+                put("style","surface"); put("corner", 12); put("borderMode","none")
             }) else owner.remove(key)
             onChange()
         })
         Spacer(Modifier.width(8.dp)); Text("Abilita stile contenitore")
     }
-
     owner.optJSONObject(key)?.let { c ->
         ContainerInspectorPanel(c, onChange)
     }
@@ -2558,83 +2728,97 @@ private fun ContainerEditorSection(
 @Composable
 private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit) {
     // Style
-    var style by remember { mutableStateOf(container.optString("style","outlined")) }
+    var style by remember { mutableStateOf(container.optString("style","surface")) }
     ExposedDropdown(
         value = style, label = "style",
         options = listOf("text","outlined","tonal","primary","surface")
     ) { sel -> style = sel; container.put("style", sel); onChange() }
 
-    // CustomColor (ruoli o hex) – opzionale
+    // N.B. Se vuoi togliere “tint”, commenta il blocco seguente:
+    var tint by remember { mutableStateOf(container.optString("tint","default")) }
+    ExposedDropdown(
+        value = tint, label = "tint",
+        options = listOf("default","success","warning","error")
+    ) { sel -> tint = sel; container.put("tint", sel); onChange() }
+
+    // CustomColor (hex/ruoli)
     val customColor = remember { mutableStateOf(container.optString("customColor","")) }
-    NamedColorPickerPlus(
-        current = customColor.value,
-        label = "customColor (palette/ruoli)",
-        allowRoles = true
-    ) { hex ->
+    NamedColorPickerPlus(current = customColor.value, label = "customColor (palette/ruoli)", allowRoles = true) { hex ->
         customColor.value = hex
         if (hex.isBlank()) container.remove("customColor") else container.put("customColor", hex)
         onChange()
     }
 
-    // Forma / corner
+    // Forma / corner (dropdown)
     var shape by remember { mutableStateOf(container.optString("shape","rounded")) }
     ExposedDropdown(
         value = shape, label = "shape",
         options = listOf("rounded","pill","cut")
     ) { sel -> shape = sel; container.put("shape", sel); onChange() }
 
-    var corner by remember { mutableStateOf(container.optDouble("corner", 16.0).toInt().toString()) }
+    var cornerOpt by remember { mutableStateOf(container.optDouble("corner",12.0).toInt().toString()) }
     ExposedDropdown(
-        value = corner,
-        label = "corner (dp)",
-        options = listOf("0","4","8","12","16","20","24","28","32")
+        value = cornerOpt, label = "corner (dp)",
+        options = listOf("0","4","8","12","16","20","24","32")
     ) { sel ->
-        corner = sel
+        cornerOpt = sel
         container.put("corner", sel.toDouble())
         onChange()
     }
 
-    // Elevation (a tendina)
-    var elev by remember { mutableStateOf(container.optDouble("elevation", 0.0).toInt().toString()) }
+    // Elevation (dropdown)
+    var elevOpt by remember { mutableStateOf((container.optDouble("elevationDp", if (style in listOf("surface","primary","tonal")) 1.0 else 0.0)).toInt().toString()) }
     ExposedDropdown(
-        value = elev, label = "elevation (dp)",
-        options = listOf("0","1","2","4","6","8","12","16","24")
-    ) { sel -> elev = sel; container.put("elevation", sel.toDouble()); onChange() }
-
-    // Border mode + thickness + color
-    var bm by remember { mutableStateOf(container.optString("borderMode","full")) }
-    ExposedDropdown(
-        value = bm, label = "borderMode",
-        options = listOf("none","full","top_bottom")
-    ) { sel -> bm = sel; container.put("borderMode", sel); onChange() }
-
-    var bw by remember { mutableStateOf(container.optDouble("borderWidth", if (style=="outlined") 1.0 else 0.0).toInt().toString()) }
-    ExposedDropdown(
-        value = bw, label = "border thickness (dp)",
-        options = listOf("0","1","2","3","4","6")
-    ) { sel -> bw = sel; container.put("borderWidth", sel.toDouble()); onChange() }
-
-    val bcol = remember { mutableStateOf(container.optString("borderColor", "#000000")) }
-    NamedColorPickerPlus(
-        current = bcol.value,
-        label = "border color",
-        allowRoles = true
-    ) { hex ->
-        bcol.value = hex
-        container.put("borderColor", hex)
+        value = elevOpt, label = "elevation (dp)",
+        options = listOf("0","1","2","3","4","6","8","12","16")
+    ) { sel ->
+        elevOpt = sel
+        if (sel == "0") container.remove("elevationDp") else container.put("elevationDp", sel.toDouble())
         onChange()
     }
 
-    // --- Larghezza / Altezza (a tendina) ---
+    // Bordo
+    var borderMode by remember { mutableStateOf(container.optString("borderMode", if (style=="outlined") "full" else "none")) }
+    ExposedDropdown(
+        value = borderMode,
+        label = "borderMode",
+        options = listOf("none","full","topBottom")
+    ) { sel ->
+        borderMode = sel
+        container.put("borderMode", sel)
+        onChange()
+    }
+
+    var borderTh by remember { mutableStateOf(container.optDouble("borderThicknessDp", if (borderMode!="none") 1.0 else 0.0).toInt().toString()) }
+    ExposedDropdown(
+        value = borderTh, label = "borderThickness (dp)",
+        options = listOf("0","1","2","3","4","6","8")
+    ) { sel ->
+        borderTh = sel
+        if (sel == "0") container.remove("borderThicknessDp") else container.put("borderThicknessDp", sel.toDouble())
+        onChange()
+    }
+
+    val borderColor = remember { mutableStateOf(container.optString("borderColor","")) }
+    NamedColorPickerPlus(current = borderColor.value, label = "borderColor", allowRoles = true) { hex ->
+        borderColor.value = hex
+        if (hex.isBlank()) container.remove("borderColor") else container.put("borderColor", hex)
+        onChange()
+    }
+
+    // Dimensioni
     var widthMode by remember { mutableStateOf(container.optString("widthMode","wrap")) }
     ExposedDropdown(
         value = widthMode, label = "width",
         options = listOf("wrap","fill","fixed_dp","fraction")
-    ) { sel -> widthMode = sel; container.put("widthMode", sel); onChange() }
-
+    ) { sel ->
+        widthMode = sel
+        container.put("widthMode", sel)
+        onChange()
+    }
     when (widthMode) {
         "fixed_dp" -> {
-            var w by remember { mutableStateOf(container.optDouble("widthDp", 160.0).toInt().toString()) }
+            var w by remember { mutableStateOf(container.optDouble("widthDp", 160.0).toInt().toString()) } // default 160
             ExposedDropdown(
                 value = w, label = "width (dp)",
                 options = listOf("120","160","200","240","280","320","360","400")
@@ -2654,7 +2838,6 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         value = heightMode, label = "height",
         options = listOf("wrap","fixed_dp")
     ) { sel -> heightMode = sel; container.put("heightMode", sel); onChange() }
-
     if (heightMode == "fixed_dp") {
         var h by remember { mutableStateOf(container.optDouble("heightDp", 48.0).toInt().toString()) }
         ExposedDropdown(
@@ -2662,58 +2845,6 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
             options = listOf("24","32","40","48","56","64","96","128","160","200")
         ) { sel -> h = sel; container.put("heightDp", sel.toDouble()); onChange() }
     }
-
-    // Allineamento orizzontale (utile nei layout a colonna)
-    var align by remember { mutableStateOf(container.optString("hAlign","start")) }
-    ExposedDropdown(
-        value = align, label = "horizontal alignment",
-        options = listOf("start","center","end")
-    ) { sel -> align = sel; container.put("hAlign", sel); onChange() }
-
-    // Opacità sfondo (alpha)
-    var alphaOpt by remember { mutableStateOf((container.optDouble("alpha",1.0)).toString()) }
-    ExposedDropdown(
-        value = alphaOpt, label = "opacity (alpha)",
-        options = listOf("1.0","0.9","0.8","0.7","0.6","0.5","0.4","0.3","0.2","0.1")
-    ) { sel -> alphaOpt = sel; container.put("alpha", sel.toDouble()); onChange() }
-
-    // Gradient – sempre visibile, 2° colore opzionale
-    Divider(); Text("Gradient (opz.)", style = MaterialTheme.typography.titleSmall)
-    val g = container.optJSONObject("gradient") ?: JSONObject().also {
-        it.put("colors", JSONArray().put("primary")) // solo colore 1 di default
-        it.put("direction","horizontal")
-        container.put("gradient", it)
-    }
-    val colorsArr = g.optJSONArray("colors")!!
-    // Colore 1
-    val c1 = remember { mutableStateOf(colorsArr.optString(0, "primary")) }
-    NamedColorPickerPlus(current = c1.value, label = "gradient color 1", allowRoles = true) { hex ->
-        c1.value = hex
-        if (colorsArr.length() == 0) colorsArr.put(hex) else colorsArr.put(0, hex)
-        onChange()
-    }
-    // Colore 2 (opzionale; se vuoto => nessun gradient)
-    val c2 = remember { mutableStateOf(colorsArr.optString(1, "")) }
-    NamedColorPickerPlus(current = c2.value, label = "gradient color 2 (opz.)", allowRoles = true) { hex ->
-        c2.value = hex
-        if (hex.isBlank()) {
-            if (colorsArr.length() > 1) {
-                // rimuovi il 2° colore → torna colore singolo
-                val rest = JSONArray()
-                rest.put(colorsArr.optString(0))
-                g.put("colors", rest)
-            }
-        } else {
-            if (colorsArr.length() < 2) colorsArr.put(hex) else colorsArr.put(1, hex)
-        }
-        onChange()
-    }
-    // Direzione
-    var dir by remember { mutableStateOf(g.optString("direction","horizontal")) }
-    ExposedDropdown(
-        value = dir, label = "gradient direction",
-        options = listOf("horizontal","vertical")
-    ) { sel -> dir = sel; g.put("direction", sel); onChange() }
 }
 
 /* =========================================================
@@ -3207,11 +3338,10 @@ private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
  * HELPERS: mapping, pickers, utils
  * ========================================================= */
 
-@Composable
-private fun mapTextAlign(key: String): TextAlign = when (key) {
+private fun mapTextAlign(v: String?): TextAlign = when (v?.lowercase()) {
     "center" -> TextAlign.Center
-    "end" -> TextAlign.End
-    else -> TextAlign.Start
+    "end"    -> TextAlign.End
+    else     -> TextAlign.Start
 }
 
 private fun sizeModifier(size: String): Modifier = when (size) {
@@ -3530,44 +3660,20 @@ private fun NamedIconEx(name: String?, contentDescription: String?) {
     if (image != null) Icon(image, contentDescription) else Text(".")
 }
 
-/* ---- Color parsing / pickers ---- */
 
-@Composable
-private fun parseColorOrRole(raw: String?): Color? {
-    val v = raw?.trim().orEmpty()
-    if (v.isEmpty()) return null
-    val cs = MaterialTheme.colorScheme
-    return when (v.lowercase()) {
-        // ruoli Material 3 più comuni (aggiungine altri se ti servono)
-        "primary" -> cs.primary
-        "onprimary" -> cs.onPrimary
-        "secondary" -> cs.secondary
-        "onsecondary" -> cs.onSecondary
-        "tertiary" -> cs.tertiary
-        "ontertiary" -> cs.onTertiary
-        "surface" -> cs.surface
-        "onsurface" -> cs.onSurface
-        "surfacevariant" -> cs.surfaceVariant
-        "onsurfacevariant" -> cs.onSurfaceVariant
-        "background" -> cs.background
-        "onbackground" -> cs.onBackground
-        "error" -> cs.error
-        "onerror" -> cs.onError
-        "outline" -> cs.outline
-        "outlinevariant" -> cs.outlineVariant
-        "inverseprimary" -> cs.inversePrimary
-        "inverseonsurface" -> cs.inverseOnSurface
-        "scrim" -> cs.scrim
-        else -> {
-            try {
-                val str = if (v.startsWith("#")) v else "#$v"
-                Color(AndroidColor.parseColor(str))
-            } catch (_: IllegalArgumentException) {
-                null
-            }
-        }
+/** Hex (#RRGGBB o #AARRGGBB) -> Color; per “ruoli” restituisce null e scatterà il fallback. */
+private fun parseColorOrRole(s: String?): Color? {
+    val v = s?.trim().orEmpty()
+    if (v.isBlank()) return null
+    if (v.startsWith("#")) {
+        return try {
+            val argb = android.graphics.Color.parseColor(v)
+            Color(argb)
+        } catch (_: Throwable) { null }
     }
+    return null
 }
+
 
 private val NAMED_SWATCHES = linkedMapOf(
     // Neutri
@@ -3654,12 +3760,11 @@ private fun NamedColorPickerPlus(
     }
 }
 
-@Composable
-private fun bestOnColor(bg: Color): Color =
-    if (luminance(bg) < 0.5) Color.White else Color.Black
-/* =========================================================
- * JSON utils
- * ========================================================= */
+private fun bestOnColor(bg: Color): Color {
+    val r = bg.red; val g = bg.green; val b = bg.blue
+    val yiq = (0.299*r + 0.587*g + 0.114*b)
+    return if (yiq > 0.5f) Color.Black else Color.White
+}
 
 private fun collectMenus(root: JSONObject): Map<String, JSONArray> {
     val map = mutableMapOf<String, JSONArray>()
@@ -3916,43 +4021,24 @@ private fun newList() = JSONObject(
  * TEXT STYLE OVERRIDES
  * ========================================================= */
 
-@Composable
-private fun applyTextStyleOverrides(
-    base: TextStyle,
-    node: JSONObject
-): TextStyle {
+/** Applica override dal JSON al TextStyle base */
+private fun applyTextStyleOverrides(base: TextStyle, overrides: JSONObject): TextStyle {
+    var s = base
     // size
-    val sizeSp = node.optDouble("sizeSp", base.fontSize.value.toDouble()).toFloat()
-
+    overrides.optDouble("textSizeSp", Double.NaN).takeIf { !it.isNaN() }?.let {
+        s = s.copy(fontSize = it.toFloat().sp)
+    }
     // weight
-    val weight = when (node.optString("weight","normal").lowercase()) {
-        "medium"    -> FontWeight.Medium
-        "semibold"  -> FontWeight.SemiBold
-        "bold"      -> FontWeight.Bold
-        else        -> FontWeight.Normal
+    parseFontWeight(overrides.optString("fontWeight", "").ifBlank { null })?.let {
+        s = s.copy(fontWeight = it)
     }
-
-    // font family
-    val fontKey = node.optString("font","").takeIf { it.isNotBlank() }
-    val family  = resolveFontFamilyRes(fontKey)
-
-    // align
-    val align = when (node.optString("align","start").lowercase()) {
-        "center" -> TextAlign.Center
-        "end"    -> TextAlign.End
-        else     -> TextAlign.Start
+    // family
+    resolveFontFamily(overrides.optString("fontFamily", "").ifBlank { null })?.let {
+        s = s.copy(fontFamily = it)
     }
-
-    // text color: se non impostato, lascio quello di base o LocalContentColor
-    val colorFromNode = node.optString("textColor","")
-    val color = parseColorOrRole(colorFromNode)
-        ?: (if (base.color != Color.Unspecified) base.color else LocalContentColor.current)
-
-    return base.copy(
-        fontSize   = sizeSp.sp,
-        fontWeight = weight,
-        fontFamily = family ?: base.fontFamily,
-        textAlign  = align,
-        color      = color
-    )
+    return s
 }
+
+/** Overload per compatibilità con chiamate esistenti (JSONObject, TextStyle) */
+private fun applyTextStyleOverrides(overrides: JSONObject, base: TextStyle): TextStyle =
+    applyTextStyleOverrides(base, overrides)
