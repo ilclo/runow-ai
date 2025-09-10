@@ -96,6 +96,13 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
+// Bridge: risolve una FontFamily a partire dalla chiave salvata nel JSON
+@Composable
+private fun resolveFontFamilyRes(key: String?): FontFamily? {
+    if (key.isNullOrBlank()) return null
+    return FontCatalog.resolveFontFamily(key)
+}
+
 @Composable
 private fun TextInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     Text("Text – Proprietà", style = MaterialTheme.typography.titleMedium)
@@ -143,7 +150,7 @@ private fun TextInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     ExposedDropdown(
         value = if (fontFamily.isBlank()) "(default)" else fontFamily,
         label = "fontFamily",
-        options = FontCatalog.FONT_FAMILY_OPTIONS
+        options = .FONT_FAMILY_OPTIONS
     ) { sel ->
         val v = if (sel == "(default)") "" else sel
         fontFamily = v
@@ -180,158 +187,6 @@ private fun TextInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     }
 }
 
-
-// --- CATALOGO FONT DA res/font ---
-// Chiave -> famiglia con varianti (regular/medium/semibold/bold/italic se presenti)
-private object FontCatalog {
-    // Opzioni mostrabili nel pannello (prima riga = "nessun override")
-    val FONT_FAMILY_OPTIONS = listOf(
-        "(default)",
-        "inter","manrope","mulish","poppins","rubik","space_grotesk","urbanist",
-        "ibm_plex_sans","ibm_plex_mono","jetbrains_mono",
-        "sans","serif","monospace","cursive"
-    )
-
-    // Famiglia completa (usa le varianti disponibili)
-    fun resolveFontFamily(key: String): FontFamily? = when (key) {
-        "inter" -> FontFamily(
-            Font(ai.runow.R.font.inter_regular,  FontWeight.Normal,    FontStyle.Normal),
-            Font(ai.runow.R.font.inter_medium,   FontWeight.Medium,    FontStyle.Normal),
-            Font(ai.runow.R.font.inter_semibold, FontWeight.SemiBold,  FontStyle.Normal),
-            Font(ai.runow.R.font.inter_bold,     FontWeight.Bold,      FontStyle.Normal),
-            Font(ai.runow.R.font.inter_italic,   FontWeight.Normal,    FontStyle.Italic),
-        )
-        "manrope" -> FontFamily(
-            Font(ai.runow.R.font.manrope_regular,  FontWeight.Normal),
-            Font(ai.runow.R.font.manrope_medium,   FontWeight.Medium),
-            Font(ai.runow.R.font.manrope_semibold, FontWeight.SemiBold),
-            Font(ai.runow.R.font.manrope_bold,     FontWeight.Bold),
-        )
-        "mulish" -> FontFamily(
-            Font(ai.runow.R.font.mulish_regular,  FontWeight.Normal,   FontStyle.Normal),
-            Font(ai.runow.R.font.mulish_medium,   FontWeight.Medium,   FontStyle.Normal),
-            Font(ai.runow.R.font.mulish_semibold, FontWeight.SemiBold, FontStyle.Normal),
-            Font(ai.runow.R.font.mulish_bold,     FontWeight.Bold,     FontStyle.Normal),
-            Font(ai.runow.R.font.mulish_italic,   FontWeight.Normal,   FontStyle.Italic),
-        )
-        "poppins" -> FontFamily(
-            Font(ai.runow.R.font.poppins_regular,  FontWeight.Normal,   FontStyle.Normal),
-            Font(ai.runow.R.font.poppins_medium,   FontWeight.Medium,   FontStyle.Normal),
-            Font(ai.runow.R.font.poppins_semibold, FontWeight.SemiBold, FontStyle.Normal),
-            Font(ai.runow.R.font.poppins_bold,     FontWeight.Bold,     FontStyle.Normal),
-            Font(ai.runow.R.font.poppins_italic,   FontWeight.Normal,   FontStyle.Italic),
-        )
-        "rubik" -> FontFamily(
-            Font(ai.runow.R.font.rubik_regular,  FontWeight.Normal,   FontStyle.Normal),
-            Font(ai.runow.R.font.rubik_medium,   FontWeight.Medium,   FontStyle.Normal),
-            Font(ai.runow.R.font.rubik_semibold, FontWeight.SemiBold, FontStyle.Normal),
-            Font(ai.runow.R.font.rubik_bold,     FontWeight.Bold,     FontStyle.Normal),
-            Font(ai.runow.R.font.rubik_italic,   FontWeight.Normal,   FontStyle.Italic),
-        )
-        "space_grotesk" -> FontFamily(
-            Font(ai.runow.R.font.space_grotesk_regular,  FontWeight.Normal),
-            Font(ai.runow.R.font.space_grotesk_medium,   FontWeight.Medium),
-            Font(ai.runow.R.font.space_grotesk_semibold, FontWeight.SemiBold),
-            Font(ai.runow.R.font.space_grotesk_bold,     FontWeight.Bold),
-        )
-        "urbanist" -> FontFamily(
-            Font(ai.runow.R.font.urbanist_regular,  FontWeight.Normal,   FontStyle.Normal),
-            Font(ai.runow.R.font.urbanist_medium,   FontWeight.Medium,   FontStyle.Normal),
-            Font(ai.runow.R.font.urbanist_semibold, FontWeight.SemiBold, FontStyle.Normal),
-            Font(ai.runow.R.font.urbanist_bold,     FontWeight.Bold,     FontStyle.Normal),
-            Font(ai.runow.R.font.urbanist_italic,   FontWeight.Normal,   FontStyle.Italic),
-        )
-        "ibm_plex_sans" -> FontFamily(
-            Font(ai.runow.R.font.ibm_plex_sans_regular,  FontWeight.Normal,   FontStyle.Normal),
-            Font(ai.runow.R.font.ibm_plex_sans_medium,   FontWeight.Medium,   FontStyle.Normal),
-            Font(ai.runow.R.font.ibm_plex_sans_semibold, FontWeight.SemiBold, FontStyle.Normal),
-            Font(ai.runow.R.font.ibm_plex_sans_bold,     FontWeight.Bold,     FontStyle.Normal),
-            Font(ai.runow.R.font.ibm_plex_sans_italic,   FontWeight.Normal,   FontStyle.Italic),
-        )
-        "ibm_plex_mono" -> FontFamily(
-            Font(ai.runow.R.font.ibm_plex_mono_regular, FontWeight.Normal,   FontStyle.Normal),
-            Font(ai.runow.R.font.ibm_plex_mono_medium,  FontWeight.Medium,   FontStyle.Normal),
-            Font(ai.runow.R.font.ibm_plex_mono_bold,    FontWeight.Bold,     FontStyle.Normal),
-            Font(ai.runow.R.font.ibm_plex_mono_italic,  FontWeight.Normal,   FontStyle.Italic),
-        )
-        "jetbrains_mono" -> FontFamily(
-            Font(ai.runow.R.font.jetbrains_mono_regular, FontWeight.Normal, FontStyle.Normal),
-            Font(ai.runow.R.font.jetbrains_mono_medium,  FontWeight.Medium, FontStyle.Normal),
-            Font(ai.runow.R.font.jetbrains_mono_bold,    FontWeight.Bold,   FontStyle.Normal),
-            Font(ai.runow.R.font.jetbrains_mono_italic,  FontWeight.Normal, FontStyle.Italic),
-        )
-        "sans"       -> FontFamily.SansSerif
-        "serif"      -> FontFamily.Serif
-        "monospace"  -> FontFamily.Monospace
-        "cursive"    -> FontFamily.Cursive
-        else -> null
-    }
-
-    // Variante "puntuale" (singolo file): es. "res:inter_regular"
-    fun resolveFontFamilyRes(resKey: String): FontFamily? {
-        val k = resKey.removePrefix("res:").lowercase()
-        val resId = when (k) {
-            // inter
-            "inter_regular"   -> ai.runow.R.font.inter_regular
-            "inter_medium"    -> ai.runow.R.font.inter_medium
-            "inter_semibold"  -> ai.runow.R.font.inter_semibold
-            "inter_bold"      -> ai.runow.R.font.inter_bold
-            "inter_italic"    -> ai.runow.R.font.inter_italic
-            // manrope
-            "manrope_regular"   -> ai.runow.R.font.manrope_regular
-            "manrope_medium"    -> ai.runow.R.font.manrope_medium
-            "manrope_semibold"  -> ai.runow.R.font.manrope_semibold
-            "manrope_bold"      -> ai.runow.R.font.manrope_bold
-            // mulish
-            "mulish_regular"   -> ai.runow.R.font.mulish_regular
-            "mulish_medium"    -> ai.runow.R.font.mulish_medium
-            "mulish_semibold"  -> ai.runow.R.font.mulish_semibold
-            "mulish_bold"      -> ai.runow.R.font.mulish_bold
-            "mulish_italic"    -> ai.runow.R.font.mulish_italic
-            // poppins
-            "poppins_regular"  -> ai.runow.R.font.poppins_regular
-            "poppins_medium"   -> ai.runow.R.font.poppins_medium
-            "poppins_semibold" -> ai.runow.R.font.poppins_semibold
-            "poppins_bold"     -> ai.runow.R.font.poppins_bold
-            "poppins_italic"   -> ai.runow.R.font.poppins_italic
-            // rubik
-            "rubik_regular"    -> ai.runow.R.font.rubik_regular
-            "rubik_medium"     -> ai.runow.R.font.rubik_medium
-            "rubik_semibold"   -> ai.runow.R.font.rubik_semibold
-            "rubik_bold"       -> ai.runow.R.font.rubik_bold
-            "rubik_italic"     -> ai.runow.R.font.rubik_italic
-            // space grotesk
-            "space_grotesk_regular"  -> ai.runow.R.font.space_grotesk_regular
-            "space_grotesk_medium"   -> ai.runow.R.font.space_grotesk_medium
-            "space_grotesk_semibold" -> ai.runow.R.font.space_grotesk_semibold
-            "space_grotesk_bold"     -> ai.runow.R.font.space_grotesk_bold
-            // urbanist
-            "urbanist_regular"  -> ai.runow.R.font.urbanist_regular
-            "urbanist_medium"   -> ai.runow.R.font.urbanist_medium
-            "urbanist_semibold" -> ai.runow.R.font.urbanist_semibold
-            "urbanist_bold"     -> ai.runow.R.font.urbanist_bold
-            "urbanist_italic"   -> ai.runow.R.font.urbanist_italic
-            // ibm plex sans
-            "ibm_plex_sans_regular"   -> ai.runow.R.font.ibm_plex_sans_regular
-            "ibm_plex_sans_medium"    -> ai.runow.R.font.ibm_plex_sans_medium
-            "ibm_plex_sans_semibold"  -> ai.runow.R.font.ibm_plex_sans_semibold
-            "ibm_plex_sans_bold"      -> ai.runow.R.font.ibm_plex_sans_bold
-            "ibm_plex_sans_italic"    -> ai.runow.R.font.ibm_plex_sans_italic
-            // ibm plex mono
-            "ibm_plex_mono_regular"   -> ai.runow.R.font.ibm_plex_mono_regular
-            "ibm_plex_mono_medium"    -> ai.runow.R.font.ibm_plex_mono_medium
-            "ibm_plex_mono_bold"      -> ai.runow.R.font.ibm_plex_mono_bold
-            "ibm_plex_mono_italic"    -> ai.runow.R.font.ibm_plex_mono_italic
-            // jetbrains mono
-            "jetbrains_mono_regular"  -> ai.runow.R.font.jetbrains_mono_regular
-            "jetbrains_mono_medium"   -> ai.runow.R.font.jetbrains_mono_medium
-            "jetbrains_mono_bold"     -> ai.runow.R.font.jetbrains_mono_bold
-            "jetbrains_mono_italic"   -> ai.runow.R.font.jetbrains_mono_italic
-            else -> 0
-        }
-        return if (resId != 0) FontFamily(Font(resId)) else null
-    }
-}
 
 
 
@@ -3274,89 +3129,17 @@ private fun ImageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
 }
 
 @Composable
-private fun SectionHeaderInspectorPanel(working: JSONObject, onChange: () -> Unit) {
-    Text("SectionHeader – Proprietà", style = MaterialTheme.typography.titleMedium)
+private fun SectionHeaderInspectorPanel(node: JSONObject) {
+    val textNode = node.optJSONObject("text") ?: JSONObject()
+    val base = MaterialTheme.typography.titleMedium  // base neutra
+    val style = applyTextStyleOverrides(base, textNode)
 
-    val title = remember { mutableStateOf(working.optString("title","")) }
-    OutlinedTextField(
-        value = title.value,
-        onValueChange = { title.value = it; working.put("title", it); onChange() },
-        label = { Text("Titolo") }
-    )
-
-    val subtitle = remember { mutableStateOf(working.optString("subtitle","")) }
-    OutlinedTextField(
-        value = subtitle.value,
-        onValueChange = { subtitle.value = it; working.put("subtitle", it); onChange() },
-        label = { Text("Sottotitolo (opz.)") }
-    )
-
-    // niente style menù a tendina per il testo
-
-    var align by remember { mutableStateOf(working.optString("align","start")) }
-    ExposedDropdown(
-        value = align, label = "align",
-        options = listOf("start","center","end")
-    ) { sel -> align = sel; working.put("align", sel); onChange() }
-
-    val textSize = remember {
-        mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() })
-    }
-    ExposedDropdown(
-        value = if (textSize.value.isBlank()) "(default)" else textSize.value,
-        label = "textSize (sp)",
-        options = listOf("(default)","8","9","10","11","12","14","16","18","20","22","24","28","32","36")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        textSize.value = v
-        if (v.isBlank()) working.remove("textSizeSp") else working.put("textSizeSp", v.toDouble())
-        onChange()
-    }
-
-    var fontWeight by remember { mutableStateOf(working.optString("fontWeight","")) }
-    ExposedDropdown(
-        value = if (fontWeight.isBlank()) "(default)" else fontWeight,
-        label = "fontWeight",
-        options = listOf("(default)","w300","w400","w500","w600","w700")
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        fontWeight = v
-        if (v.isBlank()) working.remove("fontWeight") else working.put("fontWeight", v)
-        onChange()
-    }
-
-    var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) }
-    ExposedDropdown(
-        value = if (fontFamily.isBlank()) "(default)" else fontFamily,
-        label = "fontFamily",
-        options = FontCatalog.FONT_FAMILY_OPTIONS
-    ) { sel ->
-        val v = if (sel == "(default)") "" else sel
-        fontFamily = v
-        if (v.isBlank()) working.remove("fontFamily") else working.put("fontFamily", v)
-        onChange()
-    }
-
-    val fontRes = remember { mutableStateOf(working.optString("fontRes","")) }
-    OutlinedTextField(
-        value = fontRes.value,
-        onValueChange = { v ->
-            fontRes.value = v
-            if (v.isBlank()) working.remove("fontRes") else working.put("fontRes", v)
-            onChange()
-        },
-        label = { Text("fontRes (es. res:inter_semibold)") },
-        placeholder = { Text("res:<nome_ttf_senza .ttf>") }
-    )
-
-    val textColor = remember { mutableStateOf(working.optString("textColor","")) }
-    NamedColorPickerPlus(
-        current = textColor.value,
-        label = "textColor"
-    ) { hex ->
-        textColor.value = hex
-        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
-        onChange()
+    StyledContainer(cfg = node.optJSONObject("container")) {
+        Text(
+            text  = textNode.optString("text", "Section header"),
+            style = style,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -4143,52 +3926,43 @@ private fun newList() = JSONObject(
  * TEXT STYLE OVERRIDES
  * ========================================================= */
 
-// Applica override espliciti di testo SENZA usare "style" predefiniti Material
-private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
-    var st = base
+@Composable
+private fun applyTextStyleOverrides(
+    base: TextStyle,
+    node: JSONObject
+): TextStyle {
+    // size
+    val sizeSp = node.optDouble("sizeSp", base.fontSize.value.toDouble()).toFloat()
 
-    // Colore testo
-    node.optString("textColor").takeIf { it.isNotBlank() }?.let { hex ->
-        parseColorOrRole(hex)?.let { c -> st = st.copy(color = c) }
+    // weight
+    val weight = when (node.optString("weight","normal").lowercase()) {
+        "medium"    -> FontWeight.Medium
+        "semibold"  -> FontWeight.SemiBold
+        "bold"      -> FontWeight.Bold
+        else        -> FontWeight.Normal
     }
 
-    // Dimensione (sp)
-    node.optDouble("textSizeSp", Double.NaN).let { v ->
-        if (!v.isNaN()) st = st.copy(fontSize = v.sp)
+    // font family
+    val fontKey = node.optString("font","").takeIf { it.isNotBlank() }
+    val family  = resolveFontFamilyRes(fontKey)
+
+    // align
+    val align = when (node.optString("align","start").lowercase()) {
+        "center" -> TextAlign.Center
+        "end"    -> TextAlign.End
+        else     -> TextAlign.Start
     }
 
-    // Spaziatura lettere (sp)
-    node.optDouble("letterSpacingSp", Double.NaN).let { v ->
-        if (!v.isNaN()) st = st.copy(letterSpacing = v.sp)
-    }
+    // text color: se non impostato, lascio quello di base o LocalContentColor
+    val colorFromNode = node.optString("textColor","")
+    val color = parseColorOrRole(colorFromNode)
+        ?: (if (base.color != Color.Unspecified) base.color else LocalContentColor.current)
 
-    // Interlinea (sp)
-    node.optDouble("lineHeightSp", Double.NaN).let { v ->
-        if (!v.isNaN()) st = st.copy(lineHeight = v.sp)
-    }
-
-    // Peso
-    node.optString("fontWeight").takeIf { it.isNotBlank() }?.let { w ->
-        val fw = when (w.lowercase()) {
-            "w300", "light"     -> FontWeight.Light
-            "w400", "regular"   -> FontWeight.Normal
-            "w500", "medium"    -> FontWeight.Medium
-            "w600", "semibold"  -> FontWeight.SemiBold
-            "w700", "bold"      -> FontWeight.Bold
-            else -> null
-        }
-        fw?.let { st = st.copy(fontWeight = it) }
-    }
-
-    // Corsivo
-    val italic = node.optBoolean("italic", false)
-    st = st.copy(fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal)
-
-    // Famiglia font: priorità a "fontRes" (singolo file), poi "fontFamily" (famiglia)
-    val ff = node.optString("fontRes").takeIf { it.isNotBlank() }?.let { FontCatalog.resolveFontFamilyRes(it) }
-        ?: node.optString("fontFamily").takeIf { it.isNotBlank() }?.let { FontCatalog.resolveFontFamily(it) }
-
-    if (ff != null) st = st.copy(fontFamily = ff)
-
-    return st
+    return base.copy(
+        fontSize   = sizeSp.sp,
+        fontWeight = weight,
+        fontFamily = family ?: base.fontFamily,
+        textAlign  = align,
+        color      = color
+    )
 }
