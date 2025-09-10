@@ -4,8 +4,6 @@ package ai.runow.ui.renderer
 
 
 import androidx.compose.foundation.shape.RoundedCornerShape
-
-// --- Compose runtime / UI base ---
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -26,66 +24,66 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.draw.*
 // gesture & pointer
 import androidx.compose.ui.input.pointer.pointerInput
+// Animation
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 
-// nested scroll
+// Pointer & nested scroll
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-
-// layout callbacks
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+// Layout callbacks
 import androidx.compose.ui.layout.onGloballyPositioned
-
-// text overflow
+// Text overflow
 import androidx.compose.ui.text.style.TextOverflow
-
-// immagini bitmap
+// Image bitmap utils
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+// Intent flags usati nell'image picker
+import android.content.Intent
+// Shape (evita import doppi "RoundedCornerShape")
+// (se serve) altre shape:
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CutCornerShape
+// Math helpers
+import kotlin.math.round
+import kotlin.math.max
+import kotlin.math.min
 
-// offset per il FAB trascinabile
 import androidx.compose.ui.unit.IntOffset
-
 // shape astratta usata in ResolvedContainer
 import androidx.compose.foundation.shape.CornerBasedShape
-
 // Intent usato nel picker immagini
-import android.content.Intent
-
 // math usato dallo Slider e dallo stepper
-import kotlin.math.round
-import kotlin.math.min
-import kotlin.math.max
-
 // --- Foundation ---
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CutCornerShape
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-
 // --- Material 3 ---
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-
 // --- Activity / back / picker ---
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-
 // --- Android / IO utili ---
 import android.net.Uri
 import android.graphics.BitmapFactory
-
 // --- Immagini / painter ---
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
-
 // --- JSON & coroutines ---
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
 // --- Risorse font del modulo app ---
 import ai.runow.R
 
@@ -107,19 +105,10 @@ fun ExposedDropdown(
     value: String,
     label: String,
     options: List<String>,
-
-    // compat: la maggior parte dei call site usa la lambda finale
-    onSelect: (String) -> Unit = {},
-
-    // ordine tenuto intenzionalmente così: chi usa la trailing lambda continua a funzionare
-    modifier: Modifier = Modifier,
-    onSelect: (String) -> Unit = {},
-    // compat: se hai call site vecchi con 'onValueChange = { }'
-    onValueChange: ((String) -> Unit)? = null
+    modifier: Modifier = Modifier,               // <— prima
+    onSelect: (String) -> Unit                   // <— ultimo, niente duplicati
 ) {
-    val handler: (String) -> Unit = onValueChange ?: onSelect
     var expanded by remember { mutableStateOf(false) }
-
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded },
@@ -127,7 +116,7 @@ fun ExposedDropdown(
     ) {
         OutlinedTextField(
             value = value,
-            onValueChange = {}, // readOnly
+            onValueChange = {},
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
@@ -137,7 +126,7 @@ fun ExposedDropdown(
             options.forEach { opt ->
                 DropdownMenuItem(
                     text = { Text(opt) },
-                    onClick = { handler(opt); expanded = false }
+                    onClick = { onSelect(opt); expanded = false }
                 )
             }
         }
@@ -166,33 +155,22 @@ fun LabeledField(
 fun SegmentedButtons(
     options: List<String>,
     selected: String,
-    modifier: Modifier = Modifier,
-    onSelect: (String) -> Unit
+    modifier: Modifier = Modifier,               // <— prima
+    onSelect: (String) -> Unit                   // <— ultimo
 ) {
     Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        options.forEachIndexed { idx, opt ->
-            val isSel = selected == opt
-            TextButton(
+        options.forEach { opt ->
+            FilterChip(
+                selected = opt == selected,
                 onClick = { onSelect(opt) },
-                colors = ButtonDefaults.textButtonColors(
-                    containerColor = if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
-                    contentColor   = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                ),
-                modifier = Modifier
-                    .weight(1f)
-                    .then(if (idx > 0) Modifier.border(
-                        0.5.dp,
-                        MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                    ) else Modifier)
-            ) { Text(opt) }
+                label = { Text(opt) }
+            )
         }
     }
 }
-
 
 
 // ---------------------------------------------------------------------
@@ -233,15 +211,15 @@ fun ColorRow(
 
 
 
-// Helpers colore
-private fun Color.toHex(): String {
+private fun Color.toHex(withAlpha: Boolean = false): String {
+    val a = (alpha * 255).toInt().coerceIn(0, 255)
     val r = (red   * 255).toInt().coerceIn(0, 255)
     val g = (green * 255).toInt().coerceIn(0, 255)
     val b = (blue  * 255).toInt().coerceIn(0, 255)
-    val a = (alpha * 255).toInt().coerceIn(0, 255)
-    return if (a == 255) "#%02X%02X%02X".format(r,g,b)
-           else "#%02X%02X%02X%02X".format(a,r,g,b)
+    return if (withAlpha) String.format("#%02X%02X%02X%02X", a, r, g, b)
+           else            String.format("#%02X%02X%02X", r, g, b)
 }
+
 
 private fun colorFromHex(hex: String?): Color? {
     if (hex.isNullOrBlank()) return null
@@ -378,14 +356,7 @@ private val FONT_WEIGHT_OPTIONS: List<Pair<String, FontWeight>> = listOf(
 private fun labelOfWeight(w: FontWeight): String =
     FONT_WEIGHT_OPTIONS.firstOrNull { it.second == w }?.first ?: "Normal"
 
-private fun Color.toHex(withAlpha: Boolean = false): String {
-    val a = (alpha * 255).toInt().coerceIn(0, 255)
-    val r = (red   * 255).toInt().coerceIn(0, 255)
-    val g = (green * 255).toInt().coerceIn(0, 255)
-    val b = (blue  * 255).toInt().coerceIn(0, 255)
-    return if (withAlpha) String.format("#%02X%02X%02X%02X", a, r, g, b)
-    else String.format("#%02X%02X%02X", r, g, b)
-}
+
 
 @Composable
 fun SimpleTextInspectorPanel(
