@@ -2,7 +2,6 @@
 
 package ai.runow.ui.renderer
 
-// Compose base
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 
@@ -10,9 +9,65 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import ai.runow.R
+
+import android.net.Uri
+import android.graphics.BitmapFactory
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.foundation.verticalScroll
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+
+import androidx.compose.runtime.saveable.rememberSaveable
+
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
+import androidx.compose.ui.unit.sp
 
 // Compose runtime e UI di base
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
 
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,14 +76,10 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.shape.RoundedCornerShape // se lo usi
 
 // Material3
-import androidx.compose.material3.*
 
 // Icons (se usi frecce/menu ecc.)
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 
 // Grafica & unità
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush       // se usi Brush
 import androidx.compose.ui.unit.*
 
@@ -39,7 +90,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 // UI / draw
-import androidx.compose.ui.draw.clip
 
 
 // Icons (opzionale ma utile per il caret del dropdown)
@@ -47,70 +97,15 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 
 // Color & unit
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 // Testo
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 
 // JSON
 import androidx.compose.foundation.layout.offset
 
 // --- IMPORT NECESSARI ---
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-
-@Composable
-fun ExposedDropdown(
-    label: String,
-    options: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box(modifier) {
-        OutlinedTextField(
-            value = selected,
-            onValueChange = {},      // readOnly
-            readOnly = true,
-            label = { Text(label) },
-            trailingIcon = {
-                IconButton(onClick = { expanded = !expanded }) {
-                    Icon(
-                        imageVector = if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                        contentDescription = null
-                    )
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = true }
-        )
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            options.forEach { opt ->
-                DropdownMenuItem(
-                    text = { Text(opt) },
-                    onClick = {
-                        onSelect(opt)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
 
 
 
@@ -123,6 +118,37 @@ private val DEFAULT_COLOR_SWATCH = listOf(
 // ---------------------------------------------------------------------
 // LabeledField
 // ---------------------------------------------------------------------
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExposedDropdown(
+    value: String,
+    label: String,
+    options: List<String>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }, modifier = modifier) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { opt ->
+                DropdownMenuItem(
+                    text = { Text(opt) },
+                    onClick = { onSelect(opt); expanded = false }
+                )
+            }
+        }
+    }
+}
+
 
 @Composable
 fun SimpleDropdown(
@@ -170,16 +196,13 @@ fun LabeledField(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    Column(modifier = modifier.padding(vertical = 6.dp)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = LocalContentColor.current.copy(alpha = 0.78f)
-        )
+    Column(modifier) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
         Spacer(Modifier.height(6.dp))
         content()
     }
 }
+
 
 // ---------------------------------------------------------------------
 // SegmentedButtons  (UNICA versione: selected / onSelect)
@@ -191,16 +214,30 @@ fun SegmentedButtons(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { opt ->
-            FilterChip(
-                selected = opt == selected,
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp))
+    ) {
+        options.forEachIndexed { idx, opt ->
+            val isSel = selected == opt
+            TextButton(
                 onClick = { onSelect(opt) },
-                label = { Text(opt) }
-            )
+                colors = ButtonDefaults.textButtonColors(
+                    containerColor = if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent,
+                    contentColor   = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (idx > 0) Modifier.border(
+                        0.5.dp,
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    ) else Modifier)
+            ) { Text(opt) }
         }
     }
 }
+
 
 
 // ---------------------------------------------------------------------
@@ -208,54 +245,38 @@ fun SegmentedButtons(
 // ---------------------------------------------------------------------
 @Composable
 fun ColorRow(
-    colors: List<Color>,
-    selected: Color?,
-    onSelect: (Color) -> Unit,
-    modifier: Modifier = Modifier,
-    swatchSize: Dp = 28.dp
+    current: String,
+    onPick: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        colors.forEach { c ->
-            val isSel = selected != null && c.toHex() == selected.toHex()
+    val swatches = listOf(
+        "#000000", "#333333", "#666666", "#999999", "#CCCCCC", "#FFFFFF",
+        "#E53935", "#8E24AA", "#3949AB", "#1E88E5", "#039BE5", "#00897B",
+        "#43A047", "#7CB342", "#FDD835", "#FB8C00"
+    )
+    Row(modifier.horizontalScroll(rememberScrollState())) {
+        swatches.forEach { hex ->
+            val c = colorFromHex(hex) ?: Color.Black
+            val sel = current.equals(hex, ignoreCase = true)
             Box(
                 Modifier
-                    .size(swatchSize)
-                    .clip(CircleShape)
+                    .size(28.dp)
+                    .padding(2.dp)
+                    .clip(RoundedCornerShape(6.dp))
                     .background(c)
                     .border(
-                        width = if (isSel) 3.dp else 1.dp,
-                        color  = if (isSel) MaterialTheme.colorScheme.primary
-                                 else MaterialTheme.colorScheme.outlineVariant,
-                        shape  = CircleShape
+                        2.dp,
+                        if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        RoundedCornerShape(6.dp)
                     )
-                    .clickable { onSelect(c) }
+                    .clickable { onPick(hex) }
             )
+            Spacer(Modifier.width(6.dp))
         }
     }
 }
 
-@Composable
-fun ColorRow(
-    colorHexList: List<String>,
-    selectedHex: String?,
-    onSelectHex: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    swatchSize: Dp = 28.dp
-) {
-    val colors = colorHexList.mapNotNull { colorFromHex(it) }
-    val selected = colorFromHex(selectedHex)
-    ColorRow(
-        colors = colors,
-        selected = selected,
-        onSelect = { onSelectHex(it.toHex()) },
-        modifier = modifier,
-        swatchSize = swatchSize
-    )
-}
+
 
 // Helpers colore
 private fun Color.toHex(): String {
@@ -267,25 +288,9 @@ private fun Color.toHex(): String {
            else "#%02X%02X%02X%02X".format(a,r,g,b)
 }
 
-private fun colorFromHex(s: String?): Color? {
-    if (s.isNullOrBlank()) return null
-    val hex = s.removePrefix("#")
-    return try {
-        when (hex.length) {
-            6 -> Color(
-                hex.substring(0,2).toInt(16),
-                hex.substring(2,4).toInt(16),
-                hex.substring(4,6).toInt(16)
-            )
-            8 -> Color(
-                hex.substring(2,4).toInt(16),
-                hex.substring(4,6).toInt(16),
-                hex.substring(6,8).toInt(16),
-                hex.substring(0,2).toInt(16)
-            )
-            else -> null
-        }
-    } catch (_: Throwable) { null }
+private fun colorFromHex(hex: String?): Color? {
+    if (hex.isNullOrBlank()) return null
+    return try { Color(android.graphics.Color.parseColor(hex)) } catch (_: Exception) { null }
 }
 
 
@@ -324,10 +329,84 @@ private fun fontFamilyFor(name: String?): FontFamily? =
         else -> null
     }
 
-private val FONT_FAMILY_OPTIONS: List<String> =
-    listOf("(default)", "SansSerif", "Serif", "Monospace", "Cursive",
-           "inter", "roboto", "jetbrains_mono") // opzionale: nomi “amichevoli”
+private val FONT_FAMILY_OPTIONS: List<String> = listOf(
+    "(default)",
+    "inter", "poppins", "rubik", "manrope", "mulish", "urbanist",
+    "space_grotesk", "ibm_plex_sans", "ibm_plex_mono", "jetbrains_mono"
+)
 
+private fun fontFamilyFromName(name: String?): FontFamily? {
+    if (name.isNullOrBlank() || name == "(default)") return null
+    return when (name) {
+        "inter" -> FontFamily(
+            Font(R.font.inter_regular, FontWeight.Normal, FontStyle.Normal),
+            Font(R.font.inter_medium,  FontWeight.Medium, FontStyle.Normal),
+            Font(R.font.inter_semibold,FontWeight.SemiBold, FontStyle.Normal),
+            Font(R.font.inter_bold,    FontWeight.Bold,   FontStyle.Normal),
+            Font(R.font.inter_italic,  FontWeight.Normal, FontStyle.Italic)
+        )
+        "poppins" -> FontFamily(
+            Font(R.font.poppins_regular, FontWeight.Normal),
+            Font(R.font.poppins_medium,  FontWeight.Medium),
+            Font(R.font.poppins_semibold,FontWeight.SemiBold),
+            Font(R.font.poppins_bold,    FontWeight.Bold),
+            Font(R.font.poppins_italic,  FontWeight.Normal, FontStyle.Italic)
+        )
+        "rubik" -> FontFamily(
+            Font(R.font.rubik_regular, FontWeight.Normal),
+            Font(R.font.rubik_medium,  FontWeight.Medium),
+            Font(R.font.rubik_semibold,FontWeight.SemiBold),
+            Font(R.font.rubik_bold,    FontWeight.Bold),
+            Font(R.font.rubik_italic,  FontWeight.Normal, FontStyle.Italic)
+        )
+        "manrope" -> FontFamily(
+            Font(R.font.manrope_regular, FontWeight.Normal),
+            Font(R.font.manrope_medium,  FontWeight.Medium),
+            Font(R.font.manrope_semibold,FontWeight.SemiBold),
+            Font(R.font.manrope_bold,    FontWeight.Bold)
+        )
+        "mulish" -> FontFamily(
+            Font(R.font.mulish_regular, FontWeight.Normal),
+            Font(R.font.mulish_medium,  FontWeight.Medium),
+            Font(R.font.mulish_semibold,FontWeight.SemiBold),
+            Font(R.font.mulish_bold,    FontWeight.Bold),
+            Font(R.font.mulish_italic,  FontWeight.Normal, FontStyle.Italic)
+        )
+        "urbanist" -> FontFamily(
+            Font(R.font.urbanist_regular, FontWeight.Normal),
+            Font(R.font.urbanist_medium,  FontWeight.Medium),
+            Font(R.font.urbanist_semibold,FontWeight.SemiBold),
+            Font(R.font.urbanist_bold,    FontWeight.Bold),
+            Font(R.font.urbanist_italic,  FontWeight.Normal, FontStyle.Italic)
+        )
+        "space_grotesk" -> FontFamily(
+            Font(R.font.space_grotesk_regular, FontWeight.Normal),
+            Font(R.font.space_grotesk_medium,  FontWeight.Medium),
+            Font(R.font.space_grotesk_semibold,FontWeight.SemiBold),
+            Font(R.font.space_grotesk_bold,    FontWeight.Bold)
+        )
+        "ibm_plex_sans" -> FontFamily(
+            Font(R.font.ibm_plex_sans_regular, FontWeight.Normal),
+            Font(R.font.ibm_plex_sans_medium,  FontWeight.Medium),
+            Font(R.font.ibm_plex_sans_semibold,FontWeight.SemiBold),
+            Font(R.font.ibm_plex_sans_bold,    FontWeight.Bold),
+            Font(R.font.ibm_plex_sans_italic,  FontWeight.Normal, FontStyle.Italic)
+        )
+        "ibm_plex_mono" -> FontFamily(
+            Font(R.font.ibm_plex_mono_regular, FontWeight.Normal),
+            Font(R.font.ibm_plex_mono_medium,  FontWeight.Medium),
+            Font(R.font.ibm_plex_mono_bold,    FontWeight.Bold),
+            Font(R.font.ibm_plex_mono_italic,  FontWeight.Normal, FontStyle.Italic)
+        )
+        "jetbrains_mono" -> FontFamily(
+            Font(R.font.jetbrains_mono_regular, FontWeight.Normal),
+            Font(R.font.jetbrains_mono_medium,  FontWeight.Medium),
+            Font(R.font.jetbrains_mono_bold,    FontWeight.Bold),
+            Font(R.font.jetbrains_mono_italic,  FontWeight.Normal, FontStyle.Italic)
+        )
+        else -> null
+    }
+}
 
 private val FONT_WEIGHT_OPTIONS: List<Pair<String, FontWeight>> = listOf(
     "Thin" to FontWeight.Thin,
@@ -353,197 +432,89 @@ private fun Color.toHex(withAlpha: Boolean = false): String {
     else String.format("#%02X%02X%02X", r, g, b)
 }
 
-// --- Pannello unificato -------------------------------------------------------
 @Composable
 fun SimpleTextInspectorPanel(
-    working: JSONObject,
+    working: org.json.JSONObject,
     onChange: () -> Unit
 ) {
-    // Stato locale inizializzato dai valori correnti
-    var txt by remember { mutableStateOf(working.optString("text", "")) }
-    var align by remember { mutableStateOf(working.optString("textAlign", "start")) } // start|center|end
-    var sizeText by remember {
-        val v = working.optDouble("textSizeSp", Double.NaN)
-        mutableStateOf(if (v.isNaN()) "" else v.toInt().toString())
+    // ALIGN
+    LabeledField("Allineamento") {
+        val alignOptions = listOf("start","center","end")
+        var sel by remember { mutableStateOf(working.optString("align","start")) }
+        SegmentedButtons(alignOptions, sel, onSelect = {
+            sel = it
+            working.put("align", it)
+            onChange()
+        }, modifier = Modifier.fillMaxWidth())
     }
-    var weightKey by remember { mutableStateOf(working.optString("fontWeight", "w400")) } // w300..w900
-    var familyKey by remember { mutableStateOf(working.optString("fontFamily", "")) }     // "" -> default
-    var colorStr by remember { mutableStateOf(working.optString("textColor", "")) }       // "" -> default
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Testo
-        LabeledField("text") {
-            OutlinedTextField(
-                value = txt,
-                onValueChange = {
-                    txt = it
-                    working.put("text", it); onChange()
-                },
-                singleLine = false,
-                modifier = Modifier.fillMaxWidth()
-            )
+    Spacer(Modifier.height(8.dp))
+
+    // SIZE (sp) — elenco rapido
+    LabeledField("Dimensione testo (sp)") {
+        val sizes = listOf("(default)","12","13","14","16","18","20","22","24","28","32","36")
+        val cur = working.optDouble("textSizeSp", Double.NaN)
+        val value = if (cur.isNaN()) "(default)" else cur.toInt().toString()
+        ExposedDropdown(
+            value = value,
+            label = "textSizeSp",
+            options = sizes
+        ) { pick ->
+            if (pick == "(default)") working.remove("textSizeSp")
+            else working.put("textSizeSp", pick.toDouble())
+            onChange()
         }
+    }
 
-        // Allineamento
-        LabeledField("alignment") {
-            SegmentedButtons(
-                options = listOf("start", "center", "end"),
-                selected = align,
-                onSelect = { sel ->
-                    align = sel
-                    working.put("textAlign", sel); onChange()
-                }
-            )
+    Spacer(Modifier.height(8.dp))
+
+    // WEIGHT
+    LabeledField("Peso (fontWeight)") {
+        val weights = listOf("(default)","w300","w400","w500","w600","w700","w800","w900")
+        val cur = working.optString("fontWeight","")
+        val v = if (cur.isBlank()) "(default)" else cur
+        ExposedDropdown(
+            value = v,
+            label = "fontWeight",
+            options = weights
+        ) { pick ->
+            if (pick == "(default)") working.remove("fontWeight")
+            else working.put("fontWeight", pick)
+            onChange()
         }
+    }
 
-        // Dimensione (sp) — preset + custom
-        LabeledField("size (sp)") {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val presets = listOf("12","14","16","18","20","24","28","32","36")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                    items(presets.size) { idx ->
-                        val p = presets[idx]
-                        FilterChip(
-                            selected = (sizeText == p),
-                            onClick = {
-                                sizeText = p
-                                working.put("textSizeSp", p.toDouble()); onChange()
-                            },
-                            label = { Text(p) }
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    value = sizeText,
-                    onValueChange = { v ->
-                        sizeText = v.filter { it.isDigit() }
-                        if (sizeText.isBlank()) {
-                            working.remove("textSizeSp")
-                        } else {
-                            working.put("textSizeSp", sizeText.toDouble())
-                        }
-                        onChange()
-                    },
-                    label = { Text("custom") },
-                    singleLine = true,
-                    modifier = Modifier.width(96.dp)
-                )
-            }
+    Spacer(Modifier.height(8.dp))
+
+    // FONT FAMILY (extended)
+    LabeledField("Font") {
+        val cur = working.optString("fontFamily","")
+        val v = if (cur.isBlank()) "(default)" else cur
+        ExposedDropdown(
+            value = v,
+            label = "fontFamily",
+            options = FONT_FAMILY_OPTIONS
+        ) { pick ->
+            if (pick == "(default)") working.remove("fontFamily")
+            else working.put("fontFamily", pick)
+            onChange()
         }
+    }
 
-        // Peso (w300..w900)
-        LabeledField("weight") {
-            val weights = listOf("w300","w400","w500","w600","w700","w800","w900")
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(weights.size) { idx ->
-                    val w = weights[idx]
-                    FilterChip(
-                        selected = (weightKey == w),
-                        onClick = {
-                            weightKey = w
-                            working.put("fontWeight", w); onChange()
-                        },
-                        label = { Text(w) }
-                    )
-                }
-            }
-        }
+    Spacer(Modifier.height(8.dp))
 
-        // Font family ("" = default)
-        LabeledField("font") {
-            SimpleDropdown(
-                label = "font",
-                options = FONT_FAMILY_OPTIONS,
-                selected = if (familyKey.isBlank()) "(default)" else familyKey
-            ) { sel ->
-                val k = if (sel == "(default)") "" else sel
-                familyKey = k
-                if (k.isBlank()) working.remove("fontFamily") else working.put("fontFamily", k)
-                onChange()
-            }
-        }
-
-        // Colore testo
-        LabeledField("text color") {
-            // palette di comodo + campo libero
-            val swatch = listOf(
-                "#000000","#333333","#666666","#999999","#CCCCCC","#FFFFFF",
-                "#E53935","#FB8C00","#FDD835","#43A047","#1E88E5","#8E24AA"
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ColorRow(
-                    colorHexList = swatch,
-                    selectedHex = colorStr,
-                    onSelectHex = { hex ->
-                        colorStr = hex
-                        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
-                        onChange()
-                    }
-                )
-                // input libero
-                OutlinedTextField(
-                    value = colorStr,
-                    onValueChange = { v ->
-                        colorStr = v
-                        if (v.isBlank()) working.remove("textColor") else working.put("textColor", v)
-                        onChange()
-                    },
-                    label = { Text("hex or role (e.g. #RRGGBB)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        // Anteprima (opzionale)
-        val style = TextStyle(
-            fontSize = (sizeText.toFloatOrNull() ?: 16f).sp,
-            fontFamily = fontFamilyFor(familyKey),
-            fontWeight = when (weightKey) {
-                "w300" -> FontWeight.W300
-                "w400" -> FontWeight.W400
-                "w500" -> FontWeight.W500
-                "w600" -> FontWeight.W600
-                "w700" -> FontWeight.W700
-                "w800" -> FontWeight.W800
-                "w900" -> FontWeight.W900
-                else   -> FontWeight.Normal
-            },
-            textAlign = when (align) {
-                "center" -> TextAlign.Center
-                "end"    -> TextAlign.End
-                else     -> TextAlign.Start
-            },
-            color = colorFromHex(colorStr) ?: LocalContentColor.current
-        )
-        Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
-            Text(
-                text = if (txt.isBlank()) "Preview" else txt,
-                style = style,
-                modifier = Modifier.fillMaxWidth().padding(12.dp)
-            )
+    // TEXT COLOR
+    LabeledField("Colore testo") {
+        val current = working.optString("textColor","")
+        ColorRow(current = current) { picked ->
+            if (picked.isBlank()) working.remove("textColor")
+            else working.put("textColor", picked)
+            onChange()
         }
     }
 }
 
-// Overload null-safe se in qualche punto la chiami con JSONObject?
-@Composable
-fun SimpleTextInspectorPanel(working: JSONObject?, onChange: () -> Unit) {
-    if (working == null) {
-        Text("(no selection)", style = MaterialTheme.typography.bodyMedium)
-    } else {
-        SimpleTextInspectorPanel(working, onChange)
-    }
-}
+
 
 
 private fun resolveTextColor(working: JSONObject): Color? =
@@ -3872,31 +3843,6 @@ private fun IconPickerField(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ExposedDropdown(
-    value: String,
-    label: String,
-    options: List<String>,
-    onSelect: (String) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor()
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { opt ->
-                DropdownMenuItem(text = { Text(opt) }, onClick = { onSelect(opt); expanded = false })
-            }
-        }
-    }
-}
 
 @Composable
 private fun StepperField(
