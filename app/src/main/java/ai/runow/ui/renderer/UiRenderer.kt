@@ -4325,6 +4325,7 @@ private fun newList() = JSONObject(
 /* =========================================================
  * TEXT STYLE OVERRIDES
  * ========================================================= */
+@Composable
 private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
     var st = base
 
