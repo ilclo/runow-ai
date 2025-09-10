@@ -11,20 +11,42 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 
-// UI / draw
-import androidx.compose.ui.draw.clip
+// Compose runtime e UI di base
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
+
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.shape.RoundedCornerShape // se lo usi
 
 // Material3
 import androidx.compose.material3.*
 
-// Icons (opzionale ma utile per il caret del dropdown)
+// Icons (se usi frecce/menu ecc.)
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+
+// Grafica & unità
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush       // se usi Brush
+import androidx.compose.ui.unit.*
+
+// JSON & coroutines (visti negli errori)
+import org.json.JSONArray
+import org.json.JSONObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+// UI / draw
+import androidx.compose.ui.draw.clip
+
+
+// Icons (opzionale ma utile per il caret del dropdown)
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 
 // Color & unit
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,10 +59,58 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 
 // JSON
-import org.json.JSONObject
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.offset
 
+// --- IMPORT NECESSARI ---
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+
+@Composable
+fun ExposedDropdown(
+    label: String,
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier) {
+        OutlinedTextField(
+            value = selected,
+            onValueChange = {},      // readOnly
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = {
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                        contentDescription = null
+                    )
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true }
+        )
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { opt ->
+                DropdownMenuItem(
+                    text = { Text(opt) },
+                    onClick = {
+                        onSelect(opt)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
 
 
 
@@ -132,6 +202,7 @@ fun SegmentedButtons(
     }
 }
 
+
 // ---------------------------------------------------------------------
 // ColorRow  — due overload: a) Color, b) hex stringhe
 // ---------------------------------------------------------------------
@@ -218,6 +289,7 @@ private fun colorFromHex(s: String?): Color? {
 }
 
 
+
 // Helpers colore
 private fun parseHexColorOrNull(s: String): Color? {
     val hex = s.trim().removePrefix("#")
@@ -271,19 +343,6 @@ private val FONT_WEIGHT_OPTIONS: List<Pair<String, FontWeight>> = listOf(
 
 private fun labelOfWeight(w: FontWeight): String =
     FONT_WEIGHT_OPTIONS.firstOrNull { it.second == w }?.first ?: "Normal"
-
-// Colori: conversione sicura <-> hex
-private fun colorFromHex(hex: String?): Color? {
-    if (hex.isNullOrBlank()) return null
-    val h = hex.trim().removePrefix("#")
-    return try {
-        when (h.length) {
-            6 -> Color(("ff$h").toLong(16))
-            8 -> Color(h.toLong(16))
-            else -> null
-        }
-    } catch (_: Throwable) { null }
-}
 
 private fun Color.toHex(withAlpha: Boolean = false): String {
     val a = (alpha * 255).toInt().coerceIn(0, 255)
