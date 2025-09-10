@@ -1,108 +1,47 @@
-@file:OptIn(
-    androidx.compose.material3.ExperimentalMaterial3Api::class,
-    androidx.compose.ui.unit.ExperimentalUnitApi::class
-)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package ai.runow.ui.renderer
 
-// --- Android base ---
-import android.content.Intent
-import android.graphics.BitmapFactory
-import android.net.Uri
-
-// --- Activity/Back & Activity Results ---
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-
-// --- Animations ---
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
-
-// --- Foundation ---
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.CutCornerShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-
-// --- Material Icons & Material3 ---
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopAppBarScrollBehavior
-
-// --- Runtime/State ---
+// Compose base
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.key
-import androidx.compose.runtime.produceState
-
-// --- UI Core ---
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+
+// Foundation
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+
+// UI / draw
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.alpha
+
+// Material3
+import androidx.compose.material3.*
+
+// Icons (opzionale ma utile per il caret del dropdown)
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+
+// Color & unit
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+// Testo
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.TextUnitType
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
-// --- Coroutines ---
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-
-// --- JSON ---
-import org.json.JSONArray
+// JSON
 import org.json.JSONObject
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.offset
 
-// --- Kotlin utils ---
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.round
+
 
 
 // --- Composable minimi -------------------------------------------------------
@@ -110,6 +49,50 @@ private val DEFAULT_COLOR_SWATCH = listOf(
     "#000000","#333333","#666666","#999999","#CCCCCC","#FFFFFF",
     "#E53935","#FB8C00","#FDD835","#43A047","#1E88E5","#8E24AA"
 )
+
+// ---------------------------------------------------------------------
+// LabeledField
+// ---------------------------------------------------------------------
+
+@Composable
+fun SimpleDropdown(
+    label: String,
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    OutlinedTextField(
+        value = selected,
+        onValueChange = {},            // readOnly
+        readOnly = true,
+        label = { Text(label) },
+        trailingIcon = {
+            IconButton(onClick = { expanded = !expanded }) {
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                    contentDescription = null
+                )
+            }
+        },
+        modifier = modifier.fillMaxWidth().clickable { expanded = true }
+    )
+
+    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        options.forEach { opt ->
+            DropdownMenuItem(
+                text = { Text(opt) },
+                onClick = {
+                    onSelect(opt)
+                    expanded = false
+                }
+            )
+        }
+    }
+}
+
 
 @Composable
 fun LabeledField(
@@ -128,7 +111,9 @@ fun LabeledField(
     }
 }
 
-
+// ---------------------------------------------------------------------
+// SegmentedButtons  (UNICA versione: selected / onSelect)
+// ---------------------------------------------------------------------
 @Composable
 fun SegmentedButtons(
     options: List<String>,
@@ -147,16 +132,9 @@ fun SegmentedButtons(
     }
 }
 
-// Overload compatibile con value/onValueChange
-@Composable
-fun SegmentedButtons(
-    options: List<String>,
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier
-) = SegmentedButtons(options = options, selected = value, onSelect = onValueChange, modifier = modifier)
-
-
+// ---------------------------------------------------------------------
+// ColorRow  — due overload: a) Color, b) hex stringhe
+// ---------------------------------------------------------------------
 @Composable
 fun ColorRow(
     colors: List<Color>,
@@ -165,7 +143,11 @@ fun ColorRow(
     modifier: Modifier = Modifier,
     swatchSize: Dp = 28.dp
 ) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         colors.forEach { c ->
             val isSel = selected != null && c.toHex() == selected.toHex()
             Box(
@@ -175,7 +157,8 @@ fun ColorRow(
                     .background(c)
                     .border(
                         width = if (isSel) 3.dp else 1.dp,
-                        color  = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                        color  = if (isSel) MaterialTheme.colorScheme.primary
+                                 else MaterialTheme.colorScheme.outlineVariant,
                         shape  = CircleShape
                     )
                     .clickable { onSelect(c) }
@@ -184,7 +167,6 @@ fun ColorRow(
     }
 }
 
-// Overload con hex stringhe
 @Composable
 fun ColorRow(
     colorHexList: List<String>,
@@ -202,6 +184,37 @@ fun ColorRow(
         modifier = modifier,
         swatchSize = swatchSize
     )
+}
+
+// Helpers colore
+private fun Color.toHex(): String {
+    val r = (red   * 255).toInt().coerceIn(0, 255)
+    val g = (green * 255).toInt().coerceIn(0, 255)
+    val b = (blue  * 255).toInt().coerceIn(0, 255)
+    val a = (alpha * 255).toInt().coerceIn(0, 255)
+    return if (a == 255) "#%02X%02X%02X".format(r,g,b)
+           else "#%02X%02X%02X%02X".format(a,r,g,b)
+}
+
+private fun colorFromHex(s: String?): Color? {
+    if (s.isNullOrBlank()) return null
+    val hex = s.removePrefix("#")
+    return try {
+        when (hex.length) {
+            6 -> Color(
+                hex.substring(0,2).toInt(16),
+                hex.substring(2,4).toInt(16),
+                hex.substring(4,6).toInt(16)
+            )
+            8 -> Color(
+                hex.substring(2,4).toInt(16),
+                hex.substring(4,6).toInt(16),
+                hex.substring(6,8).toInt(16),
+                hex.substring(0,2).toInt(16)
+            )
+            else -> null
+        }
+    } catch (_: Throwable) { null }
 }
 
 
@@ -228,16 +241,21 @@ private fun parseHexColorOrNull(s: String): Color? {
     } catch (_: Throwable) { null }
 }
 
-private val FONT_FAMILY_OPTIONS: List<String> =
-    listOf("Default", "SansSerif", "Serif", "Monospace", "Cursive")
+private fun fontFamilyFor(name: String?): FontFamily? =
+    when (name?.lowercase()?.trim()) {
+        null, "", "(default)", "default" -> null
+        "sans", "sansserif", "inter", "roboto", "urbanist", "poppins",
+        "manrope", "mulish", "rubik", "space_grotesk", "ibm_plex_sans" -> FontFamily.SansSerif
+        "serif", "ibm_plex_serif", "noto_serif" -> FontFamily.Serif
+        "mono", "monospace", "ibm_plex_mono", "jetbrains_mono" -> FontFamily.Monospace
+        "cursive" -> FontFamily.Cursive
+        else -> null
+    }
 
-    private fun fontFamilyFor(name: String): FontFamily = when (name) {
-    "SansSerif" -> FontFamily.SansSerif
-    "Serif"     -> FontFamily.Serif
-    "Monospace" -> FontFamily.Monospace
-    "Cursive"   -> FontFamily.Cursive
-    else        -> FontFamily.Default
-}
+private val FONT_FAMILY_OPTIONS: List<String> =
+    listOf("(default)", "SansSerif", "Serif", "Monospace", "Cursive",
+           "inter", "roboto", "jetbrains_mono") // opzionale: nomi “amichevoli”
+
 
 private val FONT_WEIGHT_OPTIONS: List<Pair<String, FontWeight>> = listOf(
     "Thin" to FontWeight.Thin,
@@ -279,146 +297,192 @@ private fun Color.toHex(withAlpha: Boolean = false): String {
 // --- Pannello unificato -------------------------------------------------------
 @Composable
 fun SimpleTextInspectorPanel(
-    value: JSONObject,
-    onChange: (JSONObject) -> Unit
+    working: JSONObject,
+    onChange: () -> Unit
 ) {
-    // Stato iniziale letto dal JSON
-    var text by remember { mutableStateOf(value.optString("text", "")) }
-    var sizeSp by remember { mutableStateOf(value.optDouble("sizeSp", 16.0).toFloat()) }
-    var familyName by remember { mutableStateOf(value.optString("family", "Default")) }
-    var weight by remember { mutableStateOf(
-        runCatching {
-            val label = value.optString("weightLabel", "Normal")
-            FONT_WEIGHT_OPTIONS.firstOrNull { it.first == label }?.second ?: FontWeight.Normal
-        }.getOrDefault(FontWeight.Normal)
-    ) }
-    var italic by remember { mutableStateOf(value.optBoolean("italic", false)) }
-    var align by remember { mutableStateOf(value.optString("align", "Start")) }
-    var colorHex by remember { mutableStateOf(value.optString("color", "#000000")) }
-
-    fun commit() {
-        // Copia JSON e scrive valori con tipo esplicito (niente Any! -> risolta ambiguità put)
-        val next = JSONObject(value.toString())
-        next.put("text", text as String)
-        next.put("sizeSp", sizeSp.toDouble())
-        next.put("family", familyName as String)
-        next.put("weightLabel", labelOfWeight(weight) as String)
-        next.put("italic", italic as Boolean)
-        next.put("align", align as String)
-        next.put("color", colorHex as String)
-        onChange(next)
+    // Stato locale inizializzato dai valori correnti
+    var txt by remember { mutableStateOf(working.optString("text", "")) }
+    var align by remember { mutableStateOf(working.optString("textAlign", "start")) } // start|center|end
+    var sizeText by remember {
+        val v = working.optDouble("textSizeSp", Double.NaN)
+        mutableStateOf(if (v.isNaN()) "" else v.toInt().toString())
     }
+    var weightKey by remember { mutableStateOf(working.optString("fontWeight", "w400")) } // w300..w900
+    var familyKey by remember { mutableStateOf(working.optString("fontFamily", "")) }     // "" -> default
+    var colorStr by remember { mutableStateOf(working.optString("textColor", "")) }       // "" -> default
 
-    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        LabeledField("Testo") {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Testo
+        LabeledField("text") {
             OutlinedTextField(
-                value = text,
-                onValueChange = { text = it; commit() },
-                modifier = Modifier.fillMaxWidth(),
+                value = txt,
+                onValueChange = {
+                    txt = it
+                    working.put("text", it); onChange()
+                },
                 singleLine = false,
-                maxLines = 6
+                modifier = Modifier.fillMaxWidth()
             )
         }
 
-        LabeledField("Dimensione (sp)") {
-            Column {
-                Slider(
-                    value = sizeSp,
-                    onValueChange = { sizeSp = it; commit() },
-                    valueRange = 8f..72f
+        // Allineamento
+        LabeledField("alignment") {
+            SegmentedButtons(
+                options = listOf("start", "center", "end"),
+                selected = align,
+                onSelect = { sel ->
+                    align = sel
+                    working.put("textAlign", sel); onChange()
+                }
+            )
+        }
+
+        // Dimensione (sp) — preset + custom
+        LabeledField("size (sp)") {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val presets = listOf("12","14","16","18","20","24","28","32","36")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                    items(presets.size) { idx ->
+                        val p = presets[idx]
+                        FilterChip(
+                            selected = (sizeText == p),
+                            onClick = {
+                                sizeText = p
+                                working.put("textSizeSp", p.toDouble()); onChange()
+                            },
+                            label = { Text(p) }
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = sizeText,
+                    onValueChange = { v ->
+                        sizeText = v.filter { it.isDigit() }
+                        if (sizeText.isBlank()) {
+                            working.remove("textSizeSp")
+                        } else {
+                            working.put("textSizeSp", sizeText.toDouble())
+                        }
+                        onChange()
+                    },
+                    label = { Text("custom") },
+                    singleLine = true,
+                    modifier = Modifier.width(96.dp)
                 )
-                Text("${sizeSp.toInt()} sp", style = MaterialTheme.typography.labelSmall)
             }
         }
 
-        LabeledField("Famiglia") {
-            // Dropdown semplice senza ExposedDropdownMenu (compatibile con tutte le versioni Material3)
-            var expanded by remember { mutableStateOf(false) }
-            OutlinedTextField(
-                value = familyName,
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = {
-                    IconButton(onClick = { expanded = !expanded }) {
-                        Icon(imageVector = if (expanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown, contentDescription = null)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().clickable { expanded = true }
-            )
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                FONT_FAMILY_OPTIONS.forEach { name ->
-                    DropdownMenuItem(
-                        text = { Text(name) },
+        // Peso (w300..w900)
+        LabeledField("weight") {
+            val weights = listOf("w300","w400","w500","w600","w700","w800","w900")
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(weights.size) { idx ->
+                    val w = weights[idx]
+                    FilterChip(
+                        selected = (weightKey == w),
                         onClick = {
-                            familyName = name
-                            expanded = false
-                            commit()
-                        }
+                            weightKey = w
+                            working.put("fontWeight", w); onChange()
+                        },
+                        label = { Text(w) }
                     )
                 }
             }
         }
 
-        LabeledField("Grassetto / Corsivo") {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                SegmentedButtons(
-                    options = FONT_WEIGHT_OPTIONS.map { it.first },
-                    selected = labelOfWeight(weight),
-                    onSelect = { lbl ->
-                        weight = FONT_WEIGHT_OPTIONS.first { it.first == lbl }.second
-                        commit()
+        // Font family ("" = default)
+        LabeledField("font") {
+            SimpleDropdown(
+                label = "font",
+                options = FONT_FAMILY_OPTIONS,
+                selected = if (familyKey.isBlank()) "(default)" else familyKey
+            ) { sel ->
+                val k = if (sel == "(default)") "" else sel
+                familyKey = k
+                if (k.isBlank()) working.remove("fontFamily") else working.put("fontFamily", k)
+                onChange()
+            }
+        }
+
+        // Colore testo
+        LabeledField("text color") {
+            // palette di comodo + campo libero
+            val swatch = listOf(
+                "#000000","#333333","#666666","#999999","#CCCCCC","#FFFFFF",
+                "#E53935","#FB8C00","#FDD835","#43A047","#1E88E5","#8E24AA"
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ColorRow(
+                    colorHexList = swatch,
+                    selectedHex = colorStr,
+                    onSelectHex = { hex ->
+                        colorStr = hex
+                        if (hex.isBlank()) working.remove("textColor") else working.put("textColor", hex)
+                        onChange()
                     }
                 )
-                FilterChip(
-                    selected = italic,
-                    onClick = { italic = !italic; commit() },
-                    label = { Text("Italic") }
+                // input libero
+                OutlinedTextField(
+                    value = colorStr,
+                    onValueChange = { v ->
+                        colorStr = v
+                        if (v.isBlank()) working.remove("textColor") else working.put("textColor", v)
+                        onChange()
+                    },
+                    label = { Text("hex or role (e.g. #RRGGBB)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
 
-        LabeledField("Allineamento") {
-            val alignOptions = listOf("Start", "Center", "End", "Justify")
-            SegmentedButtons(
-                options = alignOptions,
-                selected = align,
-                onSelect = { align = it; commit() }
-            )
-        }
-
-        LabeledField("Colore") {
-            // palette base
-            val swatch = listOf("#000000","#333333","#666666","#999999","#CCCCCC","#FFFFFF",
-                "#E53935","#FB8C00","#FDD835","#43A047","#1E88E5","#8E24AA")
-            ColorRow(
-                colorHexList = swatch,
-                selectedHex = colorHex,
-                onSelectHex = { colorHex = it; commit() }
-            )
-        }
-
-        // Preview con lo stile scelto
-        val fam = fontFamilyFor(familyName)
+        // Anteprima (opzionale)
         val style = TextStyle(
-            fontSize = sizeSp.sp,
-            fontFamily = fam,
-            fontWeight = weight,
-            fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
-            textAlign = when (align) {
-                "Center"  -> TextAlign.Center
-                "End"     -> TextAlign.End
-                "Justify" -> TextAlign.Justify
-                else      -> TextAlign.Start
+            fontSize = (sizeText.toFloatOrNull() ?: 16f).sp,
+            fontFamily = fontFamilyFor(familyKey),
+            fontWeight = when (weightKey) {
+                "w300" -> FontWeight.W300
+                "w400" -> FontWeight.W400
+                "w500" -> FontWeight.W500
+                "w600" -> FontWeight.W600
+                "w700" -> FontWeight.W700
+                "w800" -> FontWeight.W800
+                "w900" -> FontWeight.W900
+                else   -> FontWeight.Normal
             },
-            color = colorFromHex(colorHex) ?: LocalContentColor.current
+            textAlign = when (align) {
+                "center" -> TextAlign.Center
+                "end"    -> TextAlign.End
+                else     -> TextAlign.Start
+            },
+            color = colorFromHex(colorStr) ?: LocalContentColor.current
         )
-        Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(12.dp)) {
+        Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.medium) {
             Text(
-                text = if (text.isBlank()) "Anteprima" else text,
+                text = if (txt.isBlank()) "Preview" else txt,
                 style = style,
                 modifier = Modifier.fillMaxWidth().padding(12.dp)
             )
         }
+    }
+}
+
+// Overload null-safe se in qualche punto la chiami con JSONObject?
+@Composable
+fun SimpleTextInspectorPanel(working: JSONObject?, onChange: () -> Unit) {
+    if (working == null) {
+        Text("(no selection)", style = MaterialTheme.typography.bodyMedium)
+    } else {
+        SimpleTextInspectorPanel(working, onChange)
     }
 }
 
@@ -442,91 +506,7 @@ private fun parseFontWeight(v: String?): FontWeight? = when (v?.lowercase()) {
 @Composable
 private fun colorsFallback() = MaterialTheme.colorScheme
 
-@Composable
-private fun resolveFontFamilyRes(key: String?): FontFamily? {
-    if (key.isNullOrBlank()) return null
-    return FontCatalog.resolveFontFamily(key)
-}
 
-private fun resolveFontFamily(name: String?): FontFamily? = when (name?.lowercase()) {
-    // INTER
-    "inter" -> FontFamily(
-        Font(R.font.inter_regular, FontWeight.Normal, FontStyle.Normal),
-        Font(R.font.inter_medium,  FontWeight.Medium, FontStyle.Normal),
-        Font(R.font.inter_semibold,FontWeight.SemiBold, FontStyle.Normal),
-        Font(R.font.inter_bold,    FontWeight.Bold,   FontStyle.Normal),
-        Font(R.font.inter_italic,  FontWeight.Normal, FontStyle.Italic)
-    )
-    // URBANIST
-    "urbanist" -> FontFamily(
-        Font(R.font.urbanist_regular, FontWeight.Normal, FontStyle.Normal),
-        Font(R.font.urbanist_medium,  FontWeight.Medium, FontStyle.Normal),
-        Font(R.font.urbanist_semibold,FontWeight.SemiBold, FontStyle.Normal),
-        Font(R.font.urbanist_bold,    FontWeight.Bold,   FontStyle.Normal),
-        Font(R.font.urbanist_italic,  FontWeight.Normal, FontStyle.Italic)
-    )
-    // POPPINS
-    "poppins" -> FontFamily(
-        Font(R.font.poppins_regular, FontWeight.Normal, FontStyle.Normal),
-        Font(R.font.poppins_medium,  FontWeight.Medium, FontStyle.Normal),
-        Font(R.font.poppins_semibold,FontWeight.SemiBold, FontStyle.Normal),
-        Font(R.font.poppins_bold,    FontWeight.Bold,   FontStyle.Normal),
-        Font(R.font.poppins_italic,  FontWeight.Normal, FontStyle.Italic)
-    )
-    // MANROPE
-    "manrope" -> FontFamily(
-        Font(R.font.manrope_regular, FontWeight.Normal, FontStyle.Normal),
-        Font(R.font.manrope_medium,  FontWeight.Medium, FontStyle.Normal),
-        Font(R.font.manrope_semibold,FontWeight.SemiBold, FontStyle.Normal),
-        Font(R.font.manrope_bold,    FontWeight.Bold,   FontStyle.Normal)
-    )
-    // MULISH
-    "mulish" -> FontFamily(
-        Font(R.font.mulish_regular, FontWeight.Normal, FontStyle.Normal),
-        Font(R.font.mulish_medium,  FontWeight.Medium, FontStyle.Normal),
-        Font(R.font.mulish_semibold,FontWeight.SemiBold, FontStyle.Normal),
-        Font(R.font.mulish_bold,    FontWeight.Bold,   FontStyle.Normal),
-        Font(R.font.mulish_italic,  FontWeight.Normal, FontStyle.Italic)
-    )
-    // RUBIK
-    "rubik" -> FontFamily(
-        Font(R.font.rubik_regular, FontWeight.Normal, FontStyle.Normal),
-        Font(R.font.rubik_medium,  FontWeight.Medium, FontStyle.Normal),
-        Font(R.font.rubik_semibold,FontWeight.SemiBold, FontStyle.Normal),
-        Font(R.font.rubik_bold,    FontWeight.Bold,   FontStyle.Normal),
-        Font(R.font.rubik_italic,  FontWeight.Normal, FontStyle.Italic)
-    )
-    // SPACE GROTESK
-    "space_grotesk" -> FontFamily(
-        Font(R.font.space_grotesk_regular, FontWeight.Normal, FontStyle.Normal),
-        Font(R.font.space_grotesk_medium,  FontWeight.Medium, FontStyle.Normal),
-        Font(R.font.space_grotesk_semibold,FontWeight.SemiBold, FontStyle.Normal),
-        Font(R.font.space_grotesk_bold,    FontWeight.Bold,   FontStyle.Normal)
-    )
-    // IBM PLEX SANS
-    "ibm_plex_sans" -> FontFamily(
-        Font(R.font.ibm_plex_sans_regular, FontWeight.Normal, FontStyle.Normal),
-        Font(R.font.ibm_plex_sans_medium,  FontWeight.Medium, FontStyle.Normal),
-        Font(R.font.ibm_plex_sans_semibold,FontWeight.SemiBold, FontStyle.Normal),
-        Font(R.font.ibm_plex_sans_bold,    FontWeight.Bold,   FontStyle.Normal),
-        Font(R.font.ibm_plex_sans_italic,  FontWeight.Normal, FontStyle.Italic)
-    )
-    // IBM PLEX MONO
-    "ibm_plex_mono" -> FontFamily(
-        Font(R.font.ibm_plex_mono_regular, FontWeight.Normal, FontStyle.Normal),
-        Font(R.font.ibm_plex_mono_medium,  FontWeight.Medium, FontStyle.Normal),
-        Font(R.font.ibm_plex_mono_bold,    FontWeight.Bold,   FontStyle.Normal),
-        Font(R.font.ibm_plex_mono_italic,  FontWeight.Normal, FontStyle.Italic)
-    )
-    // JETBRAINS MONO
-    "jetbrains_mono" -> FontFamily(
-        Font(R.font.jetbrains_mono_regular, FontWeight.Normal, FontStyle.Normal),
-        Font(R.font.jetbrains_mono_medium,  FontWeight.Medium, FontStyle.Normal),
-        Font(R.font.jetbrains_mono_bold,    FontWeight.Bold,   FontStyle.Normal),
-        Font(R.font.jetbrains_mono_italic,  FontWeight.Normal, FontStyle.Italic)
-    )
-    else -> null
-}
 
 
 @Composable
