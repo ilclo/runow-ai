@@ -2396,7 +2396,7 @@ private fun BarItemsEditor(
                         OutlinedTextField(action.value, { v -> action.value = v; it.put("actionId", v); onChange() }, label = { Text("actionId") })
                         var style by remember { mutableStateOf(it.optString("style","text")) }
                         ExposedDropdown(
-                            value = style, label = "style",
+                            value = style, l,
                             options = listOf("text","outlined","tonal","primary")
                         ) { sel -> style = sel; it.put("style", sel); onChange() }
                     }
@@ -3206,17 +3206,6 @@ private fun ListInspectorPanel(working: JSONObject, onChange: () -> Unit) {
 /* =========================================================
  * HELPERS: mapping, pickers, utils
  * ========================================================= */
-
-@Composable
-private fun mapTextStyle(key: String): TextStyle = when (key) {
-    "displaySmall" -> MaterialTheme.typography.displaySmall
-    "headlineSmall" -> MaterialTheme.typography.headlineSmall
-    "titleLarge" -> MaterialTheme.typography.titleLarge
-    "titleSmall" -> MaterialTheme.typography.titleSmall
-    "bodyLarge" -> MaterialTheme.typography.bodyLarge
-    "bodyMedium" -> MaterialTheme.typography.bodyMedium
-    else -> MaterialTheme.typography.titleMedium
-}
 
 @Composable
 private fun mapTextAlign(key: String): TextAlign = when (key) {
