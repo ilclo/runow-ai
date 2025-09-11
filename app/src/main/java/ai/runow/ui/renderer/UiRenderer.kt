@@ -278,7 +278,7 @@ private val FONT_FAMILY_OPTIONS: List<String> = listOf(
 private fun fontFamilyFromName(name: String?): FontFamily? {
 if (name.isNullOrBlank() || name == "(default)") return null
 return when (name) {
-"inter" -> FontFamily(
+"int> FontFamily(
 Font(R.font.inter_regular, FontWeight.Normal, FontStyle.Normal),
 Font(R.font.inter_medium,  FontWeight.Medium, FontStyle.Normal),
 Font(R.font.inter_semibold,FontWeight.SemiBold, FontStyle.Normal),
@@ -1156,7 +1156,7 @@ val heightMode = cfg.optString("heightMode", "wrap")  // "wrap" | "fixed"
 val heightDp = cfg.optDouble("heightDp", 0.0).toFloat()
 
 val hAlign = when (cfg.optString("hAlign", "start")) {
-"center" -> Alignment.CenterHorizontally
+"cent> Alignment.CenterHorizontally
 "end"    -> Alignment.End
 else     -> Alignment.Start
 }
@@ -1518,7 +1518,7 @@ val type = it.optString("type").ifBlank {
 if (it.has("label")) "button" else "icon"
 }
 when (type) {
-"spacer" -> {
+"spac> {
 when (it.optString("mode","fixed")) {
 "expand" -> Spacer(Modifier.weight(1f))
 else -> Spacer(Modifier.width((it.optDouble("widthDp", 16.0).toFloat().dp)))
@@ -1615,7 +1615,7 @@ modifier = Modifier
 .clip(rounded) // arrotondamento inferiore legacy
 ) {
 when (variant) {
-"center" -> CenterAlignedTopAppBar(
+"cent> CenterAlignedTopAppBar(
 title = { TitleSubtitle(title, subtitle, titleColor) },
 actions = { RenderBarItemsRow(actions, dispatch) },
 colors = colors,
@@ -1911,7 +1911,7 @@ verticalArrangement = Arrangement.spacedBy(12.dp)
 when (working.optString("type")) {
 "Card"          -> CardInspectorPanel(working, onChange = bumpPreview)
 "ButtonRow"     -> { ButtonRowInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
-"SectionHeader" -> { SectionHeaderInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
+"SectionHead> { SectionHeaderInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
 "Progress"      -> ProgressInspectorPanel(working, onChange = bumpPreview)
 "Alert"         -> AlertInspectorPanel(working, onChange = bumpPreview)
 "Image"         -> ImageInspectorPanel(working, onChange = bumpPreview)
@@ -2431,8 +2431,8 @@ RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspe
 }
 }
 "SectionHeader" -> {
-    val title = ...
-    val subtitle = ...
+	val title = block.optString("title","")
+	val subtitle = block.optString("subtitle","")
     val align = mapTextAlign(block.readAlign())
 
     val baseTitle = MaterialTheme.typography.titleMedium
