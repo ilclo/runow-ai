@@ -4363,5 +4363,4 @@ private fun applyTextStyleOverrides(owner: JSONObject, base: TextStyle): TextSty
         st = st.copy(fontStyle = FontStyle.Italic)
     }
     return st
-    }
 }
