@@ -3,15 +3,6 @@
 package ai.runow.ui.renderer
 
 // Animations
-import android.content.Intent
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.shape.CornerBasedShape
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.round
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -129,13 +120,6 @@ private val DEFAULT_COLOR_SWATCH = listOf(
 // ---------------------------------------------------------------------
 // LabeledField
 // ---------------------------------------------------------------------
-/** Hex (#RRGGBB o #AARRGGBB) -> Color; per nomi-ruolo ritorna null per delegare ai fallback M3. */
-private fun parseColorOrRole(s: String?): Color? {
-    val v = s?.trim().orEmpty()
-    if (v.isBlank()) return null
-    if (!v.startsWith("#")) return null
-    return try { Color(android.graphics.Color.parseColor(v)) } catch (_: Throwable) { null }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
