@@ -2,6 +2,8 @@
 
 package ai.runow.ui.renderer
 
+
++import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
@@ -514,7 +516,7 @@ var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) 
 ExposedDropdown(
 value = if (fontFamily.isBlank()) "(default)" else fontFamily,
 label = "fontFamily",
-options = FontCatalog.FONT_FAMILY_OPTIONS,   
+options = FONT_FAMILY_OPTIONS,
 ) { sel ->
 val v = if (sel == "(default)") "" else sel
 fontFamily = v
@@ -1214,24 +1216,20 @@ m = when (heightMode) {
 else    -> m // wrap
 }
 
-// --- Stile: text / outlined / altri ---
-val showFill = when (style) {
-"text"     -> false
-"outlined" -> false
-else       -> true
-&& !transparentBg
+val showFill = (when (style) {
+    "text"     -> false
+    "outlined" -> false
+    else       -> true
+}) && !transparentBg
 val showBorder = when (style) {
 "text"     -> false
 "outlined" -> true
 else       -> borderThicknessDp > 0f
 }
 
-val drawSeparators = ((shapeName == "topBottom") || (borderMode == "topBottom")) && borderThicknessDp > 0f
-val borderStroke = if (showBorder && !drawSeparators && borderThicknessDp > 0f)
-BorderStroke(borderThicknessDp.dp, borderColor)
-else null
-
 val drawSeparators = (borderMode == "topBottom" && borderThicknessDp > 0f)
+val borderStroke = if (showBorder && !drawSeparators && borderThicknessDp > 0f)
+    BorderStroke(borderThicknessDp.dp, borderColor) else null
 
 val base = if (elevationDp > 0f) {
 m.shadow(elevationDp.dp, shape, clip = false)
@@ -3357,7 +3355,7 @@ var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) 
 ExposedDropdown(
 value = if (fontFamily.isBlank()) "(default)" else fontFamily,
 label = "fontFamily",
-options = FontCatalog.FONT_FAMILY_OPTIONS
+options = FONT_FAMILY_OPTIONS,
 ) { sel ->
 val v = if (sel == "(default)") "" else sel
 fontFamily = v
@@ -3587,7 +3585,7 @@ var fontFamily by remember { mutableStateOf(working.optString("fontFamily","")) 
 ExposedDropdown(
 value = if (fontFamily.isBlank()) "(default)" else fontFamily,
 label = "fontFamily",
-options = FontCatalog.FONT_FAMILY_OPTIONS
+options = FONT_FAMILY_OPTIONS,
 ) { sel ->
 val v = if (sel == "(default)") "" else sel
 fontFamily = v
@@ -3666,10 +3664,11 @@ onChange()
 * HELPERS: mapping, pickers, utils
 * ========================================================= */
 
-private fun mapTextAlign(v: String?): TextAlign = when (v?.lowercase()) {
-"center" -> TextAlign.Center
-"end"    -> TextAlign.End
-else     -> TextAlign.Start
+private fun mapTextAlign(raw: String?): TextAlign = when (raw?.lowercase()) {
+    "center" -> TextAlign.Center
+    "end", "right" -> TextAlign.End
+    "justify" -> TextAlign.Justify
+    else -> TextAlign.Start
 }
 
 private fun sizeModifier(size: String): Modifier = when (size) {
@@ -4347,52 +4346,21 @@ private fun newList() = JSONObject(
 * TEXT STYLE OVERRIDES
 * ========================================================= */
 @Composable
-private fun applyTextStyleOverrides(node: JSONObject, base: TextStyle): TextStyle {
-var st = base
-
-// dimensione (sp)
-val size = node.optDouble("textSizeSp", Double.NaN)
-if (!size.isNaN()) st = st.copy(fontSize = TextUnit(size.toFloat(), TextUnitType.Sp))
-
-// peso
-when (node.optString("fontWeight", "")) {
-"w100" -> st = st.copy(fontWeight = FontWeight.Thin)
-"w200" -> st = st.copy(fontWeight = FontWeight.ExtraLight)
-"w300" -> st = st.copy(fontWeight = FontWeight.Light)
-"w400" -> st = st.copy(fontWeight = FontWeight.Normal)
-"w500" -> st = st.copy(fontWeight = FontWeight.Medium)
-"w600" -> st = st.copy(fontWeight = FontWeight.SemiBold)
-"w700" -> st = st.copy(fontWeight = FontWeight.Bold)
-"w800" -> st = st.copy(fontWeight = FontWeight.ExtraBold)
-"w900" -> st = st.copy(fontWeight = FontWeight.Black)
-}
-
-// italic (compat sia con flag "italic": true che con stringa "fontStyle": "italic")
-val styleKey = node.optString("fontStyle", "")
-val italicFlag = node.optBoolean("italic", false)
-st = st.copy(fontStyle = if (styleKey == "italic" || italicFlag) FontStyle.Italic else FontStyle.Normal)
-
-// famiglia font: ruoli + risorse .ttf in res/font tramite FontCatalog
-val familyKey = node.optString("fontFamily", "")
-val family = when (familyKey) {
-"" -> null
-"serif" -> FontFamily.Serif
-"monospace" -> FontFamily.Monospace
-"cursive" -> FontFamily.Cursive
-"sans" -> FontFamily.SansSerif
-else -> FontCatalog.resolveFontFamily(familyKey) // <— risorse .ttf
-}
-if (family != null) st = st.copy(fontFamily = family)
-
-// letterSpacing / lineHeight (sp)
-val letterSp = node.optDouble("letterSpacingSp", Double.NaN)
-if (!letterSp.isNaN()) st = st.copy(letterSpacing = TextUnit(letterSp.toFloat(), TextUnitType.Sp))
-
-val lineSp = node.optDouble("lineHeightSp", Double.NaN)
-if (!lineSp.isNaN()) st = st.copy(lineHeight = TextUnit(lineSp.toFloat(), TextUnitType.Sp))
-
-// colore testo
-parseColorOrRole(node.optString("textColor", ""))?.let { st = st.copy(color = it) }
-
-return st
+private fun applyTextStyleOverrides(owner: JSONObject, base: TextStyle): TextStyle {
+    var st = base
+    val sizeSp = owner.optDouble("textSizeSp", Double.NaN)
+    if (!sizeSp.isNaN()) st = st.copy(fontSize = sizeSp.sp)
+    parseFontWeight(owner.optString("fontWeight","").takeIf { it.isNotBlank() })?.let {
+        st = st.copy(fontWeight = it)
+    }
+    fontFamilyFromName(owner.optString("fontFamily","").takeIf { it.isNotBlank() })?.let {
+        st = st.copy(fontFamily = it)
+    }
+    parseColorOrRole(owner.optString("textColor","").takeIf { it.isNotBlank() })?.let {
+        st = st.copy(color = it)
+    }
+    if (owner.optBoolean("italic", false)) {
+        st = st.copy(fontStyle = FontStyle.Italic)
+    }
+    return st
 }
