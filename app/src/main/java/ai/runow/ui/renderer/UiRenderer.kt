@@ -1145,165 +1145,51 @@ fun StyledContainer(
     contentPadding: PaddingValues? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
-// --- Lettura configurazione ---
-val style = cfg.optString("style", "outlined") // "text" | "outlined" | "tonal" | "primary"
-val borderMode = cfg.optString("borderMode", "full") // retro-compat: se arriva da vecchi JSON lo consideriamo
-val cornerRadius = cfg.optDouble("cornerRadiusDp", 12.0).toFloat()
+    val r = resolveContainer(cfg)  // usa gradient1/gradient2/customColor/widthMode ecc.
 
-val widthMode = cfg.optString("widthMode", "wrap")    // "wrap" | "match" | "fixed"
-val widthDp = cfg.optDouble("widthDp", 160.0).toFloat() // default 160dp
-val heightMode = cfg.optString("heightMode", "wrap")  // "wrap" | "fixed"
-val heightDp = cfg.optDouble("heightDp", 0.0).toFloat()
+    // Larghezze
+    var m = modifier
+    m = when (r.widthMode) {
+        "fill"      -> m.fillMaxWidth()
+        "fixed_dp"  -> m.width(r.widthDp)
+        "fraction"  -> m.fillMaxWidth(r.widthFraction ?: 1f)
+        else        -> m
+    }
+    // Altezze
+    m = when (r.heightMode) {
+        "fixed_dp"  -> m.height(r.heightDp)
+        else        -> m
+    }
 
-val hAlign = when (cfg.optString("hAlign", "start")) {
-"center" -> Alignment.CenterHorizontally
-"end"    -> Alignment.End
-else     -> Alignment.Start
-}
-val vAlign = when (cfg.optString("vAlign", "center")) {
-"top"    -> Alignment.Top
-"bottom" -> Alignment.Bottom
-else     -> Alignment.CenterVertically
-}
+    // Ombra
+    val base = if (r.elevation > 0.dp) {
+        m.shadow(r.elevation, r.shape, clip = false)
+    } else m
 
-// Colori e gradiente
-val bgAlpha = cfg.optDouble("bgAlpha", 1.0).toFloat().coerceIn(0f, 1f)
-val color1 = cfg.optString("color1", "#FFFFFF")
-val color2 = cfg.optString("color2", "") // se vuoto = colore singolo
-val isGradient = color2.isNotBlank()
+    // Background (pieno o trasparente in base allo style risolto)
+    val bgMod = if (r.bgBrush != null && r.bgAlpha > 0f) {
+        base.background(r.bgBrush, r.shape).alpha(r.bgAlpha)
+    } else base
 
-val containerColor = Color(android.graphics.Color.parseColor(color1))
-val containerBrush: Brush? = if (isGradient) {
-val c2 = Color(android.graphics.Color.parseColor(color2))
-val dir = cfg.optString("gradientDirection", "horizontal") // "horizontal"|"vertical"
-if (dir == "vertical") Brush.verticalGradient(listOf(containerColor, c2))
-else Brush.horizontalGradient(listOf(containerColor, c2))
-} else null
+    // Bordo: full / top_bottom / none
+    val withBorder = when (borderModeOf(r.borderMode)) {
+        BorderMode.Full -> r.border?.let { bgMod.border(it, r.shape) } ?: bgMod
+        BorderMode.TopBottom -> {
+            val stroke = r.border?.width ?: 1.dp
+            val c = (r.border?.brush as? SolidColor)?.value ?: MaterialTheme.colorScheme.outline
+            bgMod.topBottomBorder(stroke, c)
+        }
+        BorderMode.None -> bgMod
+    }
 
-// Bordi
-val borderThicknessDp = cfg.optDouble("borderThicknessDp", 1.0).toFloat()
-val borderColorStr = cfg.optString("borderColor", "#000000")
-val borderColor = Color(android.graphics.Color.parseColor(borderColorStr))
-
-val shapeName = cfg.optString("shape", "rounded")
-
-val shape = when (shapeName) {
-	"cut"      -> CutCornerShape(cornerRadius.dp)
-	"pill"     -> RoundedCornerShape(percent = 50)
-	"topBottom"-> RoundedCornerShape(0.dp)
-	else       -> RoundedCornerShape(cornerRadius.dp)
-}
-// Elevazione e ombra
-val elevationDp = cfg.optDouble("elevationDp", 0.0).toFloat().coerceAtLeast(0f)
-
-// Opacità
-val opacity = cfg.optDouble("opacity", 1.0).toFloat().coerceIn(0f,1f)
-
-val transparentBg = cfg.optBoolean("transparentBg", false)
-
-// --- Modifiche misura ---
-var m = modifier
-
-m = when (widthMode) {
-"match" -> m.fillMaxWidth()
-"fixed" -> m.width(widthDp.dp)
-else    -> m // wrap
-}
-m = when (heightMode) {
-"fixed" -> m.height(heightDp.dp)
-else    -> m // wrap
+    CompositionLocalProvider(LocalContentColor provides r.contentColor) {
+        Box(withBorder.clip(r.shape)) {
+            val inner = contentPadding?.let { Modifier.padding(it) } ?: Modifier
+            Box(modifier = inner, content = content)
+        }
+    }
 }
 
-val showFill = (when (style) {
-"text"     -> false
-"outlined" -> false
-else       -> true
-}) && !transparentBg
-val showBorder = when (style) {
-"text"     -> false
-"outlined" -> true
-else       -> borderThicknessDp > 0f
-}
-
-val drawSeparators = (borderMode == "topBottom" && borderThicknessDp > 0f)
-val borderStroke = if (showBorder && !drawSeparators && borderThicknessDp > 0f)
-BorderStroke(borderThicknessDp.dp, borderColor) else null
-
-val base = if (elevationDp > 0f) {
-m.shadow(elevationDp.dp, shape, clip = false)
-} else m
-
-val fillModifier =
-if (drawSeparators) {
-base.drawBehind {
-val strokePx = borderThicknessDp * density
-// Top line
-drawLine(
-color = borderColor,
-start = androidx.compose.ui.geometry.Offset(0f, 0f),
-end = androidx.compose.ui.geometry.Offset(size.width, 0f),
-strokeWidth = strokePx
-)
-// Bottom line
-drawLine(
-color = borderColor,
-start = androidx.compose.ui.geometry.Offset(0f, size.height - strokePx),
-end = androidx.compose.ui.geometry.Offset(size.width, size.height - strokePx),
-strokeWidth = strokePx
-)
-}
-} else base
-
-val bgModifier =
-if (showFill) {
-if (containerBrush != null)
-fillModifier.background(brush = containerBrush, shape = shape)
-else
-fillModifier.background(color = containerColor.copy(alpha = bgAlpha), shape = shape)
-} else fillModifier
-
-val borderModifier = if (borderStroke != null) {
-bgModifier.border(borderStroke, shape)
-} else bgModifier
-
-val clipModifier = borderModifier.clip(shape).then(Modifier.alpha(opacity))
-
-Box(
-modifier = clipModifier,
-contentAlignment = Alignment.Center
-) {
-val inner = contentPadding?.let { Modifier.padding(it) } ?: Modifier
-Box(
-modifier = inner.fillMaxWidth(),
-contentAlignment = Alignment.Center
-) {
-Box(
-modifier = Modifier
-.align(
-when (hAlign) {
-Alignment.CenterHorizontally -> vAlign.let { when (it) {
-Alignment.Top -> Alignment.TopCenter
-Alignment.Bottom -> Alignment.BottomCenter
-else -> Alignment.Center
-} }
-Alignment.End -> vAlign.let { when (it) {
-Alignment.Top -> Alignment.TopEnd
-Alignment.Bottom -> Alignment.BottomEnd
-else -> Alignment.CenterEnd
-} }
-else -> vAlign.let { when (it) {
-Alignment.Top -> Alignment.TopStart
-Alignment.Bottom -> Alignment.BottomStart
-else -> Alignment.CenterStart
-} }
-}
-)
-) {
-content()
-}
-}
-}
-}
 
 
 /* =========================================================
@@ -2430,9 +2316,9 @@ RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspe
 }
 }
 }
-"SectionHeader" -> {
-	val title = block.optString("title","")
-	val subtitle = block.optString("subtitle","")
+"SectionHeader" -> Wrapper {
+    val title = block.optString("title","")
+    val subtitle = block.optString("subtitle","")
     val align = mapTextAlign(block.readAlign())
 
     val baseTitle = MaterialTheme.typography.titleMedium
@@ -2449,6 +2335,7 @@ RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspe
         }
     }
 }
+
 "MetricsGrid" -> Wrapper {
 val tiles = block.optJSONArray("tiles") ?: JSONArray()
 val cols = block.optInt("columns", 2).coerceIn(1, 3)
@@ -3021,129 +2908,162 @@ ContainerInspectorPanel(c, onChange)
 
 @Composable
 private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit) {
-// Style
-var style by remember { mutableStateOf(container.optString("style","surface")) }
-ExposedDropdown(
-value = style, label = "style",
-options = listOf("text","outlined","tonal","primary","surface")
-) { sel -> style = sel; container.put("style", sel); onChange() }
+    // STYLE: interfaccia semplificata "full / outlined / text"
+    var styleUi by remember {
+        mutableStateOf(
+            when (container.optString("style","surface")) {
+                "text" -> "text"
+                "outlined" -> "outlined"
+                else -> "full"
+            }
+        )
+    }
+    ExposedDropdown(
+        value = styleUi, label = "style",
+        options = listOf("full","outlined","text")
+    ) { sel ->
+        styleUi = sel
+        val mapped = when (sel) {
+            "text" -> "text"
+            "outlined" -> "outlined"
+            else -> "surface" // interno
+        }
+        container.put("style", mapped)
+        onChange()
+    }
 
-// CustomColor (hex/ruoli)
-val customColor = remember { mutableStateOf(container.optString("customColor","")) }
-NamedColorPickerPlus(current = customColor.value, label = "customColor (palette/ruoli)", allowRoles = true) { hex ->
-customColor.value = hex
-if (hex.isBlank()) container.remove("customColor") else container.put("customColor", hex)
-onChange()
+    // BACKGROUND: gradient a due colori SEMPRE disponibile.
+    // 2° colore vuoto = singolo colore (nessun toggle).
+    val g1 = remember { mutableStateOf(container.optString("gradient1", container.optString("customColor",""))) }
+    NamedColorPickerPlus(current = g1.value, label = "bg color 1", allowRoles = true) { pick ->
+        g1.value = pick
+        if (pick.isBlank()) {
+            container.remove("gradient1")
+            container.remove("customColor")
+        } else {
+            container.put("gradient1", pick)
+            container.put("customColor", pick) // compat
+        }
+        onChange()
+    }
+
+    val g2 = remember { mutableStateOf(container.optString("gradient2","")) }
+    NamedColorPickerPlus(current = g2.value, label = "bg color 2 (nessuno = singolo)", allowRoles = true) { pick ->
+        g2.value = pick
+        if (pick.isBlank()) container.remove("gradient2") else container.put("gradient2", pick)
+        onChange()
+    }
+
+    var orient by remember { mutableStateOf(container.optString("gradientOrientation","horizontal")) }
+    ExposedDropdown(
+        value = orient, label = "gradient (orientation)",
+        options = listOf("horizontal","vertical")
+    ) { sel -> orient = sel; container.put("gradientOrientation", sel); onChange() }
+
+    // Forma / corner
+    var shape by remember { mutableStateOf(container.optString("shape","rounded")) }
+    ExposedDropdown(
+        value = shape, label = "shape",
+        options = listOf("rounded","pill","cut")
+    ) { sel -> shape = sel; container.put("shape", sel); onChange() }
+
+    var cornerOpt by remember { mutableStateOf(container.optDouble("corner",12.0).toInt().toString()) }
+    ExposedDropdown(
+        value = cornerOpt, label = "corner (dp)",
+        options = listOf("0","4","8","12","16","20","24","32")
+    ) { sel ->
+        cornerOpt = sel
+        container.put("corner", sel.toDouble())
+        onChange()
+    }
+
+    // Elevation
+    var elevOpt by remember {
+        mutableStateOf(
+            (container.optDouble("elevationDp", if (styleUi == "full") 1.0 else 0.0)).toInt().toString()
+        )
+    }
+    ExposedDropdown(
+        value = elevOpt, label = "elevation (dp)",
+        options = listOf("0","1","2","3","4","6","8","12","16")
+    ) { sel ->
+        elevOpt = sel
+        if (sel == "0") container.remove("elevationDp") else container.put("elevationDp", sel.toDouble())
+        onChange()
+    }
+
+    // Border mode + thickness + color (ruoli OK, niente crash)
+    var borderMode by remember { mutableStateOf(container.optString("borderMode", if (styleUi=="outlined") "full" else "none")) }
+    ExposedDropdown(
+        value = borderMode, label = "borderMode",
+        options = listOf("none","full","top_bottom")
+    ) { sel ->
+        borderMode = sel; container.put("borderMode", sel); onChange()
+    }
+
+    var borderTh by remember {
+        mutableStateOf(
+            container.optDouble("borderThicknessDp", if (borderMode!="none") 1.0 else 0.0)
+                .toInt().toString()
+        )
+    }
+    ExposedDropdown(
+        value = borderTh, label = "borderThickness (dp)",
+        options = listOf("0","1","2","3","4","6","8")
+    ) { sel ->
+        borderTh = sel
+        if (sel == "0") container.remove("borderThicknessDp") else container.put("borderThicknessDp", sel.toDouble())
+        onChange()
+    }
+
+    val borderColor = remember { mutableStateOf(container.optString("borderColor","")) }
+    NamedColorPickerPlus(current = borderColor.value, label = "borderColor (ruoli OK)", allowRoles = true) { hex ->
+        borderColor.value = hex
+        if (hex.isBlank()) container.remove("borderColor") else container.put("borderColor", hex)
+        onChange()
+    }
+
+    // Dimensioni coerenti con il renderer unificato
+    var widthMode by remember { mutableStateOf(container.optString("widthMode","wrap")) }
+    ExposedDropdown(
+        value = widthMode, label = "width",
+        options = listOf("wrap","fill","fixed_dp","fraction")
+    ) { sel ->
+        widthMode = sel
+        container.put("widthMode", sel)
+        onChange()
+    }
+    when (widthMode) {
+        "fixed_dp" -> {
+            var w by remember { mutableStateOf(container.optDouble("widthDp", 160.0).toInt().toString()) }
+            ExposedDropdown(
+                value = w, label = "width (dp)",
+                options = listOf("120","160","200","240","280","320","360","400")
+            ) { sel -> w = sel; container.put("widthDp", sel.toDouble()); onChange() }
+        }
+        "fraction" -> {
+            var f by remember { mutableStateOf(((container.optDouble("widthFraction",1.0))*100).toInt().toString()) }
+            ExposedDropdown(
+                value = f, label = "width (%)",
+                options = listOf("25","33","50","66","75","100")
+            ) { sel -> f = sel; container.put("widthFraction", sel.toDouble()/100.0); onChange() }
+        }
+    }
+
+    var heightMode by remember { mutableStateOf(container.optString("heightMode","wrap")) }
+    ExposedDropdown(
+        value = heightMode, label = "height",
+        options = listOf("wrap","fixed_dp")
+    ) { sel -> heightMode = sel; container.put("heightMode", sel); onChange() }
+    if (heightMode == "fixed_dp") {
+        var h by remember { mutableStateOf(container.optDouble("heightDp", 48.0).toInt().toString()) }
+        ExposedDropdown(
+            value = h, label = "height (dp)",
+            options = listOf("24","32","40","48","56","64","96","128","160","200")
+        ) { sel -> h = sel; container.put("heightDp", sel.toDouble()); onChange() }
+    }
 }
 
-// Forma / corner (dropdown)
-var shape by remember { mutableStateOf(container.optString("shape","rounded")) }
-ExposedDropdown(
-value = shape, label = "shape",
-options = listOf("rounded","pill","cut","topBottom")
-) { sel -> shape = sel; container.put("shape", sel); onChange() }
-
-var cornerOpt by remember { mutableStateOf(container.optDouble("corner",12.0).toInt().toString()) }
-ExposedDropdown(
-value = cornerOpt, label = "corner (dp)",
-options = listOf("0","4","8","12","16","20","24","32")
-) { sel ->
-cornerOpt = sel
-container.put("corner", sel.toDouble())
-onChange()
-}
-
-// Elevation (dropdown)
-var elevOpt by remember { mutableStateOf((container.optDouble("elevationDp", if (style in listOf("surface","primary","tonal")) 1.0 else 0.0)).toInt().toString()) }
-ExposedDropdown(
-value = elevOpt, label = "elevation (dp)",
-options = listOf("0","1","2","3","4","6","8","12","16")
-) { sel ->
-elevOpt = sel
-if (sel == "0") container.remove("elevationDp") else container.put("elevationDp", sel.toDouble())
-onChange()
-}
-
-val currentBorderMode = container.optString("borderMode","none")
-var borderTh by remember {
-    mutableStateOf(
-        container.optDouble(
-            "borderThicknessDp",
-            if (currentBorderMode != "none") 1.0 else 0.0
-        ).toInt().toString()
-    )
-}
-ExposedDropdown(
-value = borderTh, label = "borderThickness (dp)",
-options = listOf("0","1","2","3","4","6","8")
-) { sel ->
-borderTh = sel
-if (sel == "0") container.remove("borderThicknessDp") else container.put("borderThicknessDp", sel.toDouble())
-onChange()
-}
-
-// Nuovo toggle: sfondo trasparente (nessun fill)
-var transparent by remember { mutableStateOf(container.optBoolean("transparentBg", false)) }
-Row(verticalAlignment = Alignment.CenterVertically) {
-Switch(
-checked = transparent,
-onCheckedChange = {
-transparent = it
-if (it) container.put("transparentBg", true) else container.remove("transparentBg")
-onChange()
-}
-)
-Spacer(Modifier.width(8.dp))
-Text("Sfondo trasparente (nessun colore)")
-}
-
-val borderColor = remember { mutableStateOf(container.optString("borderColor","")) }
-NamedColorPickerPlus(current = borderColor.value, label = "borderColor", allowRoles = true) { hex ->
-borderColor.value = hex
-if (hex.isBlank()) container.remove("borderColor") else container.put("borderColor", hex)
-onChange()
-}
-
-// Dimensioni
-var widthMode by remember { mutableStateOf(container.optString("widthMode","wrap")) }
-ExposedDropdown(
-value = widthMode, label = "width",
-options = listOf("wrap","fill","fixed_dp","fraction")
-) { sel ->
-widthMode = sel
-container.put("widthMode", sel)
-onChange()
-}
-when (widthMode) {
-"fixed_dp" -> {
-var w by remember { mutableStateOf(container.optDouble("widthDp", 160.0).toInt().toString()) } // default 160
-ExposedDropdown(
-value = w, label = "width (dp)",
-options = listOf("120","160","200","240","280","320","360","400")
-) { sel -> w = sel; container.put("widthDp", sel.toDouble()); onChange() }
-}
-"fraction" -> {
-var f by remember { mutableStateOf(((container.optDouble("widthFraction",1.0))*100).toInt().toString()) }
-ExposedDropdown(
-value = f, label = "width (%)",
-options = listOf("25","33","50","66","75","100")
-) { sel -> f = sel; container.put("widthFraction", sel.toDouble()/100.0); onChange() }
-}
-}
-
-var heightMode by remember { mutableStateOf(container.optString("heightMode","wrap")) }
-ExposedDropdown(
-value = heightMode, label = "height",
-options = listOf("wrap","fixed_dp")
-) { sel -> heightMode = sel; container.put("heightMode", sel); onChange() }
-if (heightMode == "fixed_dp") {
-var h by remember { mutableStateOf(container.optDouble("heightDp", 48.0).toInt().toString()) }
-ExposedDropdown(
-value = h, label = "height (dp)",
-options = listOf("24","32","40","48","56","64","96","128","160","200")
-) { sel -> h = sel; container.put("heightDp", sel.toDouble()); onChange() }
-}
-}
 
 /* =========================================================
 * INSPECTOR dei vari BLOCCHI – esistenti
@@ -4384,4 +4304,3 @@ st = st.copy(fontStyle = FontStyle.Italic)
 }
 return st
 }
-
