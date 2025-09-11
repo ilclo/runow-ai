@@ -1153,11 +1153,12 @@ fun StyledContainer(
 
     val cs = MaterialTheme.colorScheme
     val shape = when (shapeName) {
-        "cut"       -> CutCornerShape(cornerRadius.dp)
+        "cut"       -> CutCornerShape(corner.dp)
         "pill"      -> RoundedCornerShape(percent = 50)
         "topBottom" -> RoundedCornerShape(0.dp) // usi le linee disegnate, non il fill
-        else        -> RoundedCornerShape(cornerRadius.dp)
+        else        -> RoundedCornerShape(corner.dp)
     }
+
 
 
     // === Dimensioni ===
@@ -2928,11 +2929,14 @@ val lbl = remember { mutableStateOf(it.optString("label","")) }
 OutlinedTextField(lbl.value, { v -> lbl.value = v; it.put("label", v); onChange() }, label = { Text("label") })
 val action = remember { mutableStateOf(it.optString("actionId","")) }
 OutlinedTextField(action.value, { v -> action.value = v; it.put("actionId", v); onChange() }, label = { Text("actionId") })
-var style by remember { mutableStateOf(container.optString("style","full")) }
+var style by remember { mutableStateOf(it.optString("style", "primary")) }
 ExposedDropdown(
     value = style, label = "style",
-    options = listOf("text","outlined","topbottom","full","primary","tonal","surface")
-) { sel -> style = sel; container.put("style", sel); onChange() }
+    options = listOf("primary","tonal","outlined","text")
+) { sel ->
+    style = sel
+    it.put("style", sel)
+    onChange()
 }
 else -> {
 var mode by remember { mutableStateOf(it.optString("mode","fixed")) }
@@ -3158,7 +3162,7 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         borderMode = sel; container.put("borderMode", sel); onChange()
     }
 
-    val defaultTh = if (style == "outlined" || style == "topbottom") 1 else 0
+    val defaultTh = if (styleUi == "outlined" || styleUi == "topbottom") 1 else 0
     var borderTh by remember {
         mutableStateOf(
             container.optDouble(
