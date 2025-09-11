@@ -1148,15 +1148,15 @@ fun StyledContainer(
 ) {
     // === Stile unificato ===
     val style = cfg.optString("style", "full").lowercase() // text | outlined | topbottom | full | surface | primary | tonal
-    val shapeName = cfg.optString("shape", "rounded").lowercase()
+    val shapeName = cfg.optString("shape", "rounded")
     val corner = cfg.optDouble("corner", 12.0).toFloat()
 
     val cs = MaterialTheme.colorScheme
     val shape = when (shapeName) {
-        "cut"      -> CutCornerShape(cornerRadius.dp)
-        "pill"     -> RoundedCornerShape(percent = 50)
-        "topBottom"-> RoundedCornerShape(0.dp)
-        else       -> RoundedCornerShape(cornerRadius.dp)
+        "cut"       -> CutCornerShape(cornerRadius.dp)
+        "pill"      -> RoundedCornerShape(percent = 50)
+        "topBottom" -> RoundedCornerShape(0.dp) // usi le linee disegnate, non il fill
+        else        -> RoundedCornerShape(cornerRadius.dp)
     }
 
 
