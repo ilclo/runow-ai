@@ -1180,7 +1180,6 @@ fun StyledContainer(
         else                -> m // wrap
     }
 
-    // === Allineamento contenuti ===
     val hAlign = when (cfg.optString("hAlign", "start")) {
         "center" -> Alignment.CenterHorizontally
         "end"    -> Alignment.End
@@ -1191,6 +1190,7 @@ fun StyledContainer(
         "bottom" -> Alignment.Bottom
         else     -> Alignment.CenterVertically
     }
+
 
     // === Colori / Gradiente ===
     val customColor = parseColorOrRole(cfg.optString("customColor",""))
@@ -2985,7 +2985,12 @@ label = { Text("title") }
 val subtitle = remember { mutableStateOf(topBar.optString("subtitle","")) }
 OutlinedTextField(
 value = subtitle.value,
-onValueChange = { subtitle.value = it; if (it.isBlank()) topBar.remove("subtitle") else topBar.put("subtitle", it); onChange() },
+onValueChange = {
+    subtitle.value = it
+    if (it.isBlank()) topBar.remove("subtitle") else topBar.put("subtitle", it)
+    onChange()
+},
+
 label = { Text("subtitle (opz.)") }
 )
 
@@ -3076,7 +3081,7 @@ ContainerInspectorPanel(c, onChange)
 @Composable
 private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit) {
     // STYLE: interfaccia semplificata "full / outlined / text"
-    val borderMode = container.optString("borderMode","none")
+    val currentBorderMode = container.optString("borderMode","none")
     var styleUi by remember { mutableStateOf(container.optString("style","full")) }
     ExposedDropdown(
         value = styleUi, label = "style",
@@ -3156,19 +3161,19 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
     val defaultTh = if (style == "outlined" || style == "topbottom") 1 else 0
     var borderTh by remember {
         mutableStateOf(
-            container
-                .optDouble("borderThicknessDp", if (borderMode!="none") 1.0 else 0.0)
-                .toInt()
-                .toString()
+            container.optDouble(
+                "borderThicknessDp",
+                if (currentBorderMode != "none") 1.0 else 0.0
+            ).toInt().toString()
         )
     }
-
     ExposedDropdown(
         value = borderTh, label = "borderThickness (dp)",
         options = listOf("0","1","2","3","4","6","8")
     ) { sel ->
         borderTh = sel
-        if (sel == "0") container.remove("borderThicknessDp") else container.put("borderThicknessDp", sel.toDouble())
+        if (sel == "0") container.remove("borderThicknessDp")
+        else container.put("borderThicknessDp", sel.toDouble())
         onChange()
     }
 
