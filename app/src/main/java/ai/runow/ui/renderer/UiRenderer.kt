@@ -882,7 +882,7 @@ val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
 var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
 
 // ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
-var previewRoot: JSONObject? by remember { mutableStateOf(null) }
+var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
 fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
 val out = JSONObject(base.toString())
 listOf("page", "topBar").forEach { k ->
@@ -1152,11 +1152,13 @@ fun StyledContainer(
     val corner = cfg.optDouble("corner", 12.0).toFloat()
 
     val cs = MaterialTheme.colorScheme
-    val shape: CornerBasedShape = when (shapeName) {
-        "pill" -> RoundedCornerShape(percent = 50)
-        "cut"  -> CutCornerShape(corner.dp)
-        else   -> RoundedCornerShape(corner.dp)
+    val shape = when (shapeName) {
+        "cut"      -> CutCornerShape(cornerRadius.dp)
+        "pill"     -> RoundedCornerShape(percent = 50)
+        "topBottom"-> RoundedCornerShape(0.dp)
+        else       -> RoundedCornerShape(cornerRadius.dp)
     }
+
 
     // === Dimensioni ===
     val widthMode = cfg.optString("widthMode", "wrap")             // wrap | fill | fixed_dp | fraction
@@ -2503,7 +2505,6 @@ RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspe
         }
     }
 }
-
 "MetricsGrid" -> Wrapper {
 val tiles = block.optJSONArray("tiles") ?: JSONArray()
 val cols = block.optInt("columns", 2).coerceIn(1, 3)
@@ -3075,6 +3076,7 @@ ContainerInspectorPanel(c, onChange)
 @Composable
 private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit) {
     // STYLE: interfaccia semplificata "full / outlined / text"
+    val borderMode = container.optString("borderMode","none")
     var styleUi by remember { mutableStateOf(container.optString("style","full")) }
     ExposedDropdown(
         value = styleUi, label = "style",
@@ -3152,7 +3154,15 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
     }
 
     val defaultTh = if (style == "outlined" || style == "topbottom") 1 else 0
-    var borderTh by remember { mutableStateOf(container.optDouble("borderThicknessDp", defaultTh.toDouble()).toInt().toString()) }
+    var borderTh by remember {
+        mutableStateOf(
+            container
+                .optDouble("borderThicknessDp", if (borderMode!="none") 1.0 else 0.0)
+                .toInt()
+                .toString()
+        )
+    }
+
     ExposedDropdown(
         value = borderTh, label = "borderThickness (dp)",
         options = listOf("0","1","2","3","4","6","8")
