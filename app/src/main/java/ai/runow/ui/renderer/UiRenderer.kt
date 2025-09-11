@@ -1189,10 +1189,10 @@ val borderColorStr = cfg.optString("borderColor", "#000000")
 val borderColor = Color(android.graphics.Color.parseColor(borderColorStr))
 
 val shape = when (shapeName) {
-     "cut"      -> CutCornerShape(cornerRadius.dp)
-     "pill"     -> RoundedCornerShape(percent = 50)
-     "topBottom"-> RoundedCornerShape(0.dp) // geometria di clipping standard; le linee le disegniamo a parte
-     else       -> RoundedCornerShape(cornerRadius.dp)
+"cut"      -> CutCornerShape(cornerRadius.dp)
+"pill"     -> RoundedCornerShape(percent = 50)
+"topBottom"-> RoundedCornerShape(0.dp) // geometria di clipping standard; le linee le disegniamo a parte
+else       -> RoundedCornerShape(cornerRadius.dp)
 }
 
 // Elevazione e ombra
@@ -1217,9 +1217,9 @@ else    -> m // wrap
 }
 
 val showFill = (when (style) {
-    "text"     -> false
-    "outlined" -> false
-    else       -> true
+"text"     -> false
+"outlined" -> false
+else       -> true
 }) && !transparentBg
 val showBorder = when (style) {
 "text"     -> false
@@ -1229,7 +1229,7 @@ else       -> borderThicknessDp > 0f
 
 val drawSeparators = (borderMode == "topBottom" && borderThicknessDp > 0f)
 val borderStroke = if (showBorder && !drawSeparators && borderThicknessDp > 0f)
-    BorderStroke(borderThicknessDp.dp, borderColor) else null
+BorderStroke(borderThicknessDp.dp, borderColor) else null
 
 val base = if (elevationDp > 0f) {
 m.shadow(elevationDp.dp, shape, clip = false)
@@ -2442,14 +2442,14 @@ val stTitle   = applyTextStyleOverrides(block, baseTitle)
 
 // dentro when (block.optString("type")) { ... "SectionHeader" -> { ... } }
 Column(Modifier.fillMaxWidth()) {
-    if (title.isNotBlank())
-       Text(title, style = stTitle, textAlign = align, modifier = Modifier.fillMaxWidth())
+if (title.isNotBlank())
+Text(title, style = stTitle, textAlign = align, modifier = Modifier.fillMaxWidth())
 
-    if (subtitle.isNotBlank()) {
-        val baseSub = MaterialTheme.typography.bodyMedium
-        val stSub   = applyTextStyleOverrides(block, baseSub)
-       Text(subtitle, style = stSub, textAlign = align, modifier = Modifier.fillMaxWidth())
-    }
+if (subtitle.isNotBlank()) {
+val baseSub = MaterialTheme.typography.bodyMedium
+val stSub   = applyTextStyleOverrides(block, baseSub)
+Text(subtitle, style = stSub, textAlign = align, modifier = Modifier.fillMaxWidth())
+}
 }
 
 "MetricsGrid" -> Wrapper {
@@ -2567,16 +2567,34 @@ valueRange = min..max
 
 "List" -> Wrapper {
 val items = block.optJSONArray("items") ?: JSONArray()
+val align = mapTextAlign(block.optString("align", "start"))
+val textColor = parseColorOrRole(block.optString("textColor", ""))
 Column(Modifier.fillMaxWidth()) {
 for (i in 0 until items.length()) {
-val it = items.getJSONObject(i)
-val title = it.optString("title","")
-val subtitle = it.optString("subtitle","")
-val action = it.optString("actionId","")
+val item = items.optJSONObject(i) ?: continue
 ListItem(
-headlineContent = { Text(title) },
-supportingContent = { if (subtitle.isNotBlank()) Text(subtitle) },
-modifier = Modifier.clickable { if (action.isNotBlank()) dispatch(action) }
+headlineContent = {
+Text(
+item.optString("title", ""),
+style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyLarge),
+color = textColor ?: LocalContentColor.current,
+textAlign = align,
+modifier = Modifier.fillMaxWidth()
+)
+},
+supportingContent = {
+val sub = item.optString("subtitle", "")
+if (sub.isNotBlank()) {
+Text(
+sub,
+style = applyTextStyleOverrides(block, MaterialTheme.typography.bodyMedium),
+color = textColor ?: LocalContentColor.current,
+textAlign = align,
+modifier = Modifier.fillMaxWidth()
+)
+}
+},
+modifier = Modifier.fillMaxWidth()
 )
 Divider()
 }
@@ -3062,16 +3080,16 @@ onChange()
 // Nuovo toggle: sfondo trasparente (nessun fill)
 var transparent by remember { mutableStateOf(container.optBoolean("transparentBg", false)) }
 Row(verticalAlignment = Alignment.CenterVertically) {
-    Switch(
-        checked = transparent,
-        onCheckedChange = {
-            transparent = it
-            if (it) container.put("transparentBg", true) else container.remove("transparentBg")
-            onChange()
-        }
-    )
-    Spacer(Modifier.width(8.dp))
-    Text("Sfondo trasparente (nessun colore)")
+Switch(
+checked = transparent,
+onCheckedChange = {
+transparent = it
+if (it) container.put("transparentBg", true) else container.remove("transparentBg")
+onChange()
+}
+)
+Spacer(Modifier.width(8.dp))
+Text("Sfondo trasparente (nessun colore)")
 }
 
 val borderColor = remember { mutableStateOf(container.optString("borderColor","")) }
@@ -3665,10 +3683,10 @@ onChange()
 * ========================================================= */
 
 private fun mapTextAlign(raw: String?): TextAlign = when (raw?.lowercase()) {
-    "center" -> TextAlign.Center
-    "end", "right" -> TextAlign.End
-    "justify" -> TextAlign.Justify
-    else -> TextAlign.Start
+"center" -> TextAlign.Center
+"end", "right" -> TextAlign.End
+"justify" -> TextAlign.Justify
+else -> TextAlign.Start
 }
 
 private fun sizeModifier(size: String): Modifier = when (size) {
@@ -3965,37 +3983,37 @@ if (image != null) Icon(image, contentDescription) else Text(".")
 
 @Composable
 private fun parseColorOrRole(s: String?): Color? {
-    val v = s?.trim().orEmpty()
-    if (v.isBlank()) return null
-    if (v.startsWith("#")) return runCatching { Color(android.graphics.Color.parseColor(v)) }.getOrNull()
+val v = s?.trim().orEmpty()
+if (v.isBlank()) return null
+if (v.startsWith("#")) return runCatching { Color(android.graphics.Color.parseColor(v)) }.getOrNull()
 
-    val cs = MaterialTheme.colorScheme
-    return when (v.lowercase()) {
-        "primary" -> cs.primary
-        "onprimary" -> cs.onPrimary
-        "primarycontainer" -> cs.primaryContainer
-        "onprimarycontainer" -> cs.onPrimaryContainer
-        "secondary" -> cs.secondary
-        "onsecondary" -> cs.onSecondary
-        "secondarycontainer" -> cs.secondaryContainer
-        "onsecondarycontainer" -> cs.onSecondaryContainer
-        "tertiary" -> cs.tertiary
-        "ontertiary" -> cs.onTertiary
-        "tertiarycontainer" -> cs.tertiaryContainer
-        "ontertiarycontainer" -> cs.onTertiaryContainer
-        "surface" -> cs.surface
-        "onsurface" -> cs.onSurface
-        "surfacevariant" -> cs.surfaceVariant
-        "onsurfacevariant" -> cs.onSurfaceVariant
-        "background" -> cs.background
-        "error" -> cs.error
-        "onerror" -> cs.onError
-        "errorcontainer" -> cs.errorContainer
-        "outline" -> cs.outline
-        "outlinevariant" -> cs.outlineVariant
-        "scrim" -> cs.scrim
-        else -> null
-    }
+val cs = MaterialTheme.colorScheme
+return when (v.lowercase()) {
+"primary" -> cs.primary
+"onprimary" -> cs.onPrimary
+"primarycontainer" -> cs.primaryContainer
+"onprimarycontainer" -> cs.onPrimaryContainer
+"secondary" -> cs.secondary
+"onsecondary" -> cs.onSecondary
+"secondarycontainer" -> cs.secondaryContainer
+"onsecondarycontainer" -> cs.onSecondaryContainer
+"tertiary" -> cs.tertiary
+"ontertiary" -> cs.onTertiary
+"tertiarycontainer" -> cs.tertiaryContainer
+"ontertiarycontainer" -> cs.onTertiaryContainer
+"surface" -> cs.surface
+"onsurface" -> cs.onSurface
+"surfacevariant" -> cs.surfaceVariant
+"onsurfacevariant" -> cs.onSurfaceVariant
+"background" -> cs.background
+"error" -> cs.error
+"onerror" -> cs.onError
+"errorcontainer" -> cs.errorContainer
+"outline" -> cs.outline
+"outlinevariant" -> cs.outlineVariant
+"scrim" -> cs.scrim
+else -> null
+}
 }
 
 
@@ -4268,12 +4286,12 @@ private fun newSectionHeader() = JSONObject("""{"type":"SectionHeader","title":"
 
 private fun newButtonRow() = JSONObject(
 """
-   {"type":"ButtonRow","align":"center","buttons":[
-     {"label":"Start","style":"primary","icon":"play_arrow","size":"md","tint":"default","shape":"rounded","corner":20,"pressEffect":"scale","actionId":"start_run"},
-     {"label":"Pausa","style":"tonal","icon":"pause","size":"md","tint":"default","shape":"rounded","corner":20,"actionId":"pause_run"},
-     {"label":"Stop","style":"outlined","icon":"stop","size":"md","tint":"error","shape":"rounded","corner":20,"actionId":"stop_run","confirm":true}
-   ]}
-   """.trimIndent()
+{"type":"ButtonRow","align":"center","buttons":[
+{"label":"Start","style":"primary","icon":"play_arrow","size":"md","tint":"default","shape":"rounded","corner":20,"pressEffect":"scale","actionId":"start_run"},
+{"label":"Pausa","style":"tonal","icon":"pause","size":"md","tint":"default","shape":"rounded","corner":20,"actionId":"pause_run"},
+{"label":"Stop","style":"outlined","icon":"stop","size":"md","tint":"error","shape":"rounded","corner":20,"actionId":"stop_run","confirm":true}
+]}
+""".trimIndent()
 )
 
 private fun newSpacer()   = JSONObject("""{"type":"Spacer","height":8}""")
@@ -4281,12 +4299,12 @@ private fun newDividerV() = JSONObject("""{"type":"DividerV","thickness":1,"heig
 
 private fun newCard() = JSONObject(
 """
-   {"type":"Card","variant":"elevated","clickActionId":"nav:run",
-    "blocks":[
-      {"type":"SectionHeader","title":"Card esempio","style":"titleSmall","align":"start"},
-      {"type":"Divider"}
-    ]}
-   """.trimIndent()
+{"type":"Card","variant":"elevated","clickActionId":"nav:run",
+"blocks":[
+{"type":"SectionHeader","title":"Card esempio","style":"titleSmall","align":"start"},
+{"type":"Divider"}
+]}
+""".trimIndent()
 )
 
 private fun newFab() = JSONObject("""{"type":"Fab","icon":"play_arrow","label":"Start","variant":"extended","actionId":"start_run"}""")
@@ -4296,12 +4314,12 @@ JSONObject("""{"type":"IconButton","icon":"more_vert","openMenuId":"$menuId"}"""
 
 private fun newMenu(menuId: String = "more_menu") = JSONObject(
 """
-   {"type":"Menu","id":"$menuId","items":[
-      {"icon":"tune","label":"Layout Lab","actionId":"open_layout_lab"},
-      {"icon":"palette","label":"Theme Lab","actionId":"open_theme_lab"},
-      {"icon":"settings","label":"Impostazioni","actionId":"nav:settings"}
-   ]}
-   """.trimIndent()
+{"type":"Menu","id":"$menuId","items":[
+{"icon":"tune","label":"Layout Lab","actionId":"open_layout_lab"},
+{"icon":"palette","label":"Theme Lab","actionId":"open_theme_lab"},
+{"icon":"settings","label":"Impostazioni","actionId":"nav:settings"}
+]}
+""".trimIndent()
 )
 
 private fun newProgress() = JSONObject("""{ "type":"Progress", "label":"Avanzamento", "value": 40, "color": "primary", "showPercent": true }""")
@@ -4310,21 +4328,21 @@ private fun newImage()    = JSONObject("""{ "type":"Image", "source":"res:ic_lau
 
 private fun newTabs() = JSONObject(
 """
-   {"type":"Tabs","initialIndex":0,"tabs":[
-     {"label":"Tab 1","blocks":[{"type":"SectionHeader","title":"Tab 1","style":"titleSmall","align":"start"}]},
-     {"label":"Tab 2","blocks":[{"type":"SectionHeader","title":"Tab 2","style":"titleSmall","align":"start"}]}
-   ]}
-   """.trimIndent()
+{"type":"Tabs","initialIndex":0,"tabs":[
+{"label":"Tab 1","blocks":[{"type":"SectionHeader","title":"Tab 1","style":"titleSmall","align":"start"}]},
+{"label":"Tab 2","blocks":[{"type":"SectionHeader","title":"Tab 2","style":"titleSmall","align":"start"}]}
+]}
+""".trimIndent()
 )
 
 private fun newChipRow() = JSONObject(
 """
-   {"type":"ChipRow","chips":[
-     {"label":"Easy","bind":"level","value":"easy"},
-     {"label":"Medium","bind":"level","value":"medium"},
-     {"label":"Hard","bind":"level","value":"hard"}
-   ], "textSizeSp":14}
-   """.trimIndent()
+{"type":"ChipRow","chips":[
+{"label":"Easy","bind":"level","value":"easy"},
+{"label":"Medium","bind":"level","value":"medium"},
+{"label":"Hard","bind":"level","value":"hard"}
+], "textSizeSp":14}
+""".trimIndent()
 )
 
 private fun newMetricsGrid() = JSONObject("""{"type":"MetricsGrid","columns":2,"tiles":[{"label":"Pace"},{"label":"Heart"}]}""")
@@ -4335,11 +4353,11 @@ private fun newToggle() = JSONObject("""{"type":"Toggle","label":"Attiva opzione
 
 private fun newList() = JSONObject(
 """
-   {"type":"List","align":"start","items":[
-     {"title":"Voce 1","subtitle":"Sottotitolo 1","actionId":"list:1"},
-     {"title":"Voce 2","subtitle":"Sottotitolo 2","actionId":"list:2"}
-   ]}
-   """.trimIndent()
+{"type":"List","align":"start","items":[
+{"title":"Voce 1","subtitle":"Sottotitolo 1","actionId":"list:1"},
+{"title":"Voce 2","subtitle":"Sottotitolo 2","actionId":"list:2"}
+]}
+""".trimIndent()
 )
 
 /* =========================================================
@@ -4347,20 +4365,20 @@ private fun newList() = JSONObject(
 * ========================================================= */
 @Composable
 private fun applyTextStyleOverrides(owner: JSONObject, base: TextStyle): TextStyle {
-    var st = base
-    val sizeSp = owner.optDouble("textSizeSp", Double.NaN)
-    if (!sizeSp.isNaN()) st = st.copy(fontSize = sizeSp.sp)
-    parseFontWeight(owner.optString("fontWeight","").takeIf { it.isNotBlank() })?.let {
-        st = st.copy(fontWeight = it)
-    }
-    fontFamilyFromName(owner.optString("fontFamily","").takeIf { it.isNotBlank() })?.let {
-        st = st.copy(fontFamily = it)
-    }
-    parseColorOrRole(owner.optString("textColor","").takeIf { it.isNotBlank() })?.let {
-        st = st.copy(color = it)
-    }
-    if (owner.optBoolean("italic", false)) {
-        st = st.copy(fontStyle = FontStyle.Italic)
-    }
-    return st
+var st = base
+val sizeSp = owner.optDouble("textSizeSp", Double.NaN)
+if (!sizeSp.isNaN()) st = st.copy(fontSize = sizeSp.sp)
+parseFontWeight(owner.optString("fontWeight","").takeIf { it.isNotBlank() })?.let {
+st = st.copy(fontWeight = it)
+}
+fontFamilyFromName(owner.optString("fontFamily","").takeIf { it.isNotBlank() })?.let {
+st = st.copy(fontFamily = it)
+}
+parseColorOrRole(owner.optString("textColor","").takeIf { it.isNotBlank() })?.let {
+st = st.copy(color = it)
+}
+if (owner.optBoolean("italic", false)) {
+st = st.copy(fontStyle = FontStyle.Italic)
+}
+return st
 }
