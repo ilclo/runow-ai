@@ -38,7 +38,6 @@ import androidx.compose.ui.unit.IntOffset
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
-import androidx.compose.ui.input.pointer.pointerInput
 // Animation
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -447,12 +446,6 @@ onChange()
 }
 }
 }
-
-
-
-
-private fun resolveTextColor(working: JSONObject): Color? =
-parseColorOrRole(working.optString("textColor", ""))
 
 private fun parseFontWeight(v: String?): FontWeight? = when (v?.lowercase()) {
 "w100" -> FontWeight.W100
@@ -1147,10 +1140,10 @@ drawLine(color, start = Offset(0f, size.height - w/2f), end = Offset(size.width,
 // --- StyledContainer: contenitore unificato per tutti i blocchi ---
 @Composable
 fun StyledContainer(
-cfg: JSONObject,
-modifier: Modifier = Modifier,
-contentPadding: PaddingValues? = null,
-content: @Composable BoxScope.() -> Unit
+    cfg: JSONObject,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues? = null,
+    content: @Composable BoxScope.() -> Unit
 ) {
 // --- Lettura configurazione ---
 val style = cfg.optString("style", "outlined") // "text" | "outlined" | "tonal" | "primary"
@@ -1192,13 +1185,14 @@ val borderThicknessDp = cfg.optDouble("borderThicknessDp", 1.0).toFloat()
 val borderColorStr = cfg.optString("borderColor", "#000000")
 val borderColor = Color(android.graphics.Color.parseColor(borderColorStr))
 
-val shape = when (shapeName) {
-"cut"      -> CutCornerShape(cornerRadius.dp)
-"pill"     -> RoundedCornerShape(percent = 50)
-"topBottom"-> RoundedCornerShape(0.dp) // geometria di clipping standard; le linee le disegniamo a parte
-else       -> RoundedCornerShape(cornerRadius.dp)
-}
+val shapeName = cfg.optString("shape", "rounded")
 
+val shape = when (shapeName) {
+	"cut"      -> CutCornerShape(cornerRadius.dp)
+	"pill"     -> RoundedCornerShape(percent = 50)
+	"topBottom"-> RoundedCornerShape(0.dp)
+	else       -> RoundedCornerShape(cornerRadius.dp)
+}
 // Elevazione e ombra
 val elevationDp = cfg.optDouble("elevationDp", 0.0).toFloat().coerceAtLeast(0f)
 
@@ -2437,25 +2431,24 @@ RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspe
 }
 }
 "SectionHeader" -> {
-val title = block.optString("title","")
-val subtitle = block.optString("subtitle","")
-val align = mapTextAlign(block.readAlign())
+    val title = ...
+    val subtitle = ...
+    val align = mapTextAlign(block.readAlign())
 
-val baseTitle = MaterialTheme.typography.titleMedium
-val stTitle   = applyTextStyleOverrides(block, baseTitle)
+    val baseTitle = MaterialTheme.typography.titleMedium
+    val stTitle   = applyTextStyleOverrides(block, baseTitle)
 
-// dentro when (block.optString("type")) { ... "SectionHeader" -> { ... } }
-Column(Modifier.fillMaxWidth()) {
-if (title.isNotBlank())
-Text(title, style = stTitle, textAlign = align, modifier = Modifier.fillMaxWidth())
+    Column(Modifier.fillMaxWidth()) {
+        if (title.isNotBlank())
+            Text(title, style = stTitle, textAlign = align, modifier = Modifier.fillMaxWidth())
 
-if (subtitle.isNotBlank()) {
-val baseSub = MaterialTheme.typography.bodyMedium
-val stSub   = applyTextStyleOverrides(block, baseSub)
-Text(subtitle, style = stSub, textAlign = align, modifier = Modifier.fillMaxWidth())
+        if (subtitle.isNotBlank()) {
+            val baseSub = MaterialTheme.typography.bodyMedium
+            val stSub   = applyTextStyleOverrides(block, baseSub)
+            Text(subtitle, style = stSub, textAlign = align, modifier = Modifier.fillMaxWidth())
+        }
+    }
 }
-}
-
 "MetricsGrid" -> Wrapper {
 val tiles = block.optJSONArray("tiles") ?: JSONArray()
 val cols = block.optInt("columns", 2).coerceIn(1, 3)
@@ -3071,7 +3064,15 @@ if (sel == "0") container.remove("elevationDp") else container.put("elevationDp"
 onChange()
 }
 
-var borderTh by remember { mutableStateOf(container.optDouble("borderThicknessDp", if (borderMode!="none") 1.0 else 0.0).toInt().toString()) }
+val currentBorderMode = container.optString("borderMode","none")
+var borderTh by remember {
+    mutableStateOf(
+        container.optDouble(
+            "borderThicknessDp",
+            if (currentBorderMode != "none") 1.0 else 0.0
+        ).toInt().toString()
+    )
+}
 ExposedDropdown(
 value = borderTh, label = "borderThickness (dp)",
 options = listOf("0","1","2","3","4","6","8")
