@@ -1148,8 +1148,7 @@ content: @Composable BoxScope.() -> Unit
 ) {
 // --- Lettura configurazione ---
 val style = cfg.optString("style", "outlined") // "text" | "outlined" | "tonal" | "primary"
-val borderMode = cfg.optString("borderMode", "full") // "none" | "full" | "topBottom"
-val corner = cfg.optString("corner", "rounded")       // "rounded" | "cut"
+val borderMode = cfg.optString("borderMode", "full") // retro-compat: se arriva da vecchi JSON lo consideriamo
 val cornerRadius = cfg.optDouble("cornerRadiusDp", 12.0).toFloat()
 
 val widthMode = cfg.optString("widthMode", "wrap")    // "wrap" | "match" | "fixed"
@@ -1187,9 +1186,11 @@ val borderThicknessDp = cfg.optDouble("borderThicknessDp", 1.0).toFloat()
 val borderColorStr = cfg.optString("borderColor", "#000000")
 val borderColor = Color(android.graphics.Color.parseColor(borderColorStr))
 
-val shape = when (corner) {
-"cut" -> CutCornerShape(cornerRadius.dp)
-else  -> RoundedCornerShape(cornerRadius.dp)
+val shape = when (shapeName) {
+     "cut"      -> CutCornerShape(cornerRadius.dp)
+     "pill"     -> RoundedCornerShape(percent = 50)
+     "topBottom"-> RoundedCornerShape(0.dp) // geometria di clipping standard; le linee le disegniamo a parte
+     else       -> RoundedCornerShape(cornerRadius.dp)
 }
 
 // Elevazione e ombra
@@ -1197,6 +1198,8 @@ val elevationDp = cfg.optDouble("elevationDp", 0.0).toFloat().coerceAtLeast(0f)
 
 // Opacità
 val opacity = cfg.optDouble("opacity", 1.0).toFloat().coerceIn(0f,1f)
+
+val transparentBg = cfg.optBoolean("transparentBg", false)
 
 // --- Modifiche misura ---
 var m = modifier
@@ -1216,18 +1219,18 @@ val showFill = when (style) {
 "text"     -> false
 "outlined" -> false
 else       -> true
-}
+&& !transparentBg
 val showBorder = when (style) {
 "text"     -> false
 "outlined" -> true
 else       -> borderThicknessDp > 0f
 }
 
-val borderStroke = if (showBorder && borderMode == "full" && borderThicknessDp > 0f)
+val drawSeparators = ((shapeName == "topBottom") || (borderMode == "topBottom")) && borderThicknessDp > 0f
+val borderStroke = if (showBorder && !drawSeparators && borderThicknessDp > 0f)
 BorderStroke(borderThicknessDp.dp, borderColor)
 else null
 
-// Disegno righe top/bottom se richiesto
 val drawSeparators = (borderMode == "topBottom" && borderThicknessDp > 0f)
 
 val base = if (elevationDp > 0f) {
@@ -1944,10 +1947,8 @@ if (showRootInspector) {
 val working = remember { JSONObject(layout.toString()) }
 var dummyTick by remember { mutableStateOf(0) }
 
-// onChange: aggiorna live preview di page/topBar
 val onChange: () -> Unit = {
-dummyTick++
-onRootLivePreview(working) // <-- live preview
+onRootLivePreview(JSONObject(working.toString())) // nuova istanza => recomposition garantita
 }
 
 BackHandler(enabled = true) {
@@ -2441,17 +2442,18 @@ val align = mapTextAlign(block.optString("align","start"))
 val baseTitle = MaterialTheme.typography.titleMedium
 val stTitle   = applyTextStyleOverrides(block, baseTitle)
 
+// dentro when (block.optString("type")) { ... "SectionHeader" -> { ... } }
 Column(Modifier.fillMaxWidth()) {
-if (title.isNotBlank())
-Text(title, style = stTitle, textAlign = align)
+    if (title.isNotBlank())
+       Text(title, style = stTitle, textAlign = align, modifier = Modifier.fillMaxWidth())
 
-if (subtitle.isNotBlank()) {
-val baseSub = MaterialTheme.typography.bodyMedium
-val stSub   = applyTextStyleOverrides(block, baseSub) // stessi override se presenti
-Text(subtitle, style = stSub, textAlign = align)
+    if (subtitle.isNotBlank()) {
+        val baseSub = MaterialTheme.typography.bodyMedium
+        val stSub   = applyTextStyleOverrides(block, baseSub)
+       Text(subtitle, style = stSub, textAlign = align, modifier = Modifier.fillMaxWidth())
+    }
 }
-}
-}
+
 "MetricsGrid" -> Wrapper {
 val tiles = block.optJSONArray("tiles") ?: JSONArray()
 val cols = block.optInt("columns", 2).coerceIn(1, 3)
@@ -3013,13 +3015,6 @@ value = style, label = "style",
 options = listOf("text","outlined","tonal","primary","surface")
 ) { sel -> style = sel; container.put("style", sel); onChange() }
 
-// N.B. Se vuoi togliere “tint”, commenta il blocco seguente:
-var tint by remember { mutableStateOf(container.optString("tint","default")) }
-ExposedDropdown(
-value = tint, label = "tint",
-options = listOf("default","success","warning","error")
-) { sel -> tint = sel; container.put("tint", sel); onChange() }
-
 // CustomColor (hex/ruoli)
 val customColor = remember { mutableStateOf(container.optString("customColor","")) }
 NamedColorPickerPlus(current = customColor.value, label = "customColor (palette/ruoli)", allowRoles = true) { hex ->
@@ -3032,7 +3027,7 @@ onChange()
 var shape by remember { mutableStateOf(container.optString("shape","rounded")) }
 ExposedDropdown(
 value = shape, label = "shape",
-options = listOf("rounded","pill","cut")
+options = listOf("rounded","pill","cut","topBottom")
 ) { sel -> shape = sel; container.put("shape", sel); onChange() }
 
 var cornerOpt by remember { mutableStateOf(container.optDouble("corner",12.0).toInt().toString()) }
@@ -3056,18 +3051,6 @@ if (sel == "0") container.remove("elevationDp") else container.put("elevationDp"
 onChange()
 }
 
-// Bordo
-var borderMode by remember { mutableStateOf(container.optString("borderMode", if (style=="outlined") "full" else "none")) }
-ExposedDropdown(
-value = borderMode,
-label = "borderMode",
-options = listOf("none","full","topBottom")
-) { sel ->
-borderMode = sel
-container.put("borderMode", sel)
-onChange()
-}
-
 var borderTh by remember { mutableStateOf(container.optDouble("borderThicknessDp", if (borderMode!="none") 1.0 else 0.0).toInt().toString()) }
 ExposedDropdown(
 value = borderTh, label = "borderThickness (dp)",
@@ -3076,6 +3059,21 @@ options = listOf("0","1","2","3","4","6","8")
 borderTh = sel
 if (sel == "0") container.remove("borderThicknessDp") else container.put("borderThicknessDp", sel.toDouble())
 onChange()
+}
+
+// Nuovo toggle: sfondo trasparente (nessun fill)
+var transparent by remember { mutableStateOf(container.optBoolean("transparentBg", false)) }
+Row(verticalAlignment = Alignment.CenterVertically) {
+    Switch(
+        checked = transparent,
+        onCheckedChange = {
+            transparent = it
+            if (it) container.put("transparentBg", true) else container.remove("transparentBg")
+            onChange()
+        }
+    )
+    Spacer(Modifier.width(8.dp))
+    Text("Sfondo trasparente (nessun colore)")
 }
 
 val borderColor = remember { mutableStateOf(container.optString("borderColor","")) }
@@ -3966,18 +3964,41 @@ if (image != null) Icon(image, contentDescription) else Text(".")
 }
 
 
-/** Hex (#RRGGBB o #AARRGGBB) -> Color; per “ruoli” restituisce null e scatterà il fallback. */
+@Composable
 private fun parseColorOrRole(s: String?): Color? {
-val v = s?.trim().orEmpty()
-if (v.isBlank()) return null
-if (v.startsWith("#")) {
-return try {
-val argb = android.graphics.Color.parseColor(v)
-Color(argb)
-} catch (_: Throwable) { null }
+    val v = s?.trim().orEmpty()
+    if (v.isBlank()) return null
+    if (v.startsWith("#")) return runCatching { Color(android.graphics.Color.parseColor(v)) }.getOrNull()
+
+    val cs = MaterialTheme.colorScheme
+    return when (v.lowercase()) {
+        "primary" -> cs.primary
+        "onprimary" -> cs.onPrimary
+        "primarycontainer" -> cs.primaryContainer
+        "onprimarycontainer" -> cs.onPrimaryContainer
+        "secondary" -> cs.secondary
+        "onsecondary" -> cs.onSecondary
+        "secondarycontainer" -> cs.secondaryContainer
+        "onsecondarycontainer" -> cs.onSecondaryContainer
+        "tertiary" -> cs.tertiary
+        "ontertiary" -> cs.onTertiary
+        "tertiarycontainer" -> cs.tertiaryContainer
+        "ontertiarycontainer" -> cs.onTertiaryContainer
+        "surface" -> cs.surface
+        "onsurface" -> cs.onSurface
+        "surfacevariant" -> cs.surfaceVariant
+        "onsurfacevariant" -> cs.onSurfaceVariant
+        "background" -> cs.background
+        "error" -> cs.error
+        "onerror" -> cs.onError
+        "errorcontainer" -> cs.errorContainer
+        "outline" -> cs.outline
+        "outlinevariant" -> cs.outlineVariant
+        "scrim" -> cs.scrim
+        else -> null
+    }
 }
-return null
-}
+
 
 
 private val NAMED_SWATCHES = linkedMapOf(
