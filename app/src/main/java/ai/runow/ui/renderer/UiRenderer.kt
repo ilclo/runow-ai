@@ -484,7 +484,7 @@ var align by remember { mutableStateOf(working.optString("align","start")) }
 ExposedDropdown(
 value = align, label = "align",
 options = listOf("start","center","end")
-) { sel -> align = sel; working.put("align", sel); onChange() }
+) { sel -> align = sel; working.writeAlign(sel); onChange() }
 
 val textSize = remember {
 mutableStateOf(working.optDouble("textSizeSp", Double.NaN).let { if (it.isNaN()) "" else it.toString() })
@@ -2435,7 +2435,7 @@ RenderBlock(b, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspe
 "SectionHeader" -> {
 val title = block.optString("title","")
 val subtitle = block.optString("subtitle","")
-val align = mapTextAlign(block.optString("align","start"))
+val align = mapTextAlign(block.readAlign())
 
 val baseTitle = MaterialTheme.typography.titleMedium
 val stTitle   = applyTextStyleOverrides(block, baseTitle)
@@ -2567,7 +2567,7 @@ valueRange = min..max
 
 "List" -> Wrapper {
 val items = block.optJSONArray("items") ?: JSONArray()
-val align = mapTextAlign(block.optString("align", "start"))
+val align = mapTextAlign(block.readAlign())
 val textColor = parseColorOrRole(block.optString("textColor", ""))
 Column(Modifier.fillMaxWidth()) {
 for (i in 0 until items.length()) {
@@ -3155,7 +3155,7 @@ ExposedDropdown(
 value = align,
 label = "align",
 options = listOf("start","center","end","space_between","space_around","space_evenly")
-) { sel -> align = sel; working.put("align", sel); onChange() }
+) { sel -> align = sel; working.writeAlign(sel); onChange() }
 
 Divider()
 Text("Bottoni", style = MaterialTheme.typography.titleMedium)
@@ -3569,7 +3569,7 @@ var align by remember { mutableStateOf(working.optString("align","start")) }
 ExposedDropdown(
 value = align, label = "align",
 options = listOf("start","center","end")
-) { sel -> align = sel; working.put("align", sel); onChange() }
+) { sel -> align = sel; working.writeAlign(sel); onChange() }
 
 // font size (sp)
 val textSize = remember {
@@ -3641,7 +3641,7 @@ var align by remember { mutableStateOf(working.optString("align","start")) }
 ExposedDropdown(
 value = align, label = "align",
 options = listOf("start","center","end")
-) { sel -> align = sel; working.put("align", sel); onChange() }
+) { sel -> align = sel; working.writeAlign(sel); onChange() }
 
 var fontFamily by remember { mutableStateOf(working.optString("fontFamily", "")) }
 ExposedDropdown(
@@ -3682,12 +3682,23 @@ onChange()
 * HELPERS: mapping, pickers, utils
 * ========================================================= */
 
-private fun mapTextAlign(raw: String?): TextAlign = when (raw?.lowercase()) {
+
+// --- ALIGN helpers: singola fonte di verità ---
+private fun JSONObject.readAlign(): String =
+optString("align", optString("textAlign", "start")).lowercase()
+
+private fun JSONObject.writeAlign(value: String) {
+put("align", value.lowercase())
+// teniamo compat ma rimuoviamo la chiave legacy se presente
+remove("textAlign")
+}
+
+private fun mapTextAlign(v: String): TextAlign = when (v.lowercase()) {
 "center" -> TextAlign.Center
 "end", "right" -> TextAlign.End
-"justify" -> TextAlign.Justify
 else -> TextAlign.Start
 }
+
 
 private fun sizeModifier(size: String): Modifier = when (size) {
 "xs" -> Modifier.height(32.dp)
