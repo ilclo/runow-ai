@@ -1155,11 +1155,14 @@ fun StyledContainer(
     val shapeName = cfg.optString("shape", "rounded")
     val corner = cfg.optDouble("corner", 12.0).toFloat()
     
+    // --- in StyledContainer(...) ---
     val shape = when (shapeName) {
-        "cut"  -> CutCornerShape(corner.dp)
-        "pill" -> RoundedCornerShape(percent = 50)
-        else   -> RoundedCornerShape(corner.dp)
+        "cut"       -> CutCornerShape(corner.dp)
+        "pill"      -> RoundedCornerShape(percent = 50)
+        "topBottom" -> RoundedCornerShape(0.dp) // use drawn separators, no fill
+        else        -> RoundedCornerShape(corner.dp)
     }
+
 
 
 
@@ -2891,85 +2894,127 @@ img.put("alpha", v.coerceIn(0.0,1.0)); onChange()
 * ========================================================= */
 @Composable
 private fun BarItemsEditor(
-owner: JSONObject,
-arrayKey: String,
-title: String,
-onChange: () -> Unit
+    owner: JSONObject,
+    arrayKey: String,
+    title: String,
+    onChange: () -> Unit
 ) {
-Divider(); Text(title, style = MaterialTheme.typography.titleSmall)
-val arr = owner.optJSONArray(arrayKey) ?: JSONArray().also { owner.put(arrayKey, it) }
+    Divider()
+    Text(title, style = MaterialTheme.typography.titleSmall)
+    val arr = owner.optJSONArray(arrayKey) ?: JSONArray().also { owner.put(arrayKey, it) }
 
-for (i in 0 until arr.length()) {
-val it = arr.getJSONObject(i)
-ElevatedCard {
-Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-Text("Item ${i+1}", style = MaterialTheme.typography.labelLarge)
-Row {
-IconButton(onClick = { moveInArray(arr, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
-IconButton(onClick = { moveInArray(arr, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
-IconButton(onClick = { removeAt(arr, i); onChange() }) { Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error) }
-}
+    for (i in 0 until arr.length()) {
+        val item = arr.getJSONObject(i)
+
+        ElevatedCard {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Item ${i + 1}", style = MaterialTheme.typography.labelLarge)
+                    Row {
+                        IconButton(onClick = { moveInArray(arr, i, -1); onChange() }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                        IconButton(onClick = { moveInArray(arr, i, +1); onChange() }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                        IconButton(onClick = { removeAt(arr, i); onChange() }) {
+                            Icon(Icons.Filled.Close, null, tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+
+                var type by remember { mutableStateOf(item.optString("type").ifBlank { if (item.has("label")) "button" else "icon" }) }
+                ExposedDropdown(
+                    value = type, label = "type",
+                    options = listOf("icon", "button", "spacer")
+                ) { sel ->
+                    type = sel
+                    item.put("type", sel)
+                    onChange()
+                }
+
+                when (type) {
+                    "icon" -> {
+                        val icon = remember { mutableStateOf(item.optString("icon", "more_vert")) }
+                        IconPickerField(icon, "icon") { sel ->
+                            icon.value = sel
+                            item.put("icon", sel)
+                            onChange()
+                        }
+                        val action = remember { mutableStateOf(item.optString("actionId", "")) }
+                        OutlinedTextField(
+                            action.value,
+                            { v -> action.value = v; item.put("actionId", v); onChange() },
+                            label = { Text("actionId (es. open_menu:menu_id)") }
+                        )
+                        val openMenuId = remember { mutableStateOf(item.optString("openMenuId", "")) }
+                        OutlinedTextField(
+                            openMenuId.value,
+                            { v -> openMenuId.value = v; if (v.isBlank()) item.remove("openMenuId") else item.put("openMenuId", v); onChange() },
+                            label = { Text("openMenuId (opz.)") }
+                        )
+                    }
+
+                    "button" -> {
+                        val lbl = remember { mutableStateOf(item.optString("label", "")) }
+                        OutlinedTextField(
+                            lbl.value,
+                            { v -> lbl.value = v; item.put("label", v); onChange() },
+                            label = { Text("label") }
+                        )
+
+                        val action = remember { mutableStateOf(item.optString("actionId", "")) }
+                        OutlinedTextField(
+                            action.value,
+                            { v -> action.value = v; item.put("actionId", v); onChange() },
+                            label = { Text("actionId") }
+                        )
+
+                        // Styles must match what RenderBarItemsRow supports
+                        var style by remember { mutableStateOf(item.optString("style", "text")) }
+                        ExposedDropdown(
+                            value = style, label = "style",
+                            options = listOf("text", "outlined", "tonal", "primary")
+                        ) { sel ->
+                            style = sel
+                            item.put("style", sel)
+                            onChange()
+                        }
+                    }
+
+                    else -> { // "spacer"
+                        var mode by remember { mutableStateOf(item.optString("mode", "fixed")) }
+                        ExposedDropdown(
+                            value = mode, label = "mode",
+                            options = listOf("fixed", "expand")
+                        ) { sel ->
+                            mode = sel
+                            item.put("mode", sel)
+                            onChange()
+                        }
+                        if (mode == "fixed") {
+                            var width by remember { mutableStateOf(item.optDouble("widthDp", 16.0).toInt().toString()) }
+                            ExposedDropdown(
+                                value = width, label = "width (dp)",
+                                options = listOf("8", "12", "16", "20", "24", "32", "40", "48", "64")
+                            ) { sel ->
+                                width = sel
+                                item.put("widthDp", sel.toDouble())
+                                onChange()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+    }
+
+    AddBarItemButtons(arr = arr, onChange = onChange)
 }
 
-var type by remember { mutableStateOf(it.optString("type").ifBlank { if (it.has("label")) "button" else "icon" }) }
-ExposedDropdown(
-value = type, label = "type",
-options = listOf("icon","button","spacer")
-) { sel -> type = sel; it.put("type", sel); onChange() }
-
-when (type) {
-"icon" -> {
-val icon = remember { mutableStateOf(it.optString("icon","more_vert")) }
-IconPickerField(icon, "icon") { sel -> icon.value = sel; it.put("icon", sel); onChange() }
-val action = remember { mutableStateOf(it.optString("actionId","")) }
-OutlinedTextField(action.value, { v -> action.value = v; it.put("actionId", v); onChange() }, label = { Text("actionId (es. open_menu:menu_id)") })
-val openMenuId = remember { mutableStateOf(it.optString("openMenuId","")) }
-OutlinedTextField(openMenuId.value, { v -> openMenuId.value = v; if (v.isBlank()) it.remove("openMenuId") else it.put("openMenuId", v); onChange() }, label = { Text("openMenuId (opz.)") })
-}
-"button" -> {
-val lbl = remember { mutableStateOf(it.optString("label","")) }
-OutlinedTextField(lbl.value, { v -> lbl.value = v; it.put("label", v); onChange() }, label = { Text("label") })
-
-val action = remember { mutableStateOf(it.optString("actionId","")) }
-OutlinedTextField(action.value, { v -> action.value = v; it.put("actionId", v); onChange() }, label = { Text("actionId") })
-
-var style by remember { mutableStateOf(it.optString("style","text")) }
-ExposedDropdown(
-    value = style, label = "style",
-    options = listOf("text","outlined","tonal","primary")
-) { sel ->
-    style = sel
-    it.put("style", sel)
-    onChange()
-}
-else -> {
-var mode by remember { mutableStateOf(it.optString("mode","fixed")) }
-ExposedDropdown(
-value = mode, label = "mode",
-options = listOf("fixed","expand")
-) { sel -> mode = sel; it.put("mode", sel); onChange() }
-if (mode == "fixed") {
-var width by remember { mutableStateOf(it.optDouble("widthDp",16.0).toInt().toString()) }
-ExposedDropdown(
-value = width, label = "width (dp)",
-options = listOf("8","12","16","20","24","32","40","48","64")
-) { sel ->
-width = sel
-it.put("widthDp", sel.toDouble())
-onChange()
-}
-}
-}
-}
-}
-}
-Spacer(Modifier.height(8.dp))
-}
-
-AddBarItemButtons(arr = arr, onChange = onChange)
-
-}
 
 /* =========================================================
 * TOP BAR INSPECTOR (proprietà base; azioni via BarItemsEditor)
