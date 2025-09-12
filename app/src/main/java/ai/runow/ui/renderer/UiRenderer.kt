@@ -1143,66 +1143,74 @@ drawLine(color, start = Offset(0f, size.height - w/2f), end = Offset(size.width,
 fun StyledContainer(
     cfg: JSONObject,
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     content: @Composable () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
 
-    // --- Lettura stile e shape ---
+    // --- stile/shape ---
     val style = cfg.optString("style", "full").lowercase()
     val shapeName = cfg.optString("shape", "rounded")
     val corner = cfg.optDouble("corner", 12.0).toFloat()
-
     val shape = when (shapeName) {
         "cut"       -> CutCornerShape(corner.dp)
         "pill"      -> RoundedCornerShape(percent = 50)
-        "topbottom" -> RoundedCornerShape(0.dp) // le righe vengono disegnate, niente fill
+        "topbottom" -> RoundedCornerShape(0.dp) // le righe vengono disegnate
         else        -> RoundedCornerShape(corner.dp)
     }
 
-    // --- Allineamenti ---
-    val h = cfg.optString("hAlign", "start")      // start | center | end
-    val v = cfg.optString("vAlign", "center")     // top | center | bottom
+    // --- allineamento contenuto nel box “esterno” ---
+    val h = cfg.optString("hAlign", "start")   // start | center | end
+    val v = cfg.optString("vAlign", "center")  // top | center | bottom
     val boxAlign = when (v) {
-        "top" -> when (h) {
-            "start" -> Alignment.TopStart
-            "end"   -> Alignment.TopEnd
-            else    -> Alignment.TopCenter
-        }
-        "bottom" -> when (h) {
-            "start" -> Alignment.BottomStart
-            "end"   -> Alignment.BottomEnd
-            else    -> Alignment.BottomCenter
-        }
-        else -> when (h) {
-            "start" -> Alignment.CenterStart
-            "end"   -> Alignment.CenterEnd
-            else    -> Alignment.Center
-        }
+        "top" -> when (h) { "start" -> Alignment.TopStart; "end" -> Alignment.TopEnd; else -> Alignment.TopCenter }
+        "bottom" -> when (h) { "start" -> Alignment.BottomStart; "end" -> Alignment.BottomEnd; else -> Alignment.BottomCenter }
+        else -> when (h) { "start" -> Alignment.CenterStart; "end" -> Alignment.CenterEnd; else -> Alignment.Center }
     }
 
-    // --- Colori/gradiente ---
-    val baseColor = parseColorOrRole(cfg.optString("color", "surface"), cs)
+    // --- colori/gradiente (fix: 1 solo argomento + fallback non-null) ---
+    val baseColor = parseColorOrRole(cfg.optString("color", "surface")) ?: cs.surface
     val color2Str = cfg.optString("color2", "none")
     val hasColor2 = color2Str.isNotBlank() && color2Str.lowercase() != "none"
+    val dir = cfg.optString("gradientDir", "horizontal")
 
-    val brush: Brush? = if (hasColor2) {
-        val c2 = parseColorOrRole(color2Str, cs)
-        val dir = cfg.optString("gradientDir", "horizontal")
-        if (dir == "vertical") {
-            Brush.verticalGradient(listOf(baseColor, c2))
-        } else {
-            Brush.horizontalGradient(listOf(baseColor, c2))
+    val brush: Brush? = when {
+        style in listOf("full", "surface", "primary", "tonal") -> {
+            if (hasColor2) {
+                val c2 = parseColorOrRole(color2Str) ?: baseColor
+                if (dir == "vertical") Brush.verticalGradient(listOf(baseColor, c2))
+                else Brush.horizontalGradient(listOf(baseColor, c2))
+            } else {
+                SolidColor(baseColor)
+            }
         }
-    } else null
+        // “text”, “outlined” e “topbottom” non hanno riempimento
+        else -> null
+    }
 
-    // --- Bordi / righe top-bottom ---
+    // --- bordo / righe top-bottom ---
     val borderThDp = cfg.optDouble("borderThicknessDp", 0.0).toFloat()
-    val borderColor = parseColorOrRole(cfg.optString("borderColor", "outline"), cs)
+    val borderColor = parseColorOrRole(cfg.optString("borderColor", "outline")) ?: cs.outline
 
-    // --- Padding interno, così il contenuto non tocca i bordi ---
+    val borderMod =
+        when {
+            style == "outlined" && borderThDp > 0f ->
+                Modifier.border(BorderStroke(borderThDp.dp, borderColor), shape)
+
+            style == "topbottom" && borderThDp > 0f ->
+                Modifier.drawBehind {
+                    val stroke = borderThDp.dp.toPx()
+                    drawLine(borderColor, Offset(0f, stroke/2f), Offset(size.width, stroke/2f), stroke)
+                    drawLine(borderColor, Offset(0f, size.height - stroke/2f), Offset(size.width, size.height - stroke/2f), stroke)
+                }
+
+            else -> Modifier
+        }
+
+    // --- padding interno per evitare clipping del testo ---
     val pad = cfg.optDouble("paddingDp", 12.0).dp
 
-    // --- Larghezza/altezza: wrap | fraction | fixed_dp ---
+    // --- dimensioni: wrap | fraction (5%) | fixed_dp (snap) ---
     val widthMode = cfg.optString("widthMode", "wrap")
     val heightMode = cfg.optString("heightMode", "wrap")
 
@@ -1216,66 +1224,29 @@ fun StyledContainer(
                 val w = cfg.optDouble("widthDp", 120.0).dp
                 Modifier.width(w)
             }
-            else -> Modifier.wrapContentWidth() // "wrap"
+            else -> Modifier.wrapContentWidth()
         }).then(
             when (heightMode) {
-                "fixed_dp" -> {
-                    val hdp = cfg.optDouble("heightDp", 48.0).dp
-                    // Nota: se vuoi comunque evitare clipping, usa heightIn(min = hdp)
-                    Modifier.height(hdp)
-                }
-                else -> Modifier.wrapContentHeight() // "wrap"
+                "fixed_dp" -> Modifier.height(cfg.optDouble("heightDp", 48.0).dp)
+                else       -> Modifier.wrapContentHeight()
             }
         )
 
-    // --- Background e bordo applicati al contenitore "interno" ---
-    val backgroundMod =
-        if (style in listOf("full", "surface", "primary", "tonal")) {
-            if (brush != null) Modifier.background(brush, shape)
-            else Modifier.background(baseColor, shape)
-        } else Modifier
+    val backgroundMod = if (brush != null) Modifier.background(brush, shape) else Modifier
 
-    val borderMod =
-        when {
-            style == "outlined" && borderThDp > 0f ->
-                Modifier.border(BorderStroke(borderThDp.dp, borderColor), shape)
-
-            style == "topbottom" && borderThDp > 0f ->
-                Modifier.drawBehind {
-                    val stroke = borderThDp.dp.toPx()
-                    // riga top
-                    drawLine(
-                        color = borderColor,
-                        start = Offset(0f, stroke / 2f),
-                        end = Offset(size.width, stroke / 2f),
-                        strokeWidth = stroke
-                    )
-                    // riga bottom
-                    drawLine(
-                        color = borderColor,
-                        start = Offset(0f, size.height - stroke / 2f),
-                        end = Offset(size.width, size.height - stroke / 2f),
-                        strokeWidth = stroke
-                    )
-                }
-
-            else -> Modifier
-        }
-
-    // --- STRUTTURA: Box esterno per gestire l’ancoraggio (sx/centro/dx) ---
+    // Box esterno: occupa tutta la riga, il contenitore interno si allinea e cresce dal lato giusto
     Box(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = childSizeMod
                 .then(backgroundMod)
                 .then(borderMod)
-                .padding(pad)
+                .padding(pad)                 // padding da JSON
+                .padding(contentPadding)      // padding “extra” passato dai call‑site (fix errori)
                 .align(boxAlign)
-        ) {
-            // Qui dentro il contenuto cresce liberamente: il contenitore si adatta
-            content()
-        }
+        ) { content() }
     }
 }
+
 
 
 
@@ -3334,21 +3305,20 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         )
     }
     
-    // --- COLORI / GRADIENTE ---
     NamedColorPickerPlus(
+        current = container.optString("color", "surface"),
         label = "Color 1",
-        initial = container.optString("color", "surface")
+        allowRoles = true
     ) { value ->
-        container.put("color", value)
+        if (value.isBlank()) container.remove("color") else container.put("color", value)
         onChange()
     }
     
     NamedColorPickerPlus(
-        label = "Color 2 (None = tinta unita)",
-        initial = container.optString("color2", "none"),
-        includeNone = true
+        current = container.optString("color2", ""),
+        label = "Color 2 (vuoto = tinta unita)",
+        allowRoles = true
     ) { value ->
-        // se "none" => niente gradiente
         if (value.isBlank()) container.put("color2", "none") else container.put("color2", value)
         onChange()
     }
@@ -3356,12 +3326,8 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
     ExposedDropdown(
         value = container.optString("gradientDir", "horizontal"),
         label = "gradient direction",
-        options = listOf("horizontal", "vertical")
-    ) { sel ->
-        container.put("gradientDir", sel)
-        onChange()
-    }
-}    
+        options = listOf("horizontal","vertical")
+    ) { sel -> container.put("gradientDir", sel); onChange() }   
     
 
 /* =========================================================
