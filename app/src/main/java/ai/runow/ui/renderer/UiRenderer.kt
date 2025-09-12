@@ -748,7 +748,7 @@ val maxHFrac   = cfg.optDouble("maxHeightFraction", 0.70).toFloat().coerceIn(0.3
 val cornerDp   = cfg.optDouble("corner", 18.0).toFloat().dp
 val alphaBox   = cfg.optDouble("alpha", 0.88).toFloat().coerceIn(0.35f, 1f)
 val scrimAlpha = cfg.optDouble("scrimAlpha", 0.08).toFloat().coerceIn(0f, 0.35f)
-val baseColor  = parseColorOrRole(cfg.optString("containerColor", "surface"))
+val baseColor  = parseColorOrRole(cfg.optString("containerColor"))
 ?: MaterialTheme.colorScheme.surface
 val textColor  = parseColorOrRole(cfg.optString("textColor"))
 ?: bestOnColor(baseColor)
