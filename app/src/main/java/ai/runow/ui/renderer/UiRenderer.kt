@@ -1279,6 +1279,7 @@ fun StyledContainer(
 
 
 
+
 /* =========================================================
 * PAGE BACKGROUND (colore/gradient/immagine a tutta pagina)
 * ========================================================= */
@@ -3220,6 +3221,7 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         StepperField("alpha (0..1)", alpha, 0.1) { v -> img.put("alpha", v.coerceIn(0.0,1.0)); onChange() }
     }
 
+// --- WIDTH ---
     var widthMode by remember { mutableStateOf(container.optString("widthMode", "wrap")) }
     ExposedDropdown(
         value = widthMode, label = "width mode",
@@ -3302,66 +3304,65 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
             )
         }
     }
-}
-
-// --- ALIGN ---
-ExposedDropdown(
-    value = container.optString("hAlign", "start"), label = "horizontal align",
-    options = listOf("start", "center", "end")
-) { sel -> container.put("hAlign", sel); onChange() }
-
-ExposedDropdown(
-    value = container.optString("vAlign", "center"), label = "vertical align",
-    options = listOf("top", "center", "bottom")
-) { sel -> container.put("vAlign", sel); onChange() }
-
-// --- PADDING ---
-var pad by remember { mutableStateOf(container.optDouble("paddingDp", 12.0).toFloat()) }
-Column {
-    Text("padding: ${pad.toInt()} dp")
-    Slider(
-        value = pad,
-        onValueChange = { v ->
-            val step = 2f
-            val snapped = (kotlin.math.round(v / step) * step).coerceIn(0f, 48f)
-            pad = snapped
-            container.put("paddingDp", snapped.toDouble())
-            onChange()
-        },
-        valueRange = 0f..48f,
-        steps = ((48 - 0) / 2) - 1
-    )
-}
-
-// --- COLORI / GRADIENTE ---
-NamedColorPickerPlus(
-    label = "Color 1",
-    initial = container.optString("color", "surface")
-) { value ->
-    container.put("color", value)
-    onChange()
-}
-
-NamedColorPickerPlus(
-    label = "Color 2 (None = tinta unita)",
-    initial = container.optString("color2", "none"),
-    includeNone = true
-) { value ->
-    // se "none" => niente gradiente
-    if (value.isBlank()) container.put("color2", "none") else container.put("color2", value)
-    onChange()
-}
-
-ExposedDropdown(
-    value = container.optString("gradientDir", "horizontal"),
-    label = "gradient direction",
-    options = listOf("horizontal", "vertical")
-) { sel ->
-    container.put("gradientDir", sel)
-    onChange()
-}
-
-
+    
+    // --- ALIGN ---
+    ExposedDropdown(
+        value = container.optString("hAlign", "start"), label = "horizontal align",
+        options = listOf("start", "center", "end")
+    ) { sel -> container.put("hAlign", sel); onChange() }
+    
+    ExposedDropdown(
+        value = container.optString("vAlign", "center"), label = "vertical align",
+        options = listOf("top", "center", "bottom")
+    ) { sel -> container.put("vAlign", sel); onChange() }
+    
+    // --- PADDING ---
+    var pad by remember { mutableStateOf(container.optDouble("paddingDp", 12.0).toFloat()) }
+    Column {
+        Text("padding: ${pad.toInt()} dp")
+        Slider(
+            value = pad,
+            onValueChange = { v ->
+                val step = 2f
+                val snapped = (kotlin.math.round(v / step) * step).coerceIn(0f, 48f)
+                pad = snapped
+                container.put("paddingDp", snapped.toDouble())
+                onChange()
+            },
+            valueRange = 0f..48f,
+            steps = ((48 - 0) / 2) - 1
+        )
+    }
+    
+    // --- COLORI / GRADIENTE ---
+    NamedColorPickerPlus(
+        label = "Color 1",
+        initial = container.optString("color", "surface")
+    ) { value ->
+        container.put("color", value)
+        onChange()
+    }
+    
+    NamedColorPickerPlus(
+        label = "Color 2 (None = tinta unita)",
+        initial = container.optString("color2", "none"),
+        includeNone = true
+    ) { value ->
+        // se "none" => niente gradiente
+        if (value.isBlank()) container.put("color2", "none") else container.put("color2", value)
+        onChange()
+    }
+    
+    ExposedDropdown(
+        value = container.optString("gradientDir", "horizontal"),
+        label = "gradient direction",
+        options = listOf("horizontal", "vertical")
+    ) { sel ->
+        container.put("gradientDir", sel)
+        onChange()
+    }
+}    
+    
 
 /* =========================================================
 * INSPECTOR dei vari BLOCCHI – esistenti
