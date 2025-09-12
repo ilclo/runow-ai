@@ -2,7 +2,7 @@
 
 package ai.runow.ui.renderer
 
-
+import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1143,139 +1143,191 @@ drawLine(color, start = Offset(0f, size.height - w/2f), end = Offset(size.width,
 fun StyledContainer(
     cfg: JSONObject,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(0.dp),
-    content: @Composable () -> Unit
+    contentPadding: PaddingValues? = null,
+    content: @Composable BoxScope.() -> Unit
 ) {
-    val cs = MaterialTheme.colorScheme
 
-    // --- Lettura stile e shape ---
+    // === Stile unificato ===
     val style = cfg.optString("style", "full").lowercase()
     val shapeName = cfg.optString("shape", "rounded")
     val corner = cfg.optDouble("corner", 12.0).toFloat()
-
+    
+    val cs = MaterialTheme.colorScheme
     val shape = when (shapeName) {
         "cut"       -> CutCornerShape(corner.dp)
         "pill"      -> RoundedCornerShape(percent = 50)
-        "topbottom" -> RoundedCornerShape(0.dp) // le righe vengono disegnate, niente fill
+        "topBottom" -> RoundedCornerShape(0.dp)
         else        -> RoundedCornerShape(corner.dp)
     }
+    
+    // === Dimensioni ===
+    val widthMode = cfg.optString("widthMode", "wrap")             // wrap | fill | fixed_dp | fraction
+    val heightMode = cfg.optString("heightMode", "wrap")            // wrap | fixed_dp
+    val widthDp = cfg.optDouble("widthDp", 160.0).toFloat().dp      // default 160
+    val heightDp = cfg.optDouble("heightDp", 0.0).toFloat().dp
+    val widthFraction = cfg.optDouble("widthFraction", Double.NaN)
+        .let { if (it.isNaN()) null else it.toFloat().coerceIn(0f,1f) }
 
-    // --- Allineamenti ---
-    val h = cfg.optString("hAlign", "start")      // start | center | end
-    val v = cfg.optString("vAlign", "center")     // top | center | bottom
-    val boxAlign = when (v) {
-        "top" -> when (h) {
-            "start" -> Alignment.TopStart
-            "end"   -> Alignment.TopEnd
-            else    -> Alignment.TopCenter
-        }
-        "bottom" -> when (h) {
-            "start" -> Alignment.BottomStart
-            "end"   -> Alignment.BottomEnd
-            else    -> Alignment.BottomCenter
-        }
-        else -> when (h) {
-            "start" -> Alignment.CenterStart
-            "end"   -> Alignment.CenterEnd
-            else    -> Alignment.Center
-        }
+    var m = modifier
+    m = when (widthMode) {
+        "fill"      -> m.fillMaxWidth()
+        "fixed_dp"  -> m.width(widthDp)
+        "fraction"  -> m.fillMaxWidth(widthFraction ?: 1f)
+        else        -> m // wrap
+    }
+    m = when (heightMode) {
+        "fixed_dp", "fixed" -> m.height(heightDp)
+        else                -> m // wrap
     }
 
-    // --- Colori/gradiente ---
-    val baseColor = parseColorOrRole(cfg.optString("color", "surface")) ?: cs.surface
-    val color2Str = cfg.optString("color2", "none")
-    val hasColor2 = color2Str.isNotBlank() && color2Str.lowercase() != "none"
+    val hAlign = when (cfg.optString("hAlign", "start")) {
+        "center" -> Alignment.CenterHorizontally
+        "end"    -> Alignment.End
+        else     -> Alignment.Start
+    }
+    val vAlign = when (cfg.optString("vAlign", "center")) {
+        "top"    -> Alignment.Top
+        "bottom" -> Alignment.Bottom
+        else     -> Alignment.CenterVertically
+    }
 
-    val brush: Brush? = if (hasColor2) {
-        val c2 = parseColorOrRole(color2Str)
-        val dir = cfg.optString("gradientDir", "horizontal")
-        if (dir == "vertical") {
-            Brush.verticalGradient(listOf(baseColor, c2 ?: baseColor))
-        } else {
-            Brush.horizontalGradient(listOf(baseColor, c2 ?: baseColor))
-        }
-    } else null
+    // === Colori / Gradiente ===
+    val customColor = parseColorOrRole(cfg.optString("customColor",""))
+    val bgAlpha = cfg.optDouble("bgAlpha", 1.0).toFloat().coerceIn(0f,1f)
 
-    // --- Bordi / righe top-bottom ---
-    val borderThDp = cfg.optDouble("borderThicknessDp", 0.0).toFloat()
-    val borderColor = parseColorOrRole(cfg.optString("borderColor", "outline")) ?: cs.outline
+    // Gradiente (nuovo oggetto) + legacy color1/color2
+    val gradObj = cfg.optJSONObject("gradient")
+    val gradBrush = gradObj?.let { g ->
+        val arr = g.optJSONArray("colors")
+        val cols = (0 until (arr?.length() ?: 0)).mapNotNull { i -> parseColorOrRole(arr!!.optString(i)) }
+        if (cols.size >= 2) {
+            if (g.optString("direction","vertical") == "horizontal") Brush.horizontalGradient(cols)
+            else Brush.verticalGradient(cols)
+        } else null
+    } ?: run {
+        val c1 = cfg.optString("color1","")
+        val c2 = cfg.optString("color2","")
+        if (c1.isNotBlank() && c2.isNotBlank()) {
+            val a = Color(android.graphics.Color.parseColor(c1))
+            val b = Color(android.graphics.Color.parseColor(c2))
+            if (cfg.optString("gradientDirection","horizontal") == "vertical")
+                Brush.verticalGradient(listOf(a,b))
+            else
+                Brush.horizontalGradient(listOf(a,b))
+        } else null
+    }
 
-    // --- Padding interno, così il contenuto non tocca i bordi ---
-    val pad = cfg.optDouble("paddingDp", 12.0).dp
+    val baseBgColor = customColor ?: when (style) {
+        "primary" -> cs.primary
+        "tonal"   -> cs.surfaceVariant
+        else      -> cs.surface // full/surface default
+    }
+    val transparentBg = cfg.optBoolean("transparentBg", false)
+    val onColor = bestOnColor(baseBgColor) // se serve un "on" contrastato
 
-    // --- Larghezza/altezza: wrap | fraction | fixed_dp ---
-    val widthMode = cfg.optString("widthMode", "wrap")
-    val heightMode = cfg.optString("heightMode", "wrap")
+    // === Immagine di sfondo (nuova) ===
+    val imageCfg = cfg.optJSONObject("image")
+    val imageSrc = imageCfg?.optString("source","").orEmpty()
+    val imageScale = when (imageCfg?.optString("contentScale","fill")) {
+        "fit"  -> ContentScale.Fit
+        "crop" -> ContentScale.Crop
+        else   -> ContentScale.FillBounds
+    }
+    val imageAlpha = imageCfg?.optDouble("alpha", 1.0)?.toFloat()?.coerceIn(0f,1f) ?: 1f
+    val ctx = LocalContext.current
+    val resId = if (imageSrc.startsWith("res:"))
+        ctx.resources.getIdentifier(imageSrc.removePrefix("res:"), "drawable", ctx.packageName)
+    else 0
+    val uriStr = when {
+        imageSrc.startsWith("uri:")     -> imageSrc.removePrefix("uri:")
+        imageSrc.startsWith("content:") -> imageSrc
+        imageSrc.startsWith("file:")    -> imageSrc
+        else -> null
+    }
+    val bmp = if (uriStr != null) rememberImageBitmapFromUri(uriStr) else null
 
-    val childSizeMod =
-        (when (widthMode) {
-            "fraction" -> {
-                val f = cfg.optDouble("widthFraction", 1.0).toFloat().coerceIn(0.05f, 1f)
-                Modifier.fillMaxWidth(f)
+    // === Bordi ===
+    // alias "thick" → borderThicknessDp; default per stile
+    val thick = when {
+        cfg.has("thick") -> cfg.optDouble("thick", 0.0).toFloat()
+        cfg.has("borderThicknessDp") -> cfg.optDouble("borderThicknessDp", 0.0).toFloat()
+        style == "outlined" || style == "topbottom" -> 1f
+        else -> 0f
+    }.coerceAtLeast(0f)
+
+    val borderColor = parseColorOrRole(cfg.optString("borderColor","")) ?: cs.outline
+    val drawSeparators = style == "topbottom" && thick > 0f
+    val showFill = (style in listOf("full","surface","primary","tonal")) && !transparentBg
+    val showBorder = (style == "outlined" && thick > 0f) ||
+                     ((style in listOf("full","surface","primary","tonal")) && thick > 0f)
+
+    // === Elevazione ===
+    val elevationDp = cfg.optDouble("elevationDp", if (showFill) 1.0 else 0.0).toFloat().coerceAtLeast(0f)
+
+    // === Modificatori ===
+    val base = if (elevationDp > 0f) m.shadow(elevationDp.dp, shape, clip = false) else m
+    val withSeparators = if (drawSeparators) base.topBottomBorder(thick.dp, borderColor) else base
+    val withBorder = if (showBorder && !drawSeparators) withSeparators.border(BorderStroke(thick.dp, borderColor), shape) else withSeparators
+    val clipped = withBorder.clip(shape)
+
+    // === Render ===
+    Box(modifier = clipped, contentAlignment = Alignment.Center) {
+        // Layer di background (solo se non "text")
+        if (style != "text") {
+            if (showFill && gradBrush == null) {
+                Box(Modifier.matchParentSize().background(baseBgColor.copy(alpha = bgAlpha)))
             }
-            "fixed_dp" -> {
-                val w = cfg.optDouble("widthDp", 120.0).dp
-                Modifier.width(w)
-            }
-            else -> Modifier.wrapContentWidth() // "wrap"
-        }).then(
-            when (heightMode) {
-                "fixed_dp" -> {
-                    val hdp = cfg.optDouble("heightDp", 48.0).dp
-                    // Nota: se vuoi comunque evitare clipping, usa heightIn(min = hdp)
-                    Modifier.height(hdp)
-                }
-                else -> Modifier.wrapContentHeight() // "wrap"
-            }
-        )
-
-    // --- Background e bordo applicati al contenitore "interno" ---
-    val backgroundMod =
-        if (style in listOf("full", "surface", "primary", "tonal")) {
-            if (brush != null) Modifier.background(brush, shape)
-            else Modifier.background(baseColor, shape)
-        } else Modifier
-
-    val borderMod =
-        when {
-            style == "outlined" && borderThDp > 0f ->
-                Modifier.border(BorderStroke(borderThDp.dp, borderColor), shape)
-
-            style == "topbottom" && borderThDp > 0f ->
-                Modifier.drawBehind {
-                    val stroke = borderThDp.dp.toPx()
-                    // riga top
-                    drawLine(
-                        color = borderColor,
-                        start = Offset(0f, stroke / 2f),
-                        end = Offset(size.width, stroke / 2f),
-                        strokeWidth = stroke
+            if (imageSrc.isNotBlank()) {
+                when {
+                    resId != 0 -> Image(
+                        painter = painterResource(resId),
+                        contentDescription = null,
+                        contentScale = imageScale,
+                        modifier = Modifier.matchParentSize(),
+                        alpha = imageAlpha
                     )
-                    // riga bottom
-                    drawLine(
-                        color = borderColor,
-                        start = Offset(0f, size.height - stroke / 2f),
-                        end = Offset(size.width, size.height - stroke / 2f),
-                        strokeWidth = stroke
+                    bmp != null -> Image(
+                        bitmap = bmp,
+                        contentDescription = null,
+                        contentScale = imageScale,
+                        modifier = Modifier.matchParentSize(),
+                        alpha = imageAlpha
                     )
                 }
-
-            else -> Modifier
+            }
+            if (showFill && gradBrush != null) {
+                Box(Modifier.matchParentSize().background(gradBrush).alpha(bgAlpha))
+            }
         }
 
-    Box(modifier = modifier.fillMaxWidth()) {
-        Box(
-            modifier = childSizeMod
-                .then(backgroundMod)
-                .then(borderMod)
-                .padding(pad)               // padding dal JSON (paddingDp)
-                .padding(contentPadding)    // padding aggiuntivo opzionale dai call-site
-                .align(boxAlign)
-        ) {
-            content()
+        // Contenuto (allineabile)
+        val inner = contentPadding?.let { Modifier.padding(it) } ?: Modifier
+        Box(modifier = inner.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.align(
+                    when (hAlign) {
+                        Alignment.CenterHorizontally -> when (vAlign) {
+                            Alignment.Top -> Alignment.TopCenter
+                            Alignment.Bottom -> Alignment.BottomCenter
+                            else -> Alignment.Center
+                        }
+                        Alignment.End -> when (vAlign) {
+                            Alignment.Top -> Alignment.TopEnd
+                            Alignment.Bottom -> Alignment.BottomEnd
+                            else -> Alignment.CenterEnd
+                        }
+                        else -> when (vAlign) {
+                            Alignment.Top -> Alignment.TopStart
+                            Alignment.Bottom -> Alignment.BottomStart
+                            else -> Alignment.CenterStart
+                        }
+                    }
+                )
+            ) { content() }
         }
     }
 }
+
 
 
 /* =========================================================
@@ -4216,7 +4268,8 @@ if (image != null) Icon(image, contentDescription) else Text(".")
 
 
 @Composable
-private fun parseColorOrRole(source: String?): Color? {
+private fun parseColorOrRole(source: String?, cs: ColorScheme): Color? =
+    parseColorOrRole(source)
     if (source == null || source.isBlank()) return null
     val cs = MaterialTheme.colorScheme
     return when (source.lowercase()) {
@@ -4274,59 +4327,152 @@ private val MATERIAL_ROLES = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NamedColorPickerPlus(
-current: String,
-label: String,
-allowRoles: Boolean = false,
-onPick: (String) -> Unit
+    current: String,
+    label: String,
+    allowRoles: Boolean = false,
+    includeNone: Boolean = false, // nuovo
+    onPick: (String) -> Unit
 ) {
-var expanded by remember { mutableStateOf(false) }
-val display = if (current.isBlank()) "(default)" else current
+    var expanded by remember { mutableStateOf(false) }
+    val display = if (current.isBlank()) "(default)" else current
+    val cs = MaterialTheme.colorScheme
 
-ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-OutlinedTextField(
-value = display,
-onValueChange = {},
-readOnly = true,
-label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
-trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-modifier = Modifier.menuAnchor()
-)
-ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-if (allowRoles) {
-val cs = MaterialTheme.colorScheme
-fun roleColor(role: String): Color = when (role) {
-"primary","onPrimary"     -> cs.primary
-"secondary","onSecondary" -> cs.secondary
-"tertiary","onTertiary"   -> cs.tertiary
-"error","onError"         -> cs.error
-"surface","onSurface"     -> cs.surface
-else -> cs.primary
+    // Ruoli Material come in green
+    val MATERIAL_ROLES = listOf(
+        "primary", "onPrimary", "primaryContainer", "onPrimaryContainer",
+        "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer",
+        "tertiary", "onTertiary", "tertiaryContainer", "onTertiaryContainer",
+        "surface", "onSurface", "surfaceVariant", "onSurfaceVariant",
+        "background", "onBackground",
+        "error", "onError", "errorContainer", "onErrorContainer",
+        "inverseSurface", "inverseOnSurface", "inversePrimary",
+        "outline", "outlineVariant", "scrim", "surfaceTint"
+    )
+
+    // Palette nomi/HEX (estratta dalla green)
+    val NAMED_SWATCHES = listOf(
+        "white" to "#FFFFFF",
+        "black" to "#000000",
+        "red" to "#F44336",
+        "pink" to "#E91E63",
+        "purple" to "#9C27B0",
+        "deepPurple" to "#673AB7",
+        "indigo" to "#3F51B5",
+        "blue" to "#2196F3",
+        "lightBlue" to "#03A9F4",
+        "cyan" to "#00BCD4",
+        "teal" to "#009688",
+        "green" to "#4CAF50",
+        "lightGreen" to "#8BC34A",
+        "lime" to "#CDDC39",
+        "yellow" to "#FFEB3B",
+        "amber" to "#FFC107",
+        "orange" to "#FF9800",
+        "deepOrange" to "#FF5722",
+        "brown" to "#795548",
+        "gray" to "#9E9E9E",
+        "blueGray" to "#607D8B",
+        // extra toni usati nella green
+        "red50" to "#FFEBEE", "red100" to "#FFCDD2", "red200" to "#EF9A9A", "red300" to "#E57373",
+        "red400" to "#EF5350", "red500" to "#F44336", "red600" to "#E53935", "red700" to "#D32F2F",
+        "red800" to "#C62828", "red900" to "#B71C1C",
+        "blue50" to "#E3F2FD", "blue100" to "#BBDEFB", "blue200" to "#90CAF9", "blue300" to "#64B5F6",
+        "blue400" to "#42A5F5", "blue500" to "#2196F3", "blue600" to "#1E88E5", "blue700" to "#1976D2",
+        "blue800" to "#1565C0", "blue900" to "#0D47A1",
+        "green50" to "#E8F5E9", "green100" to "#C8E6C9", "green200" to "#A5D6A7", "green300" to "#81C784",
+        "green400" to "#66BB6A", "green500" to "#4CAF50", "green600" to "#43A047", "green700" to "#388E3C",
+        "green800" to "#2E7D32", "green900" to "#1B5E20",
+        "gray50" to "#FAFAFA", "gray100" to "#F5F5F5", "gray200" to "#EEEEEE", "gray300" to "#E0E0E0",
+        "gray400" to "#BDBDBD", "gray500" to "#9E9E9E", "gray600" to "#757575", "gray700" to "#616161",
+        "gray800" to "#424242", "gray900" to "#212121"
+    )
+
+    fun parseHexOrNull(hex: String): Color? = runCatching {
+        Color(android.graphics.Color.parseColor(hex))
+    }.getOrNull()
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        OutlinedTextField(
+            value = display,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+
+            if (allowRoles) {
+                MATERIAL_ROLES.forEach { role ->
+                    val roleColor: Color = when (role) {
+                        "primary", "onPrimary" -> cs.primary
+                        "primaryContainer", "onPrimaryContainer" -> cs.primaryContainer
+                        "secondary", "onSecondary" -> cs.secondary
+                        "secondaryContainer", "onSecondaryContainer" -> cs.secondaryContainer
+                        "tertiary", "onTertiary" -> cs.tertiary
+                        "tertiaryContainer", "onTertiaryContainer" -> cs.tertiaryContainer
+                        "surface", "onSurface" -> cs.surface
+                        "surfaceVariant", "onSurfaceVariant" -> cs.surfaceVariant
+                        "background", "onBackground" -> cs.background
+                        "error", "onError" -> cs.error
+                        "errorContainer", "onErrorContainer" -> cs.errorContainer
+                        "inverseSurface", "inverseOnSurface" -> cs.inverseSurface
+                        "inversePrimary" -> cs.inversePrimary
+                        "outline" -> cs.outline
+                        "outlineVariant" -> cs.outlineVariant
+                        "scrim" -> cs.scrim
+                        "surfaceTint" -> cs.surfaceTint
+                        else -> cs.surfaceVariant
+                    }
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(16.dp).background(roleColor, CircleShape))
+                                Spacer(Modifier.width(8.dp))
+                                Text(role)
+                            }
+                        },
+                        onClick = {
+                            onPick(role)
+                            expanded = false
+                        }
+                    )
+                }
+                Divider()
+            }
+
+            // Swatches con nome/HEX
+            NAMED_SWATCHES.forEach { (name, hex) ->
+                val color = parseHexOrNull(hex) ?: return@forEach
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(16.dp).background(color, CircleShape))
+                            Spacer(Modifier.width(8.dp))
+                            Text("$name  $hex")
+                        }
+                    },
+                    onClick = {
+                        onPick(hex)
+                        expanded = false
+                    }
+                )
+            }
+
+            if (includeNone) {
+                DropdownMenuItem(
+                    text = { Text("(none)") },
+                    onClick = { onPick(""); expanded = false }
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("(default)") },
+                onClick = { onPick(""); expanded = false }
+            )
+        }
+    }
 }
-MATERIAL_ROLES.forEach { role ->
-val c = roleColor(role)
-DropdownMenuItem(
-leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
-text = { Text(role) },
-onClick = { onPick(role); expanded = false }
-)
-}
-Divider()
-}
-NAMED_SWATCHES.forEach { (name, argb) ->
-val c = Color(argb)
-DropdownMenuItem(
-leadingIcon = { Box(Modifier.size(16.dp).background(c, RoundedCornerShape(3.dp))) },
-text = { Text(name) },
-onClick = {
-val hex = "#%06X".format(argb and 0xFFFFFF)
-onPick(hex); expanded = false
-}
-)
-}
-DropdownMenuItem(text = { Text("(default)") }, onClick = { onPick(""); expanded = false })
-}
-}
-}
+
 
 
 private fun collectMenus(root: JSONObject): Map<String, JSONArray> {
