@@ -1013,7 +1013,8 @@ val onSurface = MaterialTheme.colorScheme.onSurface
 val outline = MaterialTheme.colorScheme.outline
 
 // Color di base impostabile dall’utente (palette/ruoli)
-val userBg = parseColorOrRole(cfg?., "") ?: "")
+val userBg = parseColorOrRole(cfg?.optString("color", "") ?: "")
+
 
 val background = when (style.lowercase()) {
 "text", "outlined" -> Color.Transparent // SOLO testo o SOLO bordo
@@ -1273,6 +1274,7 @@ fun StyledContainer(
     // === Render ===
     Box(modifier = clipped, contentAlignment = Alignment.Center) {
         // Layer di background (solo se non "text")
+// Layer di background (solo se non "text")
         if (style != "text") {
             if (showFill && gradBrush == null) {
                 Box(Modifier.matchParentSize().background(baseBgColor.copy(alpha = bgAlpha)))
@@ -1299,6 +1301,7 @@ fun StyledContainer(
                 Box(Modifier.matchParentSize().background(gradBrush).alpha(bgAlpha))
             }
         }
+
 
         // Contenuto (allineabile)
         val inner = contentPadding?.let { Modifier.padding(it) } ?: Modifier
@@ -4330,14 +4333,13 @@ private fun NamedColorPickerPlus(
     current: String,
     label: String,
     allowRoles: Boolean = false,
-    includeNone: Boolean = false, // nuovo
+    includeNone: Boolean = false,
     onPick: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val display = if (current.isBlank()) "(default)" else current
     val cs = MaterialTheme.colorScheme
 
-    // Ruoli Material come in green
     val MATERIAL_ROLES = listOf(
         "primary", "onPrimary", "primaryContainer", "onPrimaryContainer",
         "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer",
@@ -4349,42 +4351,15 @@ private fun NamedColorPickerPlus(
         "outline", "outlineVariant", "scrim", "surfaceTint"
     )
 
-    // Palette nomi/HEX (estratta dalla green)
     val NAMED_SWATCHES = listOf(
-        "white" to "#FFFFFF",
-        "black" to "#000000",
-        "red" to "#F44336",
-        "pink" to "#E91E63",
-        "purple" to "#9C27B0",
-        "deepPurple" to "#673AB7",
-        "indigo" to "#3F51B5",
-        "blue" to "#2196F3",
-        "lightBlue" to "#03A9F4",
-        "cyan" to "#00BCD4",
-        "teal" to "#009688",
-        "green" to "#4CAF50",
-        "lightGreen" to "#8BC34A",
-        "lime" to "#CDDC39",
-        "yellow" to "#FFEB3B",
-        "amber" to "#FFC107",
-        "orange" to "#FF9800",
-        "deepOrange" to "#FF5722",
-        "brown" to "#795548",
-        "gray" to "#9E9E9E",
-        "blueGray" to "#607D8B",
-        // extra toni usati nella green
-        "red50" to "#FFEBEE", "red100" to "#FFCDD2", "red200" to "#EF9A9A", "red300" to "#E57373",
-        "red400" to "#EF5350", "red500" to "#F44336", "red600" to "#E53935", "red700" to "#D32F2F",
-        "red800" to "#C62828", "red900" to "#B71C1C",
-        "blue50" to "#E3F2FD", "blue100" to "#BBDEFB", "blue200" to "#90CAF9", "blue300" to "#64B5F6",
-        "blue400" to "#42A5F5", "blue500" to "#2196F3", "blue600" to "#1E88E5", "blue700" to "#1976D2",
-        "blue800" to "#1565C0", "blue900" to "#0D47A1",
-        "green50" to "#E8F5E9", "green100" to "#C8E6C9", "green200" to "#A5D6A7", "green300" to "#81C784",
-        "green400" to "#66BB6A", "green500" to "#4CAF50", "green600" to "#43A047", "green700" to "#388E3C",
-        "green800" to "#2E7D32", "green900" to "#1B5E20",
-        "gray50" to "#FAFAFA", "gray100" to "#F5F5F5", "gray200" to "#EEEEEE", "gray300" to "#E0E0E0",
-        "gray400" to "#BDBDBD", "gray500" to "#9E9E9E", "gray600" to "#757575", "gray700" to "#616161",
-        "gray800" to "#424242", "gray900" to "#212121"
+        "white" to "#FFFFFF", "black" to "#000000",
+        "red" to "#F44336", "pink" to "#E91E63", "purple" to "#9C27B0",
+        "deepPurple" to "#673AB7", "indigo" to "#3F51B5", "blue" to "#2196F3",
+        "lightBlue" to "#03A9F4", "cyan" to "#00BCD4", "teal" to "#009688",
+        "green" to "#4CAF50", "lightGreen" to "#8BC34A", "lime" to "#CDDC39",
+        "yellow" to "#FFEB3B", "amber" to "#FFC107", "orange" to "#FF9800",
+        "deepOrange" to "#FF5722", "brown" to "#795548",
+        "gray" to "#9E9E9E", "blueGray" to "#607D8B"
     )
 
     fun parseHexOrNull(hex: String): Color? = runCatching {
@@ -4397,26 +4372,25 @@ private fun NamedColorPickerPlus(
             onValueChange = {},
             readOnly = true,
             label = { Text(label, style = MaterialTheme.typography.bodyMedium, color = LocalContentColor.current) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.menuAnchor()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-
             if (allowRoles) {
                 MATERIAL_ROLES.forEach { role ->
                     val roleColor: Color = when (role) {
-                        "primary", "onPrimary" -> cs.primary
-                        "primaryContainer", "onPrimaryContainer" -> cs.primaryContainer
-                        "secondary", "onSecondary" -> cs.secondary
-                        "secondaryContainer", "onSecondaryContainer" -> cs.secondaryContainer
-                        "tertiary", "onTertiary" -> cs.tertiary
-                        "tertiaryContainer", "onTertiaryContainer" -> cs.tertiaryContainer
-                        "surface", "onSurface" -> cs.surface
-                        "surfaceVariant", "onSurfaceVariant" -> cs.surfaceVariant
-                        "background", "onBackground" -> cs.background
-                        "error", "onError" -> cs.error
-                        "errorContainer", "onErrorContainer" -> cs.errorContainer
-                        "inverseSurface", "inverseOnSurface" -> cs.inverseSurface
+                        "primary","onPrimary" -> cs.primary
+                        "primaryContainer","onPrimaryContainer" -> cs.primaryContainer
+                        "secondary","onSecondary" -> cs.secondary
+                        "secondaryContainer","onSecondaryContainer" -> cs.secondaryContainer
+                        "tertiary","onTertiary" -> cs.tertiary
+                        "tertiaryContainer","onTertiaryContainer" -> cs.tertiaryContainer
+                        "surface","onSurface" -> cs.surface
+                        "surfaceVariant","onSurfaceVariant" -> cs.surfaceVariant
+                        "background","onBackground" -> cs.background
+                        "error","onError" -> cs.error
+                        "errorContainer","onErrorContainer" -> cs.errorContainer
+                        "inverseSurface","inverseOnSurface" -> cs.inverseSurface
                         "inversePrimary" -> cs.inversePrimary
                         "outline" -> cs.outline
                         "outlineVariant" -> cs.outlineVariant
@@ -4432,16 +4406,12 @@ private fun NamedColorPickerPlus(
                                 Text(role)
                             }
                         },
-                        onClick = {
-                            onPick(role)
-                            expanded = false
-                        }
+                        onClick = { onPick(role); expanded = false }
                     )
                 }
                 Divider()
             }
 
-            // Swatches con nome/HEX
             NAMED_SWATCHES.forEach { (name, hex) ->
                 val color = parseHexOrNull(hex) ?: return@forEach
                 DropdownMenuItem(
@@ -4452,26 +4422,34 @@ private fun NamedColorPickerPlus(
                             Text("$name  $hex")
                         }
                     },
-                    onClick = {
-                        onPick(hex)
-                        expanded = false
-                    }
+                    onClick = { onPick(hex); expanded = false }
                 )
             }
 
             if (includeNone) {
-                DropdownMenuItem(
-                    text = { Text("(none)") },
-                    onClick = { onPick(""); expanded = false }
-                )
+                DropdownMenuItem(text = { Text("(none)") }, onClick = { onPick(""); expanded = false })
             }
-            DropdownMenuItem(
-                text = { Text("(default)") },
-                onClick = { onPick(""); expanded = false }
-            )
+            DropdownMenuItem(text = { Text("(default)") }, onClick = { onPick(""); expanded = false })
         }
     }
 }
+
+// Overload compat con i call-site che usano `initial =`
+@Composable
+private fun NamedColorPickerPlus(
+    label: String,
+    initial: String,
+    allowRoles: Boolean = false,
+    includeNone: Boolean = false,
+    onPick: (String) -> Unit
+) = NamedColorPickerPlus(
+    current = initial,
+    label = label,
+    allowRoles = allowRoles,
+    includeNone = includeNone,
+    onPick = onPick
+)
+
 
 
 
