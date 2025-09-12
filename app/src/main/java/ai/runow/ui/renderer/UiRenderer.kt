@@ -1143,192 +1143,139 @@ drawLine(color, start = Offset(0f, size.height - w/2f), end = Offset(size.width,
 fun StyledContainer(
     cfg: JSONObject,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues? = null,
-    content: @Composable BoxScope.() -> Unit
+    content: @Composable () -> Unit
 ) {
+    val cs = MaterialTheme.colorScheme
 
-
-// === Stile unificato ===
+    // --- Lettura stile e shape ---
     val style = cfg.optString("style", "full").lowercase()
     val shapeName = cfg.optString("shape", "rounded")
     val corner = cfg.optDouble("corner", 12.0).toFloat()
-    
-    val cs = MaterialTheme.colorScheme
+
     val shape = when (shapeName) {
         "cut"       -> CutCornerShape(corner.dp)
         "pill"      -> RoundedCornerShape(percent = 50)
-        "topBottom" -> RoundedCornerShape(0.dp)
+        "topbottom" -> RoundedCornerShape(0.dp) // le righe vengono disegnate, niente fill
         else        -> RoundedCornerShape(corner.dp)
     }
-    
-    // === Dimensioni ===
-    val widthMode = cfg.optString("widthMode", "wrap")             // wrap | fill | fixed_dp | fraction
-    val heightMode = cfg.optString("heightMode", "wrap")            // wrap | fixed_dp
-    val widthDp = cfg.optDouble("widthDp", 160.0).toFloat().dp      // default 160
-    val heightDp = cfg.optDouble("heightDp", 0.0).toFloat().dp
-    val widthFraction = cfg.optDouble("widthFraction", Double.NaN)
-        .let { if (it.isNaN()) null else it.toFloat().coerceIn(0f,1f) }
 
-    var m = modifier
-    m = when (widthMode) {
-        "fill"      -> m.fillMaxWidth()
-        "fixed_dp"  -> m.width(widthDp)
-        "fraction"  -> m.fillMaxWidth(widthFraction ?: 1f)
-        else        -> m // wrap
-    }
-    m = when (heightMode) {
-        "fixed_dp", "fixed" -> m.height(heightDp)
-        else                -> m // wrap
-    }
-
-    val hAlign = when (cfg.optString("hAlign", "start")) {
-        "center" -> Alignment.CenterHorizontally
-        "end"    -> Alignment.End
-        else     -> Alignment.Start
-    }
-    val vAlign = when (cfg.optString("vAlign", "center")) {
-        "top"    -> Alignment.Top
-        "bottom" -> Alignment.Bottom
-        else     -> Alignment.CenterVertically
+    // --- Allineamenti ---
+    val h = cfg.optString("hAlign", "start")      // start | center | end
+    val v = cfg.optString("vAlign", "center")     // top | center | bottom
+    val boxAlign = when (v) {
+        "top" -> when (h) {
+            "start" -> Alignment.TopStart
+            "end"   -> Alignment.TopEnd
+            else    -> Alignment.TopCenter
+        }
+        "bottom" -> when (h) {
+            "start" -> Alignment.BottomStart
+            "end"   -> Alignment.BottomEnd
+            else    -> Alignment.BottomCenter
+        }
+        else -> when (h) {
+            "start" -> Alignment.CenterStart
+            "end"   -> Alignment.CenterEnd
+            else    -> Alignment.Center
+        }
     }
 
+    // --- Colori/gradiente ---
+    val baseColor = parseColorOrRole(cfg.optString("color", "surface"), cs)
+    val color2Str = cfg.optString("color2", "none")
+    val hasColor2 = color2Str.isNotBlank() && color2Str.lowercase() != "none"
 
-    // === Colori / Gradiente ===
-    val customColor = parseColorOrRole(cfg.optString("customColor",""))
-    val bgAlpha = cfg.optDouble("bgAlpha", 1.0).toFloat().coerceIn(0f,1f)
+    val brush: Brush? = if (hasColor2) {
+        val c2 = parseColorOrRole(color2Str, cs)
+        val dir = cfg.optString("gradientDir", "horizontal")
+        if (dir == "vertical") {
+            Brush.verticalGradient(listOf(baseColor, c2))
+        } else {
+            Brush.horizontalGradient(listOf(baseColor, c2))
+        }
+    } else null
 
-    // Gradiente (nuovo oggetto) + legacy color1/color2
-    val gradObj = cfg.optJSONObject("gradient")
-    val gradBrush = gradObj?.let { g ->
-        val arr = g.optJSONArray("colors")
-        val cols = (0 until (arr?.length() ?: 0)).mapNotNull { i -> parseColorOrRole(arr!!.optString(i)) }
-        if (cols.size >= 2) {
-            if (g.optString("direction","vertical") == "horizontal") Brush.horizontalGradient(cols)
-            else Brush.verticalGradient(cols)
-        } else null
-    } ?: run {
-        val c1 = cfg.optString("color1","")
-        val c2 = cfg.optString("color2","")
-        if (c1.isNotBlank() && c2.isNotBlank()) {
-            val a = Color(android.graphics.Color.parseColor(c1))
-            val b = Color(android.graphics.Color.parseColor(c2))
-            if (cfg.optString("gradientDirection","horizontal") == "vertical")
-                Brush.verticalGradient(listOf(a,b))
-            else
-                Brush.horizontalGradient(listOf(a,b))
-        } else null
-    }
+    // --- Bordi / righe top-bottom ---
+    val borderThDp = cfg.optDouble("borderThicknessDp", 0.0).toFloat()
+    val borderColor = parseColorOrRole(cfg.optString("borderColor", "outline"), cs)
 
-    val baseBgColor = customColor ?: when (style) {
-        "primary" -> cs.primary
-        "tonal"   -> cs.surfaceVariant
-        else      -> cs.surface // full/surface default
-    }
-    val transparentBg = cfg.optBoolean("transparentBg", false)
+    // --- Padding interno, così il contenuto non tocca i bordi ---
+    val pad = cfg.optDouble("paddingDp", 12.0).dp
 
-    // === Immagine di sfondo (nuova) ===
-    val imageCfg = cfg.optJSONObject("image")
-    val imageSrc = imageCfg?.optString("source","").orEmpty()
-    val imageScale = when (imageCfg?.optString("contentScale","fill")) {
-        "fit"  -> ContentScale.Fit
-        "crop" -> ContentScale.Crop
-        else   -> ContentScale.FillBounds
-    }
-    val imageAlpha = imageCfg?.optDouble("alpha", 1.0)?.toFloat()?.coerceIn(0f,1f) ?: 1f
-    val ctx = LocalContext.current
-    val resId = if (imageSrc.startsWith("res:"))
-        ctx.resources.getIdentifier(imageSrc.removePrefix("res:"), "drawable", ctx.packageName)
-    else 0
-    val uriStr = when {
-        imageSrc.startsWith("uri:")     -> imageSrc.removePrefix("uri:")
-        imageSrc.startsWith("content:") -> imageSrc
-        imageSrc.startsWith("file:")    -> imageSrc
-        else -> null
-    }
-    val bmp = if (uriStr != null) rememberImageBitmapFromUri(uriStr) else null
+    // --- Larghezza/altezza: wrap | fraction | fixed_dp ---
+    val widthMode = cfg.optString("widthMode", "wrap")
+    val heightMode = cfg.optString("heightMode", "wrap")
 
-    // === Bordi ===
-    // alias "thick" → borderThicknessDp; default per stile
-    val thick = when {
-        cfg.has("thick") -> cfg.optDouble("thick", 0.0).toFloat()
-        cfg.has("borderThicknessDp") -> cfg.optDouble("borderThicknessDp", 0.0).toFloat()
-        style == "outlined" || style == "topbottom" -> 1f
-        else -> 0f
-    }.coerceAtLeast(0f)
-
-    val borderColor = parseColorOrRole(cfg.optString("borderColor","")) ?: cs.outline
-    val drawSeparators = style == "topbottom" && thick > 0f
-    val showFill = (style in listOf("full","surface","primary","tonal")) && !transparentBg
-    val showBorder = (style == "outlined" && thick > 0f) ||
-                     ((style in listOf("full","surface","primary","tonal")) && thick > 0f)
-
-    // === Elevazione ===
-    val elevationDp = cfg.optDouble("elevationDp", if (showFill) 1.0 else 0.0).toFloat().coerceAtLeast(0f)
-
-    // === Modificatori ===
-    val base = if (elevationDp > 0f) m.shadow(elevationDp.dp, shape, clip = false) else m
-    val withSeparators = if (drawSeparators) base.topBottomBorder(thick.dp, borderColor) else base
-    val withBorder = if (showBorder && !drawSeparators) withSeparators.border(BorderStroke(thick.dp, borderColor), shape) else withSeparators
-    val clipped = withBorder.clip(shape)
-
-    // === Render ===
-    Box(modifier = clipped, contentAlignment = Alignment.Center) {
-        // Layer di background (solo se non "text")
-        if (style != "text") {
-            if (showFill && gradBrush == null) {
-                Box(Modifier.matchParentSize().background(baseBgColor.copy(alpha = bgAlpha)))
+    val childSizeMod =
+        (when (widthMode) {
+            "fraction" -> {
+                val f = cfg.optDouble("widthFraction", 1.0).toFloat().coerceIn(0.05f, 1f)
+                Modifier.fillMaxWidth(f)
             }
-            if (imageSrc.isNotBlank()) {
-                when {
-                    resId != 0 -> Image(
-                        painter = painterResource(resId),
-                        contentDescription = null,
-                        contentScale = imageScale,
-                        modifier = Modifier.matchParentSize(),
-                        alpha = imageAlpha
+            "fixed_dp" -> {
+                val w = cfg.optDouble("widthDp", 120.0).dp
+                Modifier.width(w)
+            }
+            else -> Modifier.wrapContentWidth() // "wrap"
+        }).then(
+            when (heightMode) {
+                "fixed_dp" -> {
+                    val hdp = cfg.optDouble("heightDp", 48.0).dp
+                    // Nota: se vuoi comunque evitare clipping, usa heightIn(min = hdp)
+                    Modifier.height(hdp)
+                }
+                else -> Modifier.wrapContentHeight() // "wrap"
+            }
+        )
+
+    // --- Background e bordo applicati al contenitore "interno" ---
+    val backgroundMod =
+        if (style in listOf("full", "surface", "primary", "tonal")) {
+            if (brush != null) Modifier.background(brush, shape)
+            else Modifier.background(baseColor, shape)
+        } else Modifier
+
+    val borderMod =
+        when {
+            style == "outlined" && borderThDp > 0f ->
+                Modifier.border(BorderStroke(borderThDp.dp, borderColor), shape)
+
+            style == "topbottom" && borderThDp > 0f ->
+                Modifier.drawBehind {
+                    val stroke = borderThDp.dp.toPx()
+                    // riga top
+                    drawLine(
+                        color = borderColor,
+                        start = Offset(0f, stroke / 2f),
+                        end = Offset(size.width, stroke / 2f),
+                        strokeWidth = stroke
                     )
-                    bmp != null -> Image(
-                        bitmap = bmp,
-                        contentDescription = null,
-                        contentScale = imageScale,
-                        modifier = Modifier.matchParentSize(),
-                        alpha = imageAlpha
+                    // riga bottom
+                    drawLine(
+                        color = borderColor,
+                        start = Offset(0f, size.height - stroke / 2f),
+                        end = Offset(size.width, size.height - stroke / 2f),
+                        strokeWidth = stroke
                     )
                 }
-            }
-            if (showFill && gradBrush != null) {
-                Box(Modifier.matchParentSize().background(gradBrush).alpha(bgAlpha))
-            }
+
+            else -> Modifier
         }
 
-        // Contenuto (allineabile)
-        val inner = contentPadding?.let { Modifier.padding(it) } ?: Modifier
-        Box(modifier = inner.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Box(
-                modifier = Modifier.align(
-                    when (hAlign) {
-                        Alignment.CenterHorizontally -> when (vAlign) {
-                            Alignment.Top -> Alignment.TopCenter
-                            Alignment.Bottom -> Alignment.BottomCenter
-                            else -> Alignment.Center
-                        }
-                        Alignment.End -> when (vAlign) {
-                            Alignment.Top -> Alignment.TopEnd
-                            Alignment.Bottom -> Alignment.BottomEnd
-                            else -> Alignment.CenterEnd
-                        }
-                        else -> when (vAlign) {
-                            Alignment.Top -> Alignment.TopStart
-                            Alignment.Bottom -> Alignment.BottomStart
-                            else -> Alignment.CenterStart
-                        }
-                    }
-                )
-            ) { content() }
+    // --- STRUTTURA: Box esterno per gestire l’ancoraggio (sx/centro/dx) ---
+    Box(modifier = modifier.fillMaxWidth()) {
+        Box(
+            modifier = childSizeMod
+                .then(backgroundMod)
+                .then(borderMod)
+                .padding(pad)
+                .align(boxAlign)
+        ) {
+            // Qui dentro il contenuto cresce liberamente: il contenitore si adatta
+            content()
         }
     }
 }
-
 
 
 
@@ -3274,45 +3221,147 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
     }
 
     // Dimensioni coerenti con il renderer unificato
-    var widthMode by remember { mutableStateOf(container.optString("widthMode","wrap")) }
-    ExposedDropdown(
-        value = widthMode, label = "width",
-        options = listOf("wrap","fill","fixed_dp","fraction")
-    ) { sel ->
-        widthMode = sel
-        container.put("widthMode", sel)
-        onChange()
-    }
-    when (widthMode) {
-        "fixed_dp" -> {
-            var w by remember { mutableStateOf(container.optDouble("widthDp", 160.0).toInt().toString()) }
-            ExposedDropdown(
-                value = w, label = "width (dp)",
-                options = listOf("120","160","200","240","280","320","360","400")
-            ) { sel -> w = sel; container.put("widthDp", sel.toDouble()); onChange() }
-        }
-        "fraction" -> {
-            var f by remember { mutableStateOf(((container.optDouble("widthFraction",1.0))*100).toInt().toString()) }
-            ExposedDropdown(
-                value = f, label = "width (%)",
-                options = listOf("25","33","50","66","75","100")
-            ) { sel -> f = sel; container.put("widthFraction", sel.toDouble()/100.0); onChange() }
-        }
-    }
+// --- WIDTH ---
+var widthMode by remember { mutableStateOf(container.optString("widthMode", "wrap")) }
+ExposedDropdown(
+    value = widthMode, label = "width mode",
+    options = listOf("wrap", "fraction", "fixed_dp")
+) { sel ->
+    widthMode = sel
+    container.put("widthMode", sel)
+    if (sel != "fraction") container.remove("widthFraction")
+    if (sel != "fixed_dp") container.remove("widthDp")
+    onChange()
+}
 
-    var heightMode by remember { mutableStateOf(container.optString("heightMode","wrap")) }
-    ExposedDropdown(
-        value = heightMode, label = "height",
-        options = listOf("wrap","fixed_dp")
-    ) { sel -> heightMode = sel; container.put("heightMode", sel); onChange() }
-    if (heightMode == "fixed_dp") {
-        var h by remember { mutableStateOf(container.optDouble("heightDp", 48.0).toInt().toString()) }
-        ExposedDropdown(
-            value = h, label = "height (dp)",
-            options = listOf("24","32","40","48","56","64","96","128","160","200")
-        ) { sel -> h = sel; container.put("heightDp", sel.toDouble()); onChange() }
+when (widthMode) {
+    "fraction" -> {
+        var frac by remember {
+            mutableStateOf(container.optDouble("widthFraction", 1.0).toFloat().coerceIn(0.05f, 1f))
+        }
+        Column {
+            Text("width: ${(frac * 100).toInt()}%")
+            Slider(
+                value = frac,
+                onValueChange = { v ->
+                    // snap a step del 5%
+                    val snapped = (kotlin.math.round(v * 20f) / 20f).coerceIn(0.05f, 1f)
+                    frac = snapped
+                    container.put("widthFraction", snapped.toDouble())
+                    onChange()
+                },
+                valueRange = 0.05f..1f,
+                steps = 19 // (1.0 - 0.05) / 0.05 - 1
+            )
+        }
+    }
+    "fixed_dp" -> {
+        var w by remember { mutableStateOf(container.optDouble("widthDp", 120.0).toFloat()) }
+        Column {
+            Text("width: ${w.toInt()} dp")
+            Slider(
+                value = w,
+                onValueChange = { v ->
+                    val step = 4f // granularità dp
+                    val snapped = (kotlin.math.round(v / step) * step).coerceIn(40f, 600f)
+                    w = snapped
+                    container.put("widthDp", snapped.toDouble())
+                    onChange()
+                },
+                valueRange = 40f..600f,
+                steps = ((600 - 40) / 4) - 1
+            )
+        }
     }
 }
+
+// --- HEIGHT (opzionale; default wrap) ---
+var heightMode by remember { mutableStateOf(container.optString("heightMode", "wrap")) }
+ExposedDropdown(
+    value = heightMode, label = "height mode",
+    options = listOf("wrap", "fixed_dp")
+) { sel ->
+    heightMode = sel
+    container.put("heightMode", sel)
+    if (sel != "fixed_dp") container.remove("heightDp")
+    onChange()
+}
+if (heightMode == "fixed_dp") {
+    var h by remember { mutableStateOf(container.optDouble("heightDp", 48.0).toFloat()) }
+    Column {
+        Text("height: ${h.toInt()} dp")
+        Slider(
+            value = h,
+            onValueChange = { v ->
+                val step = 4f
+                val snapped = (kotlin.math.round(v / step) * step).coerceIn(24f, 800f)
+                h = snapped
+                container.put("heightDp", snapped.toDouble())
+                onChange()
+            },
+            valueRange = 24f..800f,
+            steps = ((800 - 24) / 4) - 1
+        )
+    }
+}
+
+// --- ALIGN ---
+ExposedDropdown(
+    value = container.optString("hAlign", "start"), label = "horizontal align",
+    options = listOf("start", "center", "end")
+) { sel -> container.put("hAlign", sel); onChange() }
+
+ExposedDropdown(
+    value = container.optString("vAlign", "center"), label = "vertical align",
+    options = listOf("top", "center", "bottom")
+) { sel -> container.put("vAlign", sel); onChange() }
+
+// --- PADDING ---
+var pad by remember { mutableStateOf(container.optDouble("paddingDp", 12.0).toFloat()) }
+Column {
+    Text("padding: ${pad.toInt()} dp")
+    Slider(
+        value = pad,
+        onValueChange = { v ->
+            val step = 2f
+            val snapped = (kotlin.math.round(v / step) * step).coerceIn(0f, 48f)
+            pad = snapped
+            container.put("paddingDp", snapped.toDouble())
+            onChange()
+        },
+        valueRange = 0f..48f,
+        steps = ((48 - 0) / 2) - 1
+    )
+}
+
+// --- COLORI / GRADIENTE ---
+NamedColorPickerPlus(
+    label = "Color 1",
+    initial = container.optString("color", "surface")
+) { value ->
+    container.put("color", value)
+    onChange()
+}
+
+NamedColorPickerPlus(
+    label = "Color 2 (None = tinta unita)",
+    initial = container.optString("color2", "none"),
+    includeNone = true
+) { value ->
+    // se "none" => niente gradiente
+    if (value.isBlank()) container.put("color2", "none") else container.put("color2", value)
+    onChange()
+}
+
+ExposedDropdown(
+    value = container.optString("gradientDir", "horizontal"),
+    label = "gradient direction",
+    options = listOf("horizontal", "vertical")
+) { sel ->
+    container.put("gradientDir", sel)
+    onChange()
+}
+
 
 
 /* =========================================================
