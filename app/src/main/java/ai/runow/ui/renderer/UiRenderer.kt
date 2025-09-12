@@ -3220,88 +3220,87 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         StepperField("alpha (0..1)", alpha, 0.1) { v -> img.put("alpha", v.coerceIn(0.0,1.0)); onChange() }
     }
 
-    // Dimensioni coerenti con il renderer unificato
-// --- WIDTH ---
-var widthMode by remember { mutableStateOf(container.optString("widthMode", "wrap")) }
-ExposedDropdown(
-    value = widthMode, label = "width mode",
-    options = listOf("wrap", "fraction", "fixed_dp")
-) { sel ->
-    widthMode = sel
-    container.put("widthMode", sel)
-    if (sel != "fraction") container.remove("widthFraction")
-    if (sel != "fixed_dp") container.remove("widthDp")
-    onChange()
-}
-
-when (widthMode) {
-    "fraction" -> {
-        var frac by remember {
-            mutableStateOf(container.optDouble("widthFraction", 1.0).toFloat().coerceIn(0.05f, 1f))
+    var widthMode by remember { mutableStateOf(container.optString("widthMode", "wrap")) }
+    ExposedDropdown(
+        value = widthMode, label = "width mode",
+        options = listOf("wrap", "fraction", "fixed_dp")
+    ) { sel ->
+        widthMode = sel
+        container.put("widthMode", sel)
+        if (sel != "fraction") container.remove("widthFraction")
+        if (sel != "fixed_dp") container.remove("widthDp")
+        onChange()
+    }
+    
+    when (widthMode) {
+        "fraction" -> {
+            var frac by remember {
+                mutableStateOf(container.optDouble("widthFraction", 1.0).toFloat().coerceIn(0.05f, 1f))
+            }
+            Column {
+                Text("width: ${(frac * 100).toInt()}%")
+                Slider(
+                    value = frac,
+                    onValueChange = { v ->
+                        // snap a step del 5%
+                        val snapped = (kotlin.math.round(v * 20f) / 20f).coerceIn(0.05f, 1f)
+                        frac = snapped
+                        container.put("widthFraction", snapped.toDouble())
+                        onChange()
+                    },
+                    valueRange = 0.05f..1f,
+                    steps = 19 // (1.0 - 0.05) / 0.05 - 1
+                )
+            }
         }
-        Column {
-            Text("width: ${(frac * 100).toInt()}%")
-            Slider(
-                value = frac,
-                onValueChange = { v ->
-                    // snap a step del 5%
-                    val snapped = (kotlin.math.round(v * 20f) / 20f).coerceIn(0.05f, 1f)
-                    frac = snapped
-                    container.put("widthFraction", snapped.toDouble())
-                    onChange()
-                },
-                valueRange = 0.05f..1f,
-                steps = 19 // (1.0 - 0.05) / 0.05 - 1
-            )
+        "fixed_dp" -> {
+            var w by remember { mutableStateOf(container.optDouble("widthDp", 120.0).toFloat()) }
+            Column {
+                Text("width: ${w.toInt()} dp")
+                Slider(
+                    value = w,
+                    onValueChange = { v ->
+                        val step = 4f // granularità dp
+                        val snapped = (kotlin.math.round(v / step) * step).coerceIn(40f, 600f)
+                        w = snapped
+                        container.put("widthDp", snapped.toDouble())
+                        onChange()
+                    },
+                    valueRange = 40f..600f,
+                    steps = ((600 - 40) / 4) - 1
+                )
+            }
         }
     }
-    "fixed_dp" -> {
-        var w by remember { mutableStateOf(container.optDouble("widthDp", 120.0).toFloat()) }
+    
+    // --- HEIGHT (opzionale; default wrap) ---
+    var heightMode by remember { mutableStateOf(container.optString("heightMode", "wrap")) }
+    ExposedDropdown(
+        value = heightMode, label = "height mode",
+        options = listOf("wrap", "fixed_dp")
+    ) { sel ->
+        heightMode = sel
+        container.put("heightMode", sel)
+        if (sel != "fixed_dp") container.remove("heightDp")
+        onChange()
+    }
+    if (heightMode == "fixed_dp") {
+        var h by remember { mutableStateOf(container.optDouble("heightDp", 48.0).toFloat()) }
         Column {
-            Text("width: ${w.toInt()} dp")
+            Text("height: ${h.toInt()} dp")
             Slider(
-                value = w,
+                value = h,
                 onValueChange = { v ->
-                    val step = 4f // granularità dp
-                    val snapped = (kotlin.math.round(v / step) * step).coerceIn(40f, 600f)
-                    w = snapped
-                    container.put("widthDp", snapped.toDouble())
+                    val step = 4f
+                    val snapped = (kotlin.math.round(v / step) * step).coerceIn(24f, 800f)
+                    h = snapped
+                    container.put("heightDp", snapped.toDouble())
                     onChange()
                 },
-                valueRange = 40f..600f,
-                steps = ((600 - 40) / 4) - 1
+                valueRange = 24f..800f,
+                steps = ((800 - 24) / 4) - 1
             )
         }
-    }
-}
-
-// --- HEIGHT (opzionale; default wrap) ---
-var heightMode by remember { mutableStateOf(container.optString("heightMode", "wrap")) }
-ExposedDropdown(
-    value = heightMode, label = "height mode",
-    options = listOf("wrap", "fixed_dp")
-) { sel ->
-    heightMode = sel
-    container.put("heightMode", sel)
-    if (sel != "fixed_dp") container.remove("heightDp")
-    onChange()
-}
-if (heightMode == "fixed_dp") {
-    var h by remember { mutableStateOf(container.optDouble("heightDp", 48.0).toFloat()) }
-    Column {
-        Text("height: ${h.toInt()} dp")
-        Slider(
-            value = h,
-            onValueChange = { v ->
-                val step = 4f
-                val snapped = (kotlin.math.round(v / step) * step).coerceIn(24f, 800f)
-                h = snapped
-                container.put("heightDp", snapped.toDouble())
-                onChange()
-            },
-            valueRange = 24f..800f,
-            steps = ((800 - 24) / 4) - 1
-        )
     }
 }
 
