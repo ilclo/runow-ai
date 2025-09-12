@@ -1135,11 +1135,6 @@ drawLine(color, start = Offset(0f, size.height - w/2f), end = Offset(size.width,
 }
 )
 
-/**
-* StyledContainer: applica stile/shape/border/bg/gradient/size/align
-* - NESSUNA animazione (per evitare errori di import nelle prime prove)
-*/
-// --- StyledContainer: contenitore unificato per tutti i blocchi ---
 @Composable
 fun StyledContainer(
     cfg: JSONObject,
@@ -1147,40 +1142,28 @@ fun StyledContainer(
     contentPadding: PaddingValues? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
-
-    // === Stile unificato ===
-    val style = cfg.optString("style", "full").lowercase()
+    // === Stile / shape ===
+    val style     = cfg.optString("style", "full").lowercase()
     val shapeName = cfg.optString("shape", "rounded")
-    val corner = cfg.optDouble("corner", 12.0).toFloat()
-    
+    val corner    = cfg.optDouble("corner", 12.0).toFloat()
+
     val cs = MaterialTheme.colorScheme
-    val shape = when (shapeName) {
-        "cut"       -> CutCornerShape(corner.dp)
+    val shape: CornerBasedShape = when (shapeName) {
         "pill"      -> RoundedCornerShape(percent = 50)
-        "topBottom" -> RoundedCornerShape(0.dp)
+        "cut"       -> CutCornerShape(corner.dp)
+        "topbottom" -> RoundedCornerShape(0.dp)
         else        -> RoundedCornerShape(corner.dp)
     }
-    
+
     // === Dimensioni ===
-    val widthMode = cfg.optString("widthMode", "wrap")             // wrap | fill | fixed_dp | fraction
-    val heightMode = cfg.optString("heightMode", "wrap")            // wrap | fixed_dp
-    val widthDp = cfg.optDouble("widthDp", 160.0).toFloat().dp      // default 160
-    val heightDp = cfg.optDouble("heightDp", 0.0).toFloat().dp
+    val widthMode     = cfg.optString("widthMode", "wrap")       // wrap | fill | fixed_dp | fraction
+    val heightMode    = cfg.optString("heightMode", "wrap")      // wrap | fixed_dp
+    val widthDp       = cfg.optDouble("widthDp", 160.0).toFloat().dp
+    val heightDp      = cfg.optDouble("heightDp", 0.0).toFloat().dp
     val widthFraction = cfg.optDouble("widthFraction", Double.NaN)
-        .let { if (it.isNaN()) null else it.toFloat().coerceIn(0f,1f) }
+        .let { if (it.isNaN()) null else it.toFloat().coerceIn(0f, 1f) }
 
-    var m = modifier
-    m = when (widthMode) {
-        "fill"      -> m.fillMaxWidth()
-        "fixed_dp"  -> m.width(widthDp)
-        "fraction"  -> m.fillMaxWidth(widthFraction ?: 1f)
-        else        -> m // wrap
-    }
-    m = when (heightMode) {
-        "fixed_dp", "fixed" -> m.height(heightDp)
-        else                -> m // wrap
-    }
-
+    // Ancoraggi (SX/CENTRO/DX, TOP/CENTRO/BOT)
     val hAlign = when (cfg.optString("hAlign", "start")) {
         "center" -> Alignment.CenterHorizontally
         "end"    -> Alignment.End
@@ -1191,51 +1174,67 @@ fun StyledContainer(
         "bottom" -> Alignment.Bottom
         else     -> Alignment.CenterVertically
     }
-
-    // === Colori / Gradiente ===
-    val customColor = parseColorOrRole(cfg.optString("customColor",""))
-    val bgAlpha = cfg.optDouble("bgAlpha", 1.0).toFloat().coerceIn(0f,1f)
-
-    // Gradiente (nuovo oggetto) + legacy color1/color2
-    val gradObj = cfg.optJSONObject("gradient")
-    val gradBrush = gradObj?.let { g ->
-        val arr = g.optJSONArray("colors")
-        val cols = (0 until (arr?.length() ?: 0)).mapNotNull { i -> parseColorOrRole(arr!!.optString(i)) }
-        if (cols.size >= 2) {
-            if (g.optString("direction","vertical") == "horizontal") Brush.horizontalGradient(cols)
-            else Brush.verticalGradient(cols)
-        } else null
-    } ?: run {
-        val c1 = cfg.optString("color1","")
-        val c2 = cfg.optString("color2","")
-        if (c1.isNotBlank() && c2.isNotBlank()) {
-            val a = Color(android.graphics.Color.parseColor(c1))
-            val b = Color(android.graphics.Color.parseColor(c2))
-            if (cfg.optString("gradientDirection","horizontal") == "vertical")
-                Brush.verticalGradient(listOf(a,b))
-            else
-                Brush.horizontalGradient(listOf(a,b))
-        } else null
+    val boxAlign: Alignment = when (hAlign) {
+        Alignment.CenterHorizontally -> when (vAlign) {
+            Alignment.Top     -> Alignment.TopCenter
+            Alignment.Bottom  -> Alignment.BottomCenter
+            else              -> Alignment.Center
+        }
+        Alignment.End -> when (vAlign) {
+            Alignment.Top     -> Alignment.TopEnd
+            Alignment.Bottom  -> Alignment.BottomEnd
+            else              -> Alignment.CenterEnd
+        }
+        else -> when (vAlign) {
+            Alignment.Top     -> Alignment.TopStart
+            Alignment.Bottom  -> Alignment.BottomStart
+            else              -> Alignment.CenterStart
+        }
     }
 
+    // === Colore di base + gradiente 2 colori (gradient1/gradient2) ===
+    val customColor = parseColorOrRole(cfg.optString("customColor",""))
     val baseBgColor = customColor ?: when (style) {
         "primary" -> cs.primary
         "tonal"   -> cs.surfaceVariant
-        else      -> cs.surface // full/surface default
+        else      -> cs.surface
     }
-    val transparentBg = cfg.optBoolean("transparentBg", false)
-    val onColor = bestOnColor(baseBgColor) // se serve un "on" contrastato
+    val bgAlpha = cfg.optDouble("bgAlpha", 1.0).toFloat().coerceIn(0f, 1f)
 
-    // === Immagine di sfondo (nuova) ===
-    val imageCfg = cfg.optJSONObject("image")
-    val imageSrc = imageCfg?.optString("source","").orEmpty()
+    // Nuova chiave: gradient1/gradient2 (+ orientation), con fallback al blocco legacy
+    val g1 = parseColorOrRole(cfg.optString("gradient1","")) ?: baseBgColor
+    val g2 = parseColorOrRole(cfg.optString("gradient2",""))
+        ?: run {
+            // Legacy: color1/color2 se presenti
+            val c1 = cfg.optString("color1","")
+            val c2 = cfg.optString("color2","")
+            if (c1.isNotBlank() && c2.isNotBlank()) {
+                Color(android.graphics.Color.parseColor(c2))
+            } else null
+        }
+    val gradOrientation = cfg.optString("gradientOrientation",
+        cfg.optString("gradientDirection","horizontal")
+    ).lowercase()
+
+    val gradBrush: Brush? = when {
+        style == "text" -> null
+        g2 != null -> if (gradOrientation == "vertical")
+            Brush.verticalGradient(listOf(g1, g2))
+        else
+            Brush.horizontalGradient(listOf(g1, g2))
+        else -> null
+    }
+
+    // === Immagine di sfondo (come green) ===
+    val imageCfg   = cfg.optJSONObject("image")
+    val imageSrc   = imageCfg?.optString("source","").orEmpty()
     val imageScale = when (imageCfg?.optString("contentScale","fill")) {
         "fit"  -> ContentScale.Fit
         "crop" -> ContentScale.Crop
         else   -> ContentScale.FillBounds
     }
     val imageAlpha = imageCfg?.optDouble("alpha", 1.0)?.toFloat()?.coerceIn(0f,1f) ?: 1f
-    val ctx = LocalContext.current
+    val ctx        = LocalContext.current
     val resId = if (imageSrc.startsWith("res:"))
         ctx.resources.getIdentifier(imageSrc.removePrefix("res:"), "drawable", ctx.packageName)
     else 0
@@ -1247,39 +1246,58 @@ fun StyledContainer(
     }
     val bmp = if (uriStr != null) rememberImageBitmapFromUri(uriStr) else null
 
-    // === Bordi ===
-    // alias "thick" → borderThicknessDp; default per stile
+    // === Bordo / separatori ===
     val thick = when {
-        cfg.has("thick") -> cfg.optDouble("thick", 0.0).toFloat()
+        cfg.has("thick")             -> cfg.optDouble("thick", 0.0).toFloat()
         cfg.has("borderThicknessDp") -> cfg.optDouble("borderThicknessDp", 0.0).toFloat()
         style == "outlined" || style == "topbottom" -> 1f
         else -> 0f
     }.coerceAtLeast(0f)
 
-    val borderColor = parseColorOrRole(cfg.optString("borderColor","")) ?: cs.outline
+    val borderColor   = parseColorOrRole(cfg.optString("borderColor","")) ?: cs.outline
     val drawSeparators = style == "topbottom" && thick > 0f
-    val showFill = (style in listOf("full","surface","primary","tonal")) && !transparentBg
-    val showBorder = (style == "outlined" && thick > 0f) ||
-                     ((style in listOf("full","surface","primary","tonal")) && thick > 0f)
+    val showFill       = (style in listOf("full","surface","primary","tonal")) && !cfg.optBoolean("transparentBg", false)
+    val showBorder     = (style == "outlined" && thick > 0f) ||
+                         ((style in listOf("full","surface","primary","tonal")) && thick > 0f)
 
-    // === Elevazione ===
     val elevationDp = cfg.optDouble("elevationDp", if (showFill) 1.0 else 0.0).toFloat().coerceAtLeast(0f)
 
-    // === Modificatori ===
-    val base = if (elevationDp > 0f) m.shadow(elevationDp.dp, shape, clip = false) else m
-    val withSeparators = if (drawSeparators) base.topBottomBorder(thick.dp, borderColor) else base
-    val withBorder = if (showBorder && !drawSeparators) withSeparators.border(BorderStroke(thick.dp, borderColor), shape) else withSeparators
-    val clipped = withBorder.clip(shape)
+    // === Modificatori del BOX INTERNO (quello allineato e dimensionato) ===
+    val sizeMod = when (widthMode) {
+        "fill"      -> Modifier.fillMaxWidth()
+        "fixed_dp"  -> Modifier.width(widthDp)
+        "fraction"  -> Modifier.fillMaxWidth(widthFraction ?: 1f)
+        else        -> Modifier.wrapContentWidth()
+    }.then(
+        when (heightMode) {
+            // anti-clipping: min height => si adatta al contenuto se più alto
+            "fixed_dp" -> Modifier.heightIn(min = heightDp)
+            else       -> Modifier.wrapContentHeight()
+        }
+    )
 
-    // === Render ===
-    Box(modifier = clipped, contentAlignment = Alignment.Center) {
-        // Layer di background (solo se non "text")
-// Layer di background (solo se non "text")
-        if (style != "text") {
-            if (showFill && gradBrush == null) {
-                Box(Modifier.matchParentSize().background(baseBgColor.copy(alpha = bgAlpha)))
-            }
-            if (imageSrc.isNotBlank()) {
+    val baseMod = if (elevationDp > 0f) Modifier.shadow(elevationDp.dp, shape, clip = false) else Modifier
+    val withSeparators = if (drawSeparators)
+        baseMod.then(Modifier.topBottomBorder(thick.dp, borderColor))
+    else baseMod
+
+    val withBorder = if (showBorder && !drawSeparators)
+        withSeparators.border(BorderStroke(thick.dp, borderColor), shape)
+    else withSeparators
+
+    // === STRUTTURA: Box esterno a tutta riga -> box interno allineato ===
+    Box(modifier = modifier.fillMaxWidth()) {
+        Box(
+            modifier = sizeMod
+                .then(if (showFill && gradBrush == null) Modifier.background(baseBgColor.copy(alpha = bgAlpha), shape) else Modifier)
+                .then(if (showFill && gradBrush != null)  Modifier.background(gradBrush, shape).alpha(bgAlpha) else Modifier)
+                .then(withBorder)
+                .clip(shape)
+                .then(contentPadding?.let { Modifier.padding(it) } ?: Modifier)
+                .align(boxAlign)
+        ) {
+            // immagine come layer tra colore e gradiente (come green)
+            if (style != "text" && imageSrc.isNotBlank()) {
                 when {
                     resId != 0 -> Image(
                         painter = painterResource(resId),
@@ -1297,40 +1315,10 @@ fun StyledContainer(
                     )
                 }
             }
-            if (showFill && gradBrush != null) {
-                Box(Modifier.matchParentSize().background(gradBrush).alpha(bgAlpha))
-            }
-        }
-
-
-        // Contenuto (allineabile)
-        val inner = contentPadding?.let { Modifier.padding(it) } ?: Modifier
-        Box(modifier = inner.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Box(
-                modifier = Modifier.align(
-                    when (hAlign) {
-                        Alignment.CenterHorizontally -> when (vAlign) {
-                            Alignment.Top -> Alignment.TopCenter
-                            Alignment.Bottom -> Alignment.BottomCenter
-                            else -> Alignment.Center
-                        }
-                        Alignment.End -> when (vAlign) {
-                            Alignment.Top -> Alignment.TopEnd
-                            Alignment.Bottom -> Alignment.BottomEnd
-                            else -> Alignment.CenterEnd
-                        }
-                        else -> when (vAlign) {
-                            Alignment.Top -> Alignment.TopStart
-                            Alignment.Bottom -> Alignment.BottomStart
-                            else -> Alignment.CenterStart
-                        }
-                    }
-                )
-            ) { content() }
+            content()
         }
     }
 }
-
 
 
 /* =========================================================
@@ -3274,11 +3262,11 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         StepperField("alpha (0..1)", alpha, 0.1) { v -> img.put("alpha", v.coerceIn(0.0,1.0)); onChange() }
     }
 
-// --- WIDTH ---
-    var widthMode by remember { mutableStateOf(container.optString("widthMode", "wrap")) }
+    // --- WIDTH (slider % o dp) ---
+    var widthMode by remember { mutableStateOf(container.optString("widthMode","wrap")) }
     ExposedDropdown(
-        value = widthMode, label = "width mode",
-        options = listOf("wrap", "fraction", "fixed_dp")
+        value = widthMode, label = "width",
+        options = listOf("wrap","fill","fraction","fixed_dp")
     ) { sel ->
         widthMode = sel
         container.put("widthMode", sel)
@@ -3293,40 +3281,42 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
                 mutableStateOf(container.optDouble("widthFraction", 1.0).toFloat().coerceIn(0.05f, 1f))
             }
             Column {
-                Text("width: ${(frac * 100).toInt()}%")
+                Text("width: ${(frac*100).toInt()}%")
                 Slider(
                     value = frac,
                     onValueChange = { v ->
-                        // snap a step del 5%
-                        val snapped = (kotlin.math.round(v * 20f) / 20f).coerceIn(0.05f, 1f)
+                        val snapped = (kotlin.math.round(v * 20f) / 20f)  // step 5%
+                            .coerceIn(0.05f, 1f)
                         frac = snapped
                         container.put("widthFraction", snapped.toDouble())
                         onChange()
                     },
                     valueRange = 0.05f..1f,
-                    steps = 19 // (1.0 - 0.05) / 0.05 - 1
+                    steps = 19
                 )
             }
         }
         "fixed_dp" -> {
-            var w by remember { mutableStateOf(container.optDouble("widthDp", 120.0).toFloat()) }
+            var w by remember { mutableStateOf(container.optDouble("widthDp", 160.0).toFloat()) }
             Column {
                 Text("width: ${w.toInt()} dp")
                 Slider(
                     value = w,
                     onValueChange = { v ->
-                        val step = 4f // granularità dp
-                        val snapped = (kotlin.math.round(v / step) * step).coerceIn(40f, 600f)
+                        val step = 4f
+                        val snapped = (kotlin.math.round(v / step) * step)
+                            .coerceIn(40f, 800f)
                         w = snapped
                         container.put("widthDp", snapped.toDouble())
                         onChange()
                     },
-                    valueRange = 40f..600f,
-                    steps = ((600 - 40) / 4) - 1
+                    valueRange = 40f..800f,
+                    steps = ((800 - 40) / 4) - 1
                 )
             }
         }
     }
+
     
     // --- HEIGHT (opzionale; default wrap) ---
     var heightMode by remember { mutableStateOf(container.optString("heightMode", "wrap")) }
