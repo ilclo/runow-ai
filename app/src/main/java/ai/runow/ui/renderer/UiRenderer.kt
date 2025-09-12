@@ -1013,7 +1013,7 @@ val onSurface = MaterialTheme.colorScheme.onSurface
 val outline = MaterialTheme.colorScheme.outline
 
 // Color di base impostabile dall’utente (palette/ruoli)
-val userBg = parseColorOrRole(cfg?.optString("color", "") ?: "")
+val userBg = parseColorOrRole(cfg?., "") ?: "")
 
 val background = when (style.lowercase()) {
 "text", "outlined" -> Color.Transparent // SOLO testo o SOLO bordo
@@ -1143,8 +1143,8 @@ drawLine(color, start = Offset(0f, size.height - w/2f), end = Offset(size.width,
 fun StyledContainer(
     cfg: JSONObject,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues? = null,
-    content: @Composable BoxScope.() -> Unit
+    contentPadding: PaddingValues = PaddingValues(0.dp),
+    content: @Composable () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
 
@@ -1263,22 +1263,19 @@ fun StyledContainer(
             else -> Modifier
         }
 
-    // --- STRUTTURA: Box esterno per gestire l’ancoraggio (sx/centro/dx) ---
     Box(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = childSizeMod
                 .then(backgroundMod)
                 .then(borderMod)
-                .padding(pad)
+                .padding(pad)               // padding dal JSON (paddingDp)
+                .padding(contentPadding)    // padding aggiuntivo opzionale dai call-site
                 .align(boxAlign)
         ) {
-            // Qui dentro il contenuto cresce liberamente: il contenitore si adatta
             content()
         }
     }
 }
-
-
 
 
 /* =========================================================
@@ -3336,19 +3333,24 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
     }
     
     // --- COLORI / GRADIENTE ---
-    NamedColorPickerPlus(label = container.optString("color", "surface")
+    NamedColorPickerPlus(
+        label = "Color 1",
+        initial = container.optString("color", "surface")
     ) { value ->
         container.put("color", value)
         onChange()
     }
     
-    NamedColorPickerPlus(label = container.optString("color2", "none"),
+    NamedColorPickerPlus(
+        label = "Color 2 (None = tinta unita)",
+        initial = container.optString("color2", "none"),
         includeNone = true
     ) { value ->
         // se "none" => niente gradiente
         if (value.isBlank()) container.put("color2", "none") else container.put("color2", value)
         onChange()
     }
+
     
     ExposedDropdown(
         value = container.optString("gradientDir", "horizontal"),
