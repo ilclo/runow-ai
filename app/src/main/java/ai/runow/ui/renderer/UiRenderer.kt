@@ -871,7 +871,7 @@ return
 }
 
 // Menù raccolti dal layout + selezione corrente
-val menus by remember(layout, tick) { mutableStateOf(collectMenus(layout!!)) }
+val menus = remember(layout, tick) { collectMenus(layout!!) }
 var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
 
 // Stato barra designer in basso (per lasciare spazio ai contenuti)
@@ -1152,12 +1152,15 @@ fun StyledContainer(
     val corner = cfg.optDouble("corner", 12.0).toFloat()
 
     val cs = MaterialTheme.colorScheme
+    val shapeName = cfg.optString("shape", "rounded")
+    val corner = cfg.optDouble("corner", 12.0).toFloat()
+    
     val shape = when (shapeName) {
-        "cut"       -> CutCornerShape(corner.dp)
-        "pill"      -> RoundedCornerShape(percent = 50)
-        "topBottom" -> RoundedCornerShape(0.dp) // usi le linee disegnate, non il fill
-        else        -> RoundedCornerShape(corner.dp)
+        "cut"  -> CutCornerShape(corner.dp)
+        "pill" -> RoundedCornerShape(percent = 50)
+        else   -> RoundedCornerShape(corner.dp)
     }
+
 
 
 
@@ -2927,12 +2930,14 @@ OutlinedTextField(openMenuId.value, { v -> openMenuId.value = v; if (v.isBlank()
 "button" -> {
 val lbl = remember { mutableStateOf(it.optString("label","")) }
 OutlinedTextField(lbl.value, { v -> lbl.value = v; it.put("label", v); onChange() }, label = { Text("label") })
+
 val action = remember { mutableStateOf(it.optString("actionId","")) }
 OutlinedTextField(action.value, { v -> action.value = v; it.put("actionId", v); onChange() }, label = { Text("actionId") })
-var style by remember { mutableStateOf(it.optString("style", "primary")) }
+
+var style by remember { mutableStateOf(it.optString("style","text")) }
 ExposedDropdown(
     value = style, label = "style",
-    options = listOf("primary","tonal","outlined","text")
+    options = listOf("text","outlined","tonal","primary")
 ) { sel ->
     style = sel
     it.put("style", sel)
@@ -3165,12 +3170,11 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
     val defaultTh = if (styleUi == "outlined" || styleUi == "topbottom") 1 else 0
     var borderTh by remember {
         mutableStateOf(
-            container.optDouble(
-                "borderThicknessDp",
-                if (currentBorderMode != "none") 1.0 else 0.0
-            ).toInt().toString()
+            container.optDouble("borderThicknessDp", if (container.optString("borderMode","none") != "none") defaultTh.toDouble() else 0.0)
+                .toInt().toString()
         )
     }
+
     ExposedDropdown(
         value = borderTh, label = "borderThickness (dp)",
         options = listOf("0","1","2","3","4","6","8")
