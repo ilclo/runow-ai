@@ -24,21 +24,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.draw.*
-// gesture & pointer
-// Android
 import android.content.Intent
-
-// Compose graphics & text
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.input.pointer.pointerInput // used with detectVerticalDragGestures
 import androidx.compose.ui.unit.IntOffset
-// Math helpers
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
-// Animation
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -47,59 +41,66 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-// Pointer & nested scroll
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-// Layout callbacks
 import androidx.compose.ui.layout.onGloballyPositioned
-// Text overflow
-// Image bitmap utils
-// Intent flags usati nell'image picker
-// Shape (evita import doppi "RoundedCornerShape")
-// (se serve) altre shape:
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CutCornerShape
-// shape astratta usata in ResolvedContainer
 import androidx.compose.foundation.shape.CornerBasedShape
-// Intent usato nel picker immagini
-// math usato dallo Slider e dallo stepper
-// --- Foundation ---
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-// --- Material 3 ---
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-// --- Activity / back / picker ---
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-// --- Android / IO utili ---
 import android.net.Uri
 import android.graphics.BitmapFactory
-// --- Immagini / painter ---
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
-// --- JSON & coroutines ---
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-// --- Risorse font del modulo app ---
 import ai.runow.R
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.CutCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import org.json.JSONObject
+import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+
+
+@Composable
+fun RenderPageWithPinnedTopBar(
+    page: JSONObject,
+    // se hai già un body composable che richiede parametri, aggiungili qui
+) {
+    // Recupera la config topbar dalla pagina (fallback vuoto)
+    val topbarCfg = page.optJSONObject("topbar") ?: JSONObject()
+
+    // Avvolgi il contenuto nel nostro Scaffold con topbar "pinned"
+    ScreenScaffoldWithPinnedTopBar(topbarCfg) { innerPadding: PaddingValues ->
+        // NB: imePadding solo sul contenuto (la topbar resta ferma)
+        Box(
+            Modifier
+                .padding(innerPadding)
+                .imePadding()
+                .fillMaxSize()
+        ) {
+            // >>> QUI chiama il tuo builder della pagina <<<
+            // Esempio (sostituisci con la tua funzione reale):
+            RenderPageBody(page, modifier = Modifier.fillMaxSize())
+        }
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1510,7 +1511,7 @@ Box(Modifier.matchParentSize().background(b))
 * ROOT SCAFFOLD (top bar, bottom bar, fab, scroll)
 * ========================================================= */
 @Composable
-private fun RenderRootScaffold(
+private fun Scaffold(
 layout: JSONObject,
 dispatch: (String) -> Unit,
 uiState: MutableMap<String, Any>,
