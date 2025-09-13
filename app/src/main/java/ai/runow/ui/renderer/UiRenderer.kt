@@ -89,7 +89,108 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 // --- Risorse font del modulo app ---
 import ai.runow.R
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import org.json.JSONObject
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ScreenScaffoldWithPinnedTopBar(
+    topbarCfg: JSONObject,
+    // il contenuto che scorre sotto: metti qui la tua pagina o lista
+    content: @Composable (PaddingValues) -> Unit
+) {
+    // 1) scrollBehavior “pinned” = la TopBar non scorre via
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
+    Scaffold(
+        modifier = Modifier
+            // 2) attach a Scaffold, non al contenuto: evita doppi nestedScroll
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
+        // 3) TopBar nello slot dedicato (non dentro colonne scrollabili)
+        topBar = { StyledTopBarPinned(topbarCfg, scrollBehavior) },
+
+        // 4) insets: lasciamo alla Scaffold i systemBars;
+        //    l’IME lo gestiamo sul contenuto (vedi sotto)
+        contentWindowInsets = WindowInsets.systemBars
+    ) { innerPadding ->
+        // 5) Solo il contenuto evita la tastiera: la TopBar non riceve imePadding
+        Box(
+            Modifier
+                .padding(innerPadding)
+                .imePadding() // spinge SOLO il contenuto sopra la tastiera
+                .fillMaxSize()
+        ) {
+            content(innerPadding)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StyledTopBarPinned(
+    cfg: JSONObject,
+    scrollBehavior: TopAppBarScrollBehavior
+) {
+    val cs = MaterialTheme.colorScheme
+
+    // === DEFAULT richiesti ===
+    val style     = cfg.optString("style", "surface")      // default: surface
+    val titleStr  = cfg.optString("title", "topbar")       // default: "topbar"
+    val shapeName = cfg.optString("shape", "rounded")      // default: rounded
+    val corner    = cfg.optDouble("corner", 0.0).toFloat() // default: 0
+    val thick     = cfg.optDouble("thick", 2.0).toFloat()  // default: 2 dp
+
+    // Colori scuri accattivanti di default (restano sovrascrivibili da cfg)
+    val defaultBg = cs.surface.copy(alpha = 1f)            // dark surface del tema
+    val bgColor   = parseColorOrRole(cfg.optString("customColor","")) ?: defaultBg
+    val onColor   = bestOnColor(bgColor) ?: cs.onSurface
+    val borderCol = parseColorOrRole(cfg.optString("borderColor","")) ?: cs.outline
+
+    val shape = when (shapeName.lowercase()) {
+        "cut"  -> CutCornerShape(corner.dp)
+        "pill" -> RoundedCornerShape(percent = 50)
+        else   -> RoundedCornerShape(corner.dp)
+    }
+
+    // Surface come “contenitore” per supportare shape + border,
+    // mentre TopAppBar ha container trasparente (così non duplichiamo sfondi)
+    Surface(
+        color = bgColor,
+        shape = shape,
+        border = if (thick > 0f) BorderStroke(thick.dp, borderCol) else null,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        TopAppBar(
+            title = {
+                Text(
+                    text = titleStr,
+                    color = onColor,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent, // lo sfondo lo fornisce la Surface
+                titleContentColor = onColor,
+                navigationIconContentColor = onColor,
+                actionIconContentColor = onColor
+            ),
+            // NB: qui puoi aggiungere navigationIcon/actions leggendo dal cfg
+            // senza dipendere da componenti custom (NamedIconEx ecc.)
+            scrollBehavior = scrollBehavior
+        )
+    }
+}
 
 
 // --- Composable minimi -------------------------------------------------------
