@@ -75,66 +75,167 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.imePaddingimport androidx.compose.foundation.layout.WindowInsets
 
 
 @Composable
-fun RenderPageWithPinnedTopBar(
-    page: JSONObject,
-    // se hai già un body composable che richiede parametri, aggiungili qui
+private fun ScreenScaffoldWithPinnedTopBar(
+    layout: JSONObject,
+    dispatch: (String) -> Unit,
+    uiState: MutableMap<String, Any>,
+    designerMode: Boolean,
+    menus: Map<String, JSONArray>,
+    selectedPathSetter: (String) -> Unit,
+    extraPaddingBottom: Dp,
+    scaffoldPadding: PaddingValues
 ) {
-    // Recupera la config topbar dalla pagina (fallback vuoto)
-    val topbarCfg = page.optJSONObject("topbar") ?: JSONObject()
+    val title = layout.optString("topTitle", "")
+    val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // legacy fallback
+    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy fallback
 
-    // Avvolgi il contenuto nel nostro Scaffold con topbar "pinned"
-    ScreenScaffoldWithPinnedTopBar(topbarCfg) { innerPadding: PaddingValues ->
-        // NB: imePadding solo sul contenuto (la topbar resta ferma)
-        Box(
-            Modifier
-                .padding(innerPadding)
-                .imePadding()
-                .fillMaxSize()
-        ) {
-            // >>> QUI chiama il tuo builder della pagina <<<
-            // Esempio (sostituisci con la tua funzione reale):
-            RenderPageBody(page, modifier = Modifier.fillMaxSize())
+    val bottomBarNode  = layout.optJSONObject("bottomBar")
+    val bottomBarCfg   = bottomBarNode?.optJSONObject("container")
+    val bottomBarItems = bottomBarNode?.optJSONArray("items")
+    val fab   = layout.optJSONObject("fab")
+    val scroll = layout.optBoolean("scroll", true)
+    val topBarConf = layout.optJSONObject("topBar")
+
+    // Pinned per difetto se 'scroll' nella top bar è "pinned"
+    val topScrollBehavior =
+        when (topBarConf?.optString("scroll", "none")) {
+            "pinned"            -> TopAppBarDefaults.pinnedScrollBehavior()
+            "enterAlways"       -> TopAppBarDefaults.enterAlwaysScrollBehavior()
+            "exitUntilCollapsed"-> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+            else                -> null
         }
-    }
-}
-
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ScreenScaffoldWithPinnedTopBar(
-    topbarCfg: JSONObject,
-    // il contenuto che scorre sotto: metti qui la tua pagina o lista
-    content: @Composable (PaddingValues) -> Unit
-) {
-    // 1) scrollBehavior “pinned” = la TopBar non scorre via
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
-        modifier = Modifier
-            // 2) attach a Scaffold, non al contenuto: evita doppi nestedScroll
-            .fillMaxSize()
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
-        // 3) TopBar nello slot dedicato (non dentro colonne scrollabili)
-        topBar = { StyledTopBarPinned(topbarCfg, scrollBehavior) },
+        // Colleghiamo lo scroll behavior della top bar
+        modifier = if (topScrollBehavior != null)
+            Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
+        else Modifier,
 
-        // 4) insets: lasciamo alla Scaffold i systemBars;
-        //    l’IME lo gestiamo sul contenuto (vedi sotto)
-        contentWindowInsets = WindowInsets.systemBars
+        // Evitiamo che l'IME (tastiera) o i system insets facciano “rimpicciolire” lo spazio del body
+        // La TopBar resta ferma; il contenuto gestisce gli insets manualmente.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+
+        topBar = {
+            if (topBarConf != null) {
+                RenderTopBar(topBarConf, dispatch, topScrollBehavior)
+            } else {
+                // Fallback legacy: topTitle/topActions
+                if (title.isNotBlank() || topActions.length() > 0) {
+                    TopAppBar(
+                        title = { Text(title) },
+                        actions = {
+                            for (i in 0 until topActions.length()) {
+                                val a = topActions.optJSONObject(i) ?: continue
+                                IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                                    NamedIconEx(a.optString("icon", "more_vert"), null)
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        },
+
+        bottomBar = {
+            // Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
+            val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
+                JSONArray().apply {
+                    for (i in 0 until bottomButtons.length()) {
+                        val it = bottomButtons.optJSONObject(i) ?: continue
+                        put(JSONObject().apply {
+                            put("type", "button")
+                            put("label", it.optString("label","Button"))
+                            put("actionId", it.optString("actionId",""))
+                            put("style", "text")
+                        })
+                    }
+                }
+            } else null
+
+            if (items != null && items.length() > 0) {
+                StyledContainer(
+                    cfg = bottomBarCfg ?: JSONObject(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RenderBarItemsRow(items, dispatch)
+                    }
+                }
+            }
+        },
+
+        floatingActionButton = {
+            fab?.let {
+                FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
+                    NamedIconEx(it.optString("icon", "play_arrow"), null)
+                }
+            }
+        },
+
+        containerColor = Color.Transparent
     ) { innerPadding ->
-        // 5) Solo il contenuto evita la tastiera: la TopBar non riceve imePadding
-        Box(
-            Modifier
-                .padding(innerPadding)
-                .imePadding() // spinge SOLO il contenuto sopra la tastiera
-                .fillMaxSize()
-        ) {
-            content(innerPadding)
+        // Contenuti body
+        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
+
+        val host: @Composable () -> Unit = {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    // Padding fornito dallo Scaffold (topBar/bottomBar), poi padding esterno dello screen
+                    .padding(innerPadding)
+                    .padding(scaffoldPadding)
+                    // Evita che la tastiera sovrapponga i contenuti: la TopBar resta fissa
+                    .imePadding()
+                    // Protezione per notch/bordi orizzontali (la TopBar gestisce già il top)
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+                    )
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 16.dp,
+                        bottom = extraPaddingBottom
+                    ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                for (i in 0 until blocks.length()) {
+                    val block = blocks.optJSONObject(i) ?: continue
+                    val path = "/blocks/$i"
+                    RenderBlock(
+                        block = block,
+                        dispatch = dispatch,
+                        uiState = uiState,
+                        designerMode = designerMode,
+                        path = path,
+                        menus = menus,
+                        onSelect = { p -> selectedPathSetter(p) },
+                        onOpenInspector = { p -> selectedPathSetter(p) }
+                    )
+                }
+            }
+        }
+
+        if (scroll) {
+            Column(Modifier.verticalScroll(rememberScrollState())) { host() }
+        } else {
+            host()
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1000,17 +1101,17 @@ Box(Modifier.fillMaxSize()) {
 // ====== SFONDO PAGINA (colore/gradient/immagine) ======
 RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
-// ====== CONTENUTO con Scaffold di ROOT ======
-RenderRootScaffold(
-layout = effectiveLayout,
-dispatch = dispatch,
-uiState = uiState,
-designerMode = designMode,
-menus = menus,
-selectedPathSetter = { selectedPath = it },
-extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-scaffoldPadding = scaffoldPadding
+ScreenScaffoldWithPinnedTopBar(
+    layout = effectiveLayout,
+    dispatch = dispatch,
+    uiState = uiState,
+    designerMode = designMode,
+    menus = menus,
+    selectedPathSetter = { selectedPath = it },
+    extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+    scaffoldPadding = scaffoldPadding
 )
+
 
 if (designMode) {
 DesignerOverlay(
@@ -2167,20 +2268,26 @@ onCheckedChange = {
 topBarEnabled = it
 if (it) {
 if (!working.has("topBar")) {
-working.put("topBar", JSONObject().apply {
-put("variant", "small")
-put("title", working.optString("topTitle", ""))
-put("titleColor", "onSurface")
-put("actionsColor", "onSurface")
-put("divider", false)
-put("container", JSONObject().apply {
-put("style","surface")
-put("corner", 0)
-put("borderMode","none")
-})
-put("actions", JSONArray())
-})
+    working.put("topBar", JSONObject().apply {
+        put("variant", "small")
+        put("title", "topbar")
+        put("scroll", "pinned")
+        // Testo chiaro su toni scuri (surface scuro -> onSurface di solito è chiaro nel tema dark)
+        put("titleColor", "onSurface")
+        put("actionsColor", "onSurface")
+        put("divider", false)
+        put("container", JSONObject().apply {
+            put("style", "surface")
+            put("corner", 0)
+            put("borderMode", "full")
+            put("borderThicknessDp", 2)
+            // opzionale: imposta un bordo visibile scuro/chiaro a seconda del tema
+            // put("borderColor", "outline")
+        })
+        put("actions", JSONArray())
+    })
 }
+
 } else {
 working.remove("topBar")
 }
