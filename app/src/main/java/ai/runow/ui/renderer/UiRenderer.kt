@@ -2,6 +2,10 @@
 
 package ai.runow.ui.renderer
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.consume
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -82,91 +86,60 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 
 @Composable
-private fun ResizableRow(
-    rowBlock: JSONObject,
-    path: String,
-    uiState: MutableMap<String, Any>,
-    menus: Map<String, JSONArray>,
-    dispatch: (String) -> Unit,
-    designerMode: Boolean,
-    onSelect: (String) -> Unit,
-    onOpenInspector: (String) -> Unit
+fun ResizableRow(
+    modifier: Modifier = Modifier,
+    blocks: List<@Composable BoxScope.() -> Unit>,
+    // sizing = "fixed" usa widthsDp, sizing = "flex" usa weights
+    sizing: String = "fixed",
+    widthsDpInitial: List<Float> = List(blocks.size) { 0f },
+    weightsInitial: List<Float> = List(blocks.size) { 1f / blocks.size.coerceAtLeast(1) },
+    resizable: Boolean = true,
+    showGuides: Boolean = true,
+    designerMode: Boolean = false, // true = modalità editor, false = runtime
 ) {
-    val items = rowBlock.optJSONArray("items") ?: JSONArray()
-    val gap = rowBlock.optDouble("gapDp", 8.0).toFloat().dp
-    val sizing = rowBlock.optString("sizing", "flex")  // "flex" | "fixed" | "scroll"
-    val resizable = rowBlock.optBoolean("resizable", true)
+    val density = LocalDensity.current
+    val cs = MaterialTheme.colorScheme
 
-    // Misura larghezza/altezza della row per conversioni px<->percentuali
-    var rowWidthPx by remember(path) { mutableStateOf(0f) }
-    var rowHeightPx by remember(path) { mutableStateOf(0f) }
+    var widthsDp by remember { mutableStateOf(widthsDpInitial) }
+    var weights by remember { mutableStateOf(weightsInitial) }
+    var rowWidthPx by remember { mutableStateOf(0f) }
 
-    // Stato interno: pesi/width/height + sblocco per cella
-    val count = items.length()
-    val weights = remember(path, count) {
-        MutableList(count) { idx ->
-            val it = items.optJSONObject(idx)
-            when {
-                it == null -> 0.0f
-                it.optString("type") == "SpacerH" && it.optString("mode","fixed") == "fixed" -> 0.0f
-                else -> {
-                    val w = it.optDouble("weight", Double.NaN)
-                    if (!w.isNaN()) w.toFloat().coerceIn(0.05f, 0.95f) else 1f / count
-                }
-            }
-        }.toMutableStateList()
-    }
-    val widthsDp = remember(path, count) {
-        MutableList(count) { idx ->
-            val it = items.optJSONObject(idx)
-            it?.optDouble("widthDp", Double.NaN)?.takeIf { !it.isNaN() }?.toFloat() ?: 120f
-        }.toMutableStateList()
-    }
-    val heightsDp = remember(path, count) {
-        MutableList(count) { idx ->
-            val it = items.optJSONObject(idx)
-            it?.optDouble("heightDp", Double.NaN)?.takeIf { !it.isNaN() }?.toFloat() ?: 0f // 0 = auto
-        }.toMutableStateList()
-    }
-    val unlocked = remember(path, count) { MutableList(count) { false }.toMutableStateList() }
+    // Colori e conversioni presi in fase di composizione (OK) e riusati in drawBehind/pointerInput
+    val guidesColor = cs.outlineVariant.copy(alpha = 0.45f)
+    val handleTextColor = cs.onSurfaceVariant.copy(alpha = 0.75f)
 
-    // Disegno “righelli” mentre si trascina: indice bordo attivo (-1 = none)
-    var activeEdge by remember(path) { mutableStateOf(-1) }
+    // Pre‑calcolo in px delle larghezze fisse, legato a widthsDp e density
+    val widthsPx by remember(widthsDp, density) {
+        mutableStateOf(widthsDp.map { with(density) { it.dp.toPx() } })
+    }
+
+    // Helper locale non composable che usa la density catturata
+    fun pxToDpLocal(px: Float): Float = with(density) { px.toDp().value }
 
     Row(
-        Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .let { if (sizing == "scroll") it.horizontalScroll(rememberScrollState()) else it }
-            .onGloballyPositioned { coords ->
-                rowWidthPx = coords.size.width.toFloat()
-                rowHeightPx = coords.size.height.toFloat()
-            }
+            .onGloballyPositioned { rowWidthPx = it.size.width.toFloat() }
             .drawBehind {
-                if (activeEdge >= 0 && rowWidthPx > 0f) {
-                    // righe verticali ai confini tra celle (colore tenue)
-                    val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-                    var acc = 0f
-                    for (i in 0 until count) {
-                        val wPx = when (sizing) {
+                if (showGuides && blocks.size > 1) {
+                    val topY = 0f
+                    val bottomY = size.height
+                    var accX = 0f
+                    for (i in 0 until blocks.lastIndex) {
+                        val w = when (sizing) {
                             "flex" -> rowWidthPx * weights[i].coerceAtLeast(0f)
-                            "fixed" -> with(LocalDensity.current) { widthsDp[i].dp.toPx() }
-                            else -> with(LocalDensity.current) { widthsDp[i].dp.toPx() } // scroll
+                            else   -> widthsPx[i] // "fixed" o fallback
                         }
-                        acc += wPx
-                        // bordo tra i e i+1
-                        if (i < count - 1) {
-                            val thick = if (i == activeEdge) 3f else 1.5f
-                            drawLine(
-                                color = lineColor,
-                                start = Offset(acc, 0f),
-                                end = Offset(acc, size.height),
-                                strokeWidth = thick
-                            )
-                        }
+                        accX += w
+                        drawLine(
+                            color = guidesColor,
+                            start = Offset(accX, topY),
+                            end = Offset(accX, bottomY),
+                            strokeWidth = 1.dp.toPx()
+                        )
                     }
                 }
             },
-        horizontalArrangement = Arrangement.spacedBy(gap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         for (i in 0 until count) {
@@ -297,8 +270,16 @@ private fun BoxScope.ResizeHandleX(
                 )
             }
             .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-    )
-}
+    ) {
+        // <<< aggiunta: glifo sull’orecchia orizzontale
+        Text(
+            "↔",
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.align(Alignment.Center)
+        )
+    }
+
 
 /* ---- Handle verticale (alto/basso) ---- */
 @Composable
@@ -308,20 +289,30 @@ private fun BoxScope.ResizeHandleY(
 ) {
     val handleH = 10.dp
     Box(
-        Modifier
-            .align(align)
-            .fillMaxWidth()
-            .height(handleH)
-            .cursorForResizeVert()
-            .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    onDrag(dragAmount.y)
+            Modifier
+                .align(align)
+                .fillMaxWidth()
+                .height(handleH)
+                .cursorForResizeVert()
+                .pointerInput(Unit) {
+                    androidx.compose.foundation.gestures.detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount.y)
+                    }
                 }
-            }
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-    )
-}
+                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+        ) {
+            // <<< aggiunta: glifo sull’orecchia verticale
+            Text(
+                "↕",
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    // spostalo di qualche dp se vuoi sollevarlo/abbassarlo leggermente
+                    // .offset(y = (-18).dp)
+            )
+        }
 
 /* ---- Helpers snapping & proporzioni (5%) ---- */
 private fun snapPercent5(v: Float): Float {
@@ -332,8 +323,8 @@ private fun snapPercent5(v: Float): Float {
 private fun snapDp(v: Float, step: Float = 8f): Float =
     ((v / step).roundToInt() * step).coerceAtLeast(step)
 
-@Composable private fun pxToDp(px: Float): Float =
-    with(LocalDensity.current) { px.toDp().value }
+private fun pxToDp(px: Float, density: Density): Float = with(density) { px.toDp().value }
+
 
 /* Distribuisce il delta di weight sull'elemento i
  * e lo sottrae in parti uguali agli altri (non negativi, min 5%)
@@ -1433,7 +1424,7 @@ onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
 )
 }
 
-// ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
+// ====== LEVETTA LATERALE: DESIGNER  ANTEPRIMA ======
 DesignSwitchKnob(
 isDesigner = designMode,
 onToggle = { designMode = !designMode }
