@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -24,6 +25,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.draw.*
 import android.content.Intent
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.input.pointer.pointerInput // used with detectVerticalDragGestures
 import androidx.compose.ui.unit.IntOffset
@@ -54,6 +57,8 @@ import androidx.compose.material3.*
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import android.graphics.BitmapFactory
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import org.json.JSONArray
@@ -75,324 +80,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
-// --- IMPORT da aggiungere in testa al file (se non già presenti) ---
-import android.graphics.BitmapFactory
-import android.net.Uri
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
 
-// --- UTIL da incollare in un punto top-level di UiRenderer.kt ---
-@Composable
-private fun rememberImageBitmapFromUri(source: String): ImageBitmap? {
-    val context = LocalContext.current
-    return remember(source) {
-        try {
-            if (source.isBlank()) return@remember null
-            val uri = Uri.parse(source)
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                BitmapFactory.decodeStream(stream)?.asImageBitmap()
-            }
-        } catch (_: Throwable) {
-            null
-        }
-    }
-}
-
-
-@Composable
-private fun ResizableRow(
-    rowBlock: JSONObject,
-    path: String,
-    uiState: MutableMap<String, Any>,
-    menus: Map<String, JSONArray>,
-    dispatch: (String) -> Unit,
-    designerMode: Boolean,
-    onSelect: (String) -> Unit,
-    onOpenInspector: (String) -> Unit
-) {
-    val items = rowBlock.optJSONArray("items") ?: JSONArray()
-    val gap = rowBlock.optDouble("gapDp", 8.0).toFloat().dp
-    val sizing = rowBlock.optString("sizing", "flex")  // "flex" | "fixed" | "scroll"
-    val resizable = rowBlock.optBoolean("resizable", true)
-
-    // Misura larghezza/altezza della row per conversioni px<->percentuali
-    var rowWidthPx by remember(path) { mutableStateOf(0f) }
-    var rowHeightPx by remember(path) { mutableStateOf(0f) }
-
-    // Stato interno: pesi/width/height + sblocco per cella
-    val count = items.length()
-    val weights = remember(path, count) {
-        MutableList(count) { idx ->
-            val it = items.optJSONObject(idx)
-            when {
-                it == null -> 0.0f
-                it.optString("type") == "SpacerH" && it.optString("mode","fixed") == "fixed" -> 0.0f
-                else -> {
-                    val w = it.optDouble("weight", Double.NaN)
-                    if (!w.isNaN()) w.toFloat().coerceIn(0.05f, 0.95f) else 1f / count
-                }
-            }
-        }.toMutableStateList()
-    }
-    val widthsDp = remember(path, count) {
-        MutableList(count) { idx ->
-            val it = items.optJSONObject(idx)
-            it?.optDouble("widthDp", Double.NaN)?.takeIf { !it.isNaN() }?.toFloat() ?: 120f
-        }.toMutableStateList()
-    }
-    val heightsDp = remember(path, count) {
-        MutableList(count) { idx ->
-            val it = items.optJSONObject(idx)
-            it?.optDouble("heightDp", Double.NaN)?.takeIf { !it.isNaN() }?.toFloat() ?: 0f // 0 = auto
-        }.toMutableStateList()
-    }
-    val unlocked = remember(path, count) { MutableList(count) { false }.toMutableStateList() }
-
-    // Disegno “righelli” mentre si trascina: indice bordo attivo (-1 = none)
-    var activeEdge by remember(path) { mutableStateOf(-1) }
-
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .let { if (sizing == "scroll") it.horizontalScroll(rememberScrollState()) else it }
-            .onGloballyPositioned { coords ->
-                rowWidthPx = coords.size.width.toFloat()
-                rowHeightPx = coords.size.height.toFloat()
-            }
-            .drawBehind {
-                if (activeEdge >= 0 && rowWidthPx > 0f) {
-                    // righe verticali ai confini tra celle (colore tenue)
-                    val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-                    var acc = 0f
-                    for (i in 0 until count) {
-                        val wPx = when (sizing) {
-                            "flex" -> rowWidthPx * weights[i].coerceAtLeast(0f)
-                            "fixed" -> with(LocalDensity.current) { widthsDp[i].dp.toPx() }
-                            else -> with(LocalDensity.current) { widthsDp[i].dp.toPx() } // scroll
-                        }
-                        acc += wPx
-                        // bordo tra i e i+1
-                        if (i < count - 1) {
-                            val thick = if (i == activeEdge) 3f else 1.5f
-                            drawLine(
-                                color = lineColor,
-                                start = Offset(acc, 0f),
-                                end = Offset(acc, size.height),
-                                strokeWidth = thick
-                            )
-                        }
-                    }
-                }
-            },
-        horizontalArrangement = Arrangement.spacedBy(gap),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        for (i in 0 until count) {
-            val child = items.optJSONObject(i) ?: continue
-
-            // Se SpacerH fixed lo tratto separato (non ridimensionabile)
-            val isFixedSpacer = child.optString("type") == "SpacerH" && child.optString("mode","fixed") == "fixed"
-            if (isFixedSpacer) {
-                Spacer(Modifier.width(child.optDouble("widthDp", 16.0).toFloat().dp))
-                continue
-            }
-
-            // Modificatore base della cella in base al sizing
-            val cellBase = when (sizing) {
-                "flex" -> {
-                    val w = weights[i].coerceAtLeast(0.0001f) // RowScope.weight richiede > 0
-                    Modifier.weight(w, fill = true)
-                }
-                "fixed", "scroll" -> Modifier.width(widthsDp[i].dp)
-                else -> Modifier.weight(1f, fill = true)
-            }.then(
-                if (heightsDp[i] > 0f) Modifier.height(heightsDp[i].dp) else Modifier
-            )
-
-            Box(
-                cellBase
-                    // doppio tap: sblocca/lock la cella (solo se resizable == true e non in designer)
-                    .pointerInput(resizable, designerMode, unlocked[i]) {
-                        if (resizable && !designerMode) {
-                            androidx.compose.foundation.gestures.detectTapGestures(
-                                onDoubleTap = { unlocked[i] = !unlocked[i] }
-                            )
-                        }
-                    }
-            ) {
-                // Contenuto reale del blocco
-                val p2 = "$path/items/$i"
-                RenderBlock(child, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
-
-                // Maniglie: visibili solo se sbloccato e resizable
-                if (resizable && !designerMode && unlocked[i]) {
-                    // Orizzontale (lato destro): non l’ultima cella
-                    if (i < count - 1) {
-                        ResizeHandleX(
-                            align = Alignment.CenterEnd,
-                            onDragStart = { activeEdge = i },
-                            onDrag = { deltaPx ->
-                                when (sizing) {
-                                    "flex" -> {
-                                        val deltaW = (deltaPx / (rowWidthPx.takeIf { it > 0f } ?: 1f))
-                                        applyProportionalDelta(weights, i, deltaW, items)
-                                    }
-                                    "fixed" -> {
-                                        val step = 8f
-                                        widthsDp[i] = snapDp(widthsDp[i] + pxToDp(deltaPx), step)
-                                        // ridistribuisci il delta in parti uguali sugli altri (se non scroll)
-                                        val others = (0 until count).filter { it != i }
-                                        if (others.isNotEmpty()) {
-                                            val share = -pxToDp(deltaPx) / others.size
-                                            others.forEach { j ->
-                                                widthsDp[j] = snapDp((widthsDp[j] + share).coerceAtLeast(48f), step)
-                                            }
-                                        }
-                                        // salva nelle JSON (opzionale, non persistente su disco)
-                                        child.put("widthDp", widthsDp[i].toDouble())
-                                        others.forEach { j -> items.optJSONObject(j)?.put("widthDp", widthsDp[j].toDouble()) }
-                                    }
-                                    "scroll" -> {
-                                        val step = 8f
-                                        widthsDp[i] = snapDp(widthsDp[i] + pxToDp(deltaPx), step)
-                                        child.put("widthDp", widthsDp[i].toDouble())
-                                    }
-                                }
-                            },
-                            onDragEnd = { activeEdge = -1 }
-                        )
-                    }
-                    // Verticale (basso)
-                    ResizeHandleY(
-                        align = Alignment.BottomCenter,
-                        onDrag = { dyPx ->
-                            val step = 8f
-                            val newH = snapDp((heightsDp[i].takeIf { it > 0f } ?: pxToDp(rowHeightPx)) + pxToDp(dyPx), step)
-                            heightsDp[i] = newH.coerceAtLeast(32f)
-                            child.put("heightDp", heightsDp[i].toDouble())
-                        }
-                    )
-                    // Verticale (alto): ancora il bordo superiore
-                    ResizeHandleY(
-                        align = Alignment.TopCenter,
-                        onDrag = { dyPx ->
-                            val step = 8f
-                            val newH = snapDp((heightsDp[i].takeIf { it > 0f } ?: pxToDp(rowHeightPx)) - pxToDp(dyPx), step)
-                            heightsDp[i] = newH.coerceAtLeast(32f)
-                            child.put("heightDp", heightsDp[i].toDouble())
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-/* ---- Handle orizzontale (dx/sx) ---- */
-@Composable
-private fun BoxScope.ResizeHandleX(
-    align: Alignment,
-    onDragStart: () -> Unit = {},
-    onDrag: (Float) -> Unit,
-    onDragEnd: () -> Unit = {}
-) {
-    val handleW = 12.dp
-    Box(
-        Modifier
-            .align(align)
-            .fillMaxHeight()
-            .width(handleW)
-            .cursorForResizeHoriz()
-            .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectDragGestures(
-                    onDragStart = { onDragStart() },
-                    onDragEnd = { onDragEnd() },
-                    onDragCancel = { onDragEnd() },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        onDrag(dragAmount.x)
-                    }
-                )
-            }
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-    )
-}
-
-/* ---- Handle verticale (alto/basso) ---- */
-@Composable
-private fun BoxScope.ResizeHandleY(
-    align: Alignment,
-    onDrag: (Float) -> Unit
-) {
-    val handleH = 10.dp
-    Box(
-        Modifier
-            .align(align)
-            .fillMaxWidth()
-            .height(handleH)
-            .cursorForResizeVert()
-            .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    onDrag(dragAmount.y)
-                }
-            }
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-    )
-}
-
-/* ---- Helpers snapping & proporzioni (5%) ---- */
-private fun snapPercent5(v: Float): Float {
-    // scatti a 5%
-    val snaps = (v * 20f).roundToInt().coerceIn(1, 19) // 0.05 .. 0.95
-    return snaps / 20f
-}
-private fun snapDp(v: Float, step: Float = 8f): Float =
-    ((v / step).roundToInt() * step).coerceAtLeast(step)
-
-@Composable private fun pxToDp(px: Float): Float =
-    with(LocalDensity.current) { px.toDp().value }
-
-/* Distribuisce il delta di weight sull'elemento i
- * e lo sottrae in parti uguali agli altri (non negativi, min 5%)
- * Scrive anche nel JSON la nuova weight.
- */
-private fun applyProportionalDelta(
-    weights: MutableList<Float>,
-    i: Int,
-    delta: Float,
-    items: JSONArray
-) {
-    if (weights.isEmpty()) return
-    val oldWi = weights[i]
-    val newWi = (oldWi + delta).coerceIn(0.05f, 0.95f)
-    val applied = newWi - oldWi
-    if (applied == 0f) return
-
-    val othersIdx = (0 until weights.size).filter { it != i }
-    if (othersIdx.isEmpty()) return
-
-    val share = -applied / othersIdx.size
-    othersIdx.forEach { j ->
-        weights[j] = (weights[j] + share).coerceIn(0.05f, 0.95f)
-    }
-    weights[i] = newWi
-
-    // snap 5% e normalizza lieve per tenere somma ≈ 1
-    for (k in 0 until weights.size) {
-        weights[k] = snapPercent5(weights[k])
-    }
-    val sum = weights.sum().takeIf { it > 0f } ?: 1f
-    for (k in 0 until weights.size) {
-        weights[k] = (weights[k] / sum).coerceIn(0.05f, 0.95f)
-        items.optJSONObject(k)?.put("weight", weights[k].toDouble())
-    }
-}
-
-/* ---- “Cursori” fittizi per dare feedback (opzionale) ---- */
-private fun Modifier.cursorForResizeHoriz(): Modifier = this // placeholder per eventuale pointerIcon su Desktop
-private fun Modifier.cursorForResizeVert(): Modifier = this   // idem
 
 
 @Composable
@@ -743,9 +431,9 @@ else            String.format("#%02X%02X%02X", r, g, b)
 }
 
 
-private fun colorFromHex(hex: String): Color {
-    // accetta #RRGGBB o #AARRGGBB
-    return Color(android.graphics.Color.parseColor(hex))
+private fun colorFromHex(hex: String?): Color? {
+if (hex.isNullOrBlank()) return null
+return try { Color(android.graphics.Color.parseColor(hex)) } catch (_: Exception) { null }
 }
 
 
@@ -867,6 +555,7 @@ Font(R.font.inknut_antiqua_medium,  FontWeight.Medium),
 Font(R.font.inknut_antiqua_semibold,FontWeight.SemiBold),
 Font(R.font.inknut_antiqua_bold,    FontWeight.Bold)
 )
+
 "playfair" -> FontFamily(
 Font(R.font.playfair_regular,        FontWeight.Normal),
 // se presenti:
@@ -876,20 +565,22 @@ Font(R.font.playfair_semibold_italic,FontWeight.SemiBold, FontStyle.Italic),
 Font(R.font.playfair_bold,           FontWeight.Bold),
 Font(R.font.playfair_bold_italic,    FontWeight.Bold, FontStyle.Italic)
 )
+
 "sacramento" -> FontFamily(
 // normalmente ha solo Regular
 Font(R.font.sacramento_regular, FontWeight.Normal)
 )
+
 "space_mono" -> FontFamily(
 Font(R.font.space_mono_regular,     FontWeight.Normal),
 Font(R.font.space_mono_italic,      FontWeight.Normal, FontStyle.Italic),
 Font(R.font.space_mono_bold,        FontWeight.Bold),
 Font(R.font.space_mono_bold_italic, FontWeight.Bold,   FontStyle.Italic)
 )
+
 else -> null
 }
 }
-
 
 private val FONT_WEIGHT_OPTIONS: List<Pair<String, FontWeight>> = listOf(
 "Thin" to FontWeight.Thin,
@@ -1252,7 +943,26 @@ Text(title, style = MaterialTheme.typography.titleMedium)
 IconButton(onClick = onClose) { NamedIconEx("close", "Close") }
 }
 }
-
+for (i in 0 until items.length()) {
+val block = items.optJSONObject(i) ?: continue
+val path = "/sidePanels/${panel.optString("id")}/items/$i"
+RenderBlock(
+block = block,
+dispatch = dispatch,
+uiState = mutableMapOf(),
+designerMode = false,
+path = path,
+menus = menus,
+onSelect = {},
+onOpenInspector = {}
+)
+}
+}
+}
+}
+}
+}
+}
 
 
 @Composable
@@ -1356,18 +1066,17 @@ Spacer(Modifier.height(4.dp))
 
 @Composable
 fun DesignerRoot() {
-    val uiState = remember { mutableMapOf<String, Any>() }
-    val dispatch: (String) -> Unit = { /* instrada le azioni della tua app qui */ }
+val uiState = remember { mutableMapOf<String, Any>() }
+val dispatch: (String) -> Unit = { /* TODO: instrada azioni app */ }
 
-    UiScreen(
-        screenName = "home",
-        dispatch = dispatch,
-        uiState = uiState,
-        designerMode = true,
-        scaffoldPadding = PaddingValues(0.dp)
-    )
+UiScreen(
+screenName = "home",
+dispatch = dispatch,
+uiState = uiState,
+designerMode = true,
+scaffoldPadding = PaddingValues(0.dp)
+)
 }
-
 
 
 /* =========================================================
@@ -1436,41 +1145,39 @@ scaffoldPadding = scaffoldPadding
 
 
 if (designMode) {
-    DesignerOverlay(
-        screenName = screenName,
-        layout = layout!!,
-        selectedPath = selectedPath,
-        setSelectedPath = { selectedPath = it },
-        onLiveChange = { tick++ },
-        onLayoutChange = {
-            UiLoader.saveDraft(ctx, screenName, layout!!)
-            // forza recomposition senza perdere i riferimenti
-            layout = JSONObject(layout.toString())
-            tick++
-        },
-        onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-        onPublish = {
-            UiLoader.saveDraft(ctx, screenName, layout!!)
-            UiLoader.publish(ctx, screenName)
-        },
-        onReset = {
-            UiLoader.resetPublished(ctx, screenName)
-            layout = UiLoader.loadLayout(ctx, screenName)
-            selectedPath = null
-            tick++
-        },
-        topPadding = scaffoldPadding.calculateTopPadding(),
-        onOverlayHeight = { overlayHeightPx = it },
-        onOpenRootInspector = { /* gestito nel pannello root inspector */ },
-        onRootLivePreview = { previewRoot = it }   // live preview page/topBar mentre editi
-    )
+DesignerOverlay(
+screenName = screenName,
+layout = layout!!,
+selectedPath = selectedPath,
+setSelectedPath = { selectedPath = it },
+onLiveChange = { tick++ },
+onLayoutChange = {
+UiLoader.saveDraft(ctx, screenName, layout!!)
+layout = JSONObject(layout.toString())
+tick++
+},
+onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
+onReset = {
+UiLoader.resetPublished(ctx, screenName)
+layout = UiLoader.loadLayout(ctx, screenName)
+selectedPath = null
+tick++
+},
+topPadding = scaffoldPadding.calculateTopPadding(),
+onOverlayHeight = { overlayHeightPx = it },
+onOpenRootInspector = { /* gestito sotto */ },
+onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
+)
 }
 
 // ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
 DesignSwitchKnob(
-    isDesigner = designMode,
-    onToggle   = { designMode = !designMode }
+isDesigner = designMode,
+onToggle = { designMode = !designMode }
 )
+}
+}
 
 /* =========================================================
 * KNOB laterale (trascinabile) per commutare Designer/Anteprima
@@ -2830,17 +2537,13 @@ if (ic.isNotBlank()) NamedIconEx(ic, null)
 }
 
 "Row" -> Wrapper {
-    ResizableRow(
-        rowBlock = block,
-        path = path,
-        uiState = uiState,
-        menus = menus,
-        dispatch = dispatch,
-        designerMode = designerMode,
-        onSelect = onSelect,
-        onOpenInspector = onOpenInspector
-    )
-}
+val items = block.optJSONArray("items") ?: JSONArray()
+val gap = block.optDouble("gapDp", 8.0).toFloat().dp
+Row(
+Modifier.fillMaxWidth(),
+horizontalArrangement = Arrangement.spacedBy(gap),
+verticalAlignment = Alignment.CenterVertically
+) {
 for (i in 0 until items.length()) {
 val child = items.optJSONObject(i) ?: continue
 when (child.optString("type")) {
@@ -3261,19 +2964,15 @@ Modifier.padding(8.dp)
 }
 }
 
-        else -> {
-            if (designerMode) {
-                Surface(tonalElevation = 1.dp) {
-                    Text(
-                        "Blocco non supportato: ${block.optString("type")}",
-                        color = Color.Red
-                    )
-                }
-            }
-        }
-    } // <- chiude la when
-}   // <- chiude la Wrapper(cfg) { ... } o il contenitore immediato, se presente
-}   
+else -> {
+if (designerMode) {
+Surface(tonalElevation = 1.dp) {
+Text("Blocco non supportato: ${block.optString("type")}", color = Color.Red)
+}
+}
+}
+}
+}
 
 /* =========================================================
 * GRID
@@ -3528,48 +3227,37 @@ onChange()
 }
 }
 
-// --- dentro when(type) { "spacer" -> { ... } } di BarItemsEditor ---
-"spacer" -> {
-    val modes = listOf("expand", "fixed")
-    var mode by remember { mutableStateOf(item.optString("mode", "expand")) }
-
-    LabeledField("Spazio") {
-        ExposedDropdown(
-            items = modes,
-            selected = mode,
-            label = "Comportamento",
-            onSelect = { sel ->
-                mode = sel
-                item.put("mode", sel)
-                if (sel == "expand") {
-                    // lo spazio prende tutto il residuo, nessuna width fissa
-                    if (item.has("widthDp")) item.remove("widthDp")
-                } else {
-                    // default sensato se vado su "fixed"
-                    item.put("widthDp", item.optDouble("widthDp", 24.0))
-                }
-            }
-        )
-
-        if (mode == "fixed") {
-            Spacer(Modifier.height(8.dp))
-            var w by remember { mutableStateOf(item.optDouble("widthDp", 24.0).toFloat()) }
-
-            Text("Larghezza (dp): ${w.toInt()}", style = MaterialTheme.typography.labelMedium)
-            Slider(
-                value = w,
-                onValueChange = { nv ->
-                    w = nv
-                    item.put("widthDp", nv.toDouble())
-                },
-                // 8..160 dp (step 8dp)
-                valueRange = 8f..160f,
-                steps = 19 // ((160f - 8f) / 8f).toInt() - 1 = 19
-            )
-        }
-    }
+else -> { // "spacer"
+var mode by remember { mutableStateOf(item.optString("mode", "fixed")) }
+ExposedDropdown(
+value = mode, label = "mode",
+options = listOf("fixed", "expand")
+) { sel ->
+mode = sel
+item.put("mode", sel)
+onChange()
+}
+if (mode == "fixed") {
+var width by remember { mutableStateOf(item.optDouble("widthDp", 16.0).toInt().toString()) }
+ExposedDropdown(
+value = width, label = "width (dp)",
+options = listOf("8", "12", "16", "20", "24", "32", "40", "48", "64")
+) { sel ->
+width = sel
+item.put("widthDp", sel.toDouble())
+onChange()
+}
+}
+}
+}
+}
 }
 
+Spacer(Modifier.height(8.dp))
+}
+
+AddBarItemButtons(arr = arr, onChange = onChange)
+}
 
 
 /* =========================================================
@@ -4756,50 +4444,26 @@ if (image != null) Icon(image, contentDescription) else Text(".")
 
 @Composable
 private fun parseColorOrRole(source: String?): Color? {
-    val raw = source?.trim().orEmpty()
-    if (raw.isBlank()) return null
-
-    // HEX (#RRGGBB/#AARRGGBB)
-    if (raw.startsWith("#")) return colorFromHex(raw)
-
-    val cs = MaterialTheme.colorScheme
-    return when (raw.lowercase()) {
-        // ruoli principali
-        "primary" -> cs.primary
-        "onprimary","on_primary" -> cs.onPrimary
-        "primarycontainer","primary_container" -> cs.primaryContainer
-        "onprimarycontainer","on_primary_container" -> cs.onPrimaryContainer
-
-        "secondary" -> cs.secondary
-        "onsecondary","on_secondary" -> cs.onSecondary
-        "secondarycontainer","secondary_container" -> cs.secondaryContainer
-        "onsecondarycontainer","on_secondary_container" -> cs.onSecondaryContainer
-
-        "tertiary" -> cs.tertiary
-        "ontertiary","on_tertiary" -> cs.onTertiary
-        "tertiarycontainer","tertiary_container" -> cs.tertiaryContainer
-        "ontertiarycontainer","on_tertiary_container" -> cs.onTertiaryContainer
-
-        "surface" -> cs.surface
-        "onsurface","on_surface" -> cs.onSurface
-        "surfacevariant","surface_variant" -> cs.surfaceVariant
-        "onsurfacevariant","on_surface_variant" -> cs.onSurfaceVariant
-
-        "background" -> cs.background
-        "onbackground","on_background" -> cs.onBackground
-
-        "error" -> cs.error
-        "onerror","on_error" -> cs.onError
-        "errorcontainer","error_container" -> cs.errorContainer
-        "onerrorcontainer","on_error_container" -> cs.onErrorContainer
-
-        "outline" -> cs.outline
-        "inverseprimary","inverse_primary" -> cs.inversePrimary
-        "inverseonsurface","inverse_on_surface" -> cs.inverseOnSurface
-        "scrim" -> cs.scrim
-
-        else -> null
-    }
+if (source == null || source.isBlank()) return null
+val cs = MaterialTheme.colorScheme
+return when (source.lowercase()) {
+"primary"      -> cs.primary
+"onprimary"    -> cs.onPrimary
+"secondary"    -> cs.secondary
+"onsecondary"  -> cs.onSecondary
+"tertiary"     -> cs.tertiary
+"ontertiary"   -> cs.onTertiary
+"surface"      -> cs.surface
+"onsurface"    -> cs.onSurface
+"background"   -> cs.background
+"onbackground" -> cs.onBackground
+"error"        -> cs.error
+"onerror"      -> cs.onError
+"success"      -> cs.tertiary       // mappatura “di comodo” per ruoli custom
+"warning"      -> cs.secondary
+"info"         -> cs.primary
+else -> runCatching { Color(android.graphics.Color.parseColor(source)) }.getOrNull()
+}
 }
 
 private fun bestOnColor(bg: Color): Color =
@@ -5147,41 +4811,23 @@ private fun newList() = JSONObject(
 * TEXT STYLE OVERRIDES
 * ========================================================= */
 @Composable
-private fun applyTextStyleOverrides(base: TextStyle, working: JSONObject): TextStyle {
-    var s = base
-
-    // dimensioni
-    val sizeSp = working.optDouble("sizeSp", Double.NaN)
-    if (!sizeSp.isNaN()) s = s.copy(fontSize = sizeSp.sp)
-
-    val lineHeightSp = working.optDouble("lineHeightSp", Double.NaN)
-    if (!lineHeightSp.isNaN()) s = s.copy(lineHeight = lineHeightSp.sp)
-
-    val letterEm = working.optDouble("letterSpacingEm", Double.NaN)
-    if (!letterEm.isNaN()) s = s.copy(letterSpacing = letterEm.em)
-
-    // peso
-    when (working.optString("weight", "").lowercase()) {
-        "w100","thin" -> s = s.copy(fontWeight = FontWeight.W100)
-        "w200","extra_light","extralight" -> s = s.copy(fontWeight = FontWeight.W200)
-        "w300","light" -> s = s.copy(fontWeight = FontWeight.W300)
-        "w400","normal","regular","" -> s = s.copy(fontWeight = FontWeight.W400)
-        "w500","medium" -> s = s.copy(fontWeight = FontWeight.W500)
-        "w600","semibold","semi_bold" -> s = s.copy(fontWeight = FontWeight.W600)
-        "w700","bold" -> s = s.copy(fontWeight = FontWeight.W700)
-        "w800","extrabold","extra_bold" -> s = s.copy(fontWeight = FontWeight.W800)
-        "w900","black" -> s = s.copy(fontWeight = FontWeight.W900)
-    }
-
-    // corsivo
-    if (working.optBoolean("italic", false)) {
-        s = s.copy(fontStyle = FontStyle.Italic)
-    }
-
-    // colore
-    parseColorOrRole(working.optString("color", ""))?.let { s = s.copy(color = it) }
-
-    return s
+private fun applyTextStyleOverrides(owner: JSONObject, base: TextStyle): TextStyle {
+var st = base
+val sizeSp = owner.optDouble("textSizeSp", Double.NaN)
+if (!sizeSp.isNaN()) st = st.copy(fontSize = sizeSp.sp)
+parseFontWeight(owner.optString("fontWeight","").takeIf { it.isNotBlank() })?.let {
+st = st.copy(fontWeight = it)
+}
+fontFamilyFromName(owner.optString("fontFamily","").takeIf { it.isNotBlank() })?.let {
+st = st.copy(fontFamily = it)
+}
+parseColorOrRole(owner.optString("textColor","").takeIf { it.isNotBlank() })?.let {
+st = st.copy(color = it)
+}
+if (owner.optBoolean("italic", false)) {
+st = st.copy(fontStyle = FontStyle.Italic)
+}
+return st
 }
 
 private fun newRow() = JSONObject(
