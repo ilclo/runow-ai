@@ -550,9 +550,8 @@ Font(R.font.jetbrains_mono_italic,  FontWeight.Normal, FontStyle.Italic)
 )
 "inknut_antiqua" -> FontFamily(
 Font(R.font.inknut_antiqua_regular, FontWeight.Normal),
-// commenta o rimuovi quelli che non hai nel pacchetto:
 Font(R.font.inknut_antiqua_medium,  FontWeight.Medium),
-Font(R.font.inknut_antiqua_semibold,FontWeight.SemiBold),
+Font(R.font.inknut_antiqua_semibold, FontWeight.SemiBold),
 Font(R.font.inknut_antiqua_bold,    FontWeight.Bold)
 )
 
