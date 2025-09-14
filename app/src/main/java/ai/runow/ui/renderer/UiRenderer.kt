@@ -2,6 +2,13 @@
 
 package ai.runow.ui.renderer
 
+
+import androidx.compose.foundation.layout.WindowInsets as FWindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides as FSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.imePadding
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -75,22 +82,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.WindowInsets
 // Gesti
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 // Layout/insets utili
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.imePadding
 // Density e math
 import androidx.compose.ui.platform.LocalDensity
@@ -105,15 +106,16 @@ private fun <T> MutableList<T>.swap(a: Int, b: Int) {
 }
 
 @Composable
+@Composable
 private fun ResizableRow(
     rowBlock: JSONObject,
-    path: String,
-    uiState: MutableMap<String, Any>,
-    menus: Map<String, JSONArray>,
-    dispatch: (String) -> Unit,
-    designerMode: Boolean,
-    onSelect: (String) -> Unit,
-    onOpenInspector: (String) -> Unit
+    path: List<Int>,
+    uiState: UiState,
+    menus: Menus,
+    dispatch: (Action) -> Unit,
+    designerMode: Boolean = false,   // <-- default per chiudere l'errore
+    onSelect: (List<Int>) -> Unit,
+    onOpenInspector: (List<Int>) -> Unit
 ) {
     val items = rowBlock.optJSONArray("items") ?: JSONArray()
     val count = items.length()
@@ -325,13 +327,14 @@ private fun BoxScope.ResizeHandleY(
             .fillMaxWidth()
             .height(handleH)
             .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectDragGestures { _, dragAmount ->
-                    onDrag(dragAmount.y)
-                }
+                androidx.compose.foundation.gestures.detectDragGestures(
+                    onDrag = { _, dragAmount -> onDrag(dragAmount.y) }
+                )
             }
             .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
     )
 }
+
 
 private fun snapPercent5(v: Float): Float {
     val snaps = (v * 20f).roundToInt().coerceIn(1, 19)
@@ -340,8 +343,8 @@ private fun snapPercent5(v: Float): Float {
 private fun snapDp(v: Float, step: Float = 8f): Float =
     ((v / step).roundToInt() * step).coerceAtLeast(step)
 
-private fun pxToDp(px: Float, density: Density): Float =
-    with(density) { px.toDp().value }
+private fun pxToDp(px: Float, density: Density): Dp = with(density) { px.toDp() }
+
 
 private fun applyProportionalDelta(
     weights: MutableList<Float>,
@@ -412,7 +415,7 @@ private fun ScreenScaffoldWithPinnedTopBar(
         else Modifier,
 
         // niente riduzione del contenuto: gestiamo noi gli insets
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        contentWindowInsets = FWindowInsets(0, 0, 0, 0),
 
         topBar = {
             if (topBarConf != null) {
@@ -467,7 +470,7 @@ private fun ScreenScaffoldWithPinnedTopBar(
                 .padding(innerPadding)
                 .padding(scaffoldPadding)
                 .padding(bottom = extraPaddingBottom)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                .windowInsetsPadding(FWindowInsets.safeDrawing.only(FSides.Horizontal))
         ) {
             for (i in 0 until blocks.length()) {
                 val b = blocks.optJSONObject(i) ?: continue
