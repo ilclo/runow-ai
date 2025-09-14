@@ -1462,38 +1462,26 @@ scaffoldPadding = scaffoldPadding
 
 if (designMode) {
 DesignerOverlay(
-screenName = screenName,
-layout = layout!!,
-selectedPath = selectedPath,
-setSelectedPath = { selectedPath = it },
-onLiveChange = { tick++ },
-onLayoutChange = {
-UiLoader.saveDraft(ctx, screenName, layout!!)
-layout = JSONObject(layout.toString())
-tick++
-},
-onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
-onReset = {
-UiLoader.resetPublished(ctx, screenName)
-layout = UiLoader.loadLayout(ctx, screenName)
-selectedPath = null
-tick++
-},
-topPadding = scaffoldPadding.calculateTopPadding(),
-onOverlayHeight = { overlayHeightPx = it },
-onOpenRootInspector = { /* gestito sotto */ },
-onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
-)
+    screenName = screenName,
+    layout = layout!!,
+    selectedPath = selectedPath,
+    setSelectedPath = { selectedPath = it },
+    onLiveChange = { tick++ },
+    onLayoutChange = {
+        UiLoader.saveDraft(ctx, screenName, layout!!)
+        // forzo un nuovo oggetto per triggerare recomposition
+        layout = JSONObject(layout.toString())
+        tick++
+    },
+    onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+    onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!) }
+) { measuredHeightPx ->
+    // aggiorna l’altezza dell’overlay (se il tuo DesignerOverlay espone questa callback)
+    overlayHeightPx = measuredHeightPx
 }
-
-// ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
-DesignSwitchKnob(
-isDesigner = designMode,
-onToggle = { designMode = !designMode }
-)
-}
-}
+} // end if (designMode)
+} // end Box(Modifier.fillMaxSize())
+} // end fun UiScreen(...)
 
 /* =========================================================
 * KNOB laterale (trascinabile) per commutare Designer/Anteprima
