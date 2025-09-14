@@ -87,6 +87,7 @@ private fun <T> MutableList<T>.swap(a: Int, b: Int) {
     }
 }
 
+// ===================== RESIZE: ROW & HANDLES =====================
 
 @Composable
 private fun ResizableRow(
@@ -100,26 +101,26 @@ private fun ResizableRow(
     onOpenInspector: (String) -> Unit
 ) {
     val items = rowBlock.optJSONArray("items") ?: JSONArray()
+    val count = items.length()
+    if (count == 0) return
+
+    val density = LocalDensity.current
+
     val gap = rowBlock.optDouble("gapDp", 8.0).toFloat().dp
-    val sizing = rowBlock.optString("sizing", "flex")  // "flex" | "fixed" | "scroll"
+    val sizing = rowBlock.optString("sizing", "flex") // "flex" | "fixed" | "scroll"
     val resizable = rowBlock.optBoolean("resizable", true)
 
-    // Misura larghezza/altezza della row per conversioni px<->percentuali
+    // Misure della row per conversioni px<->percentuali
     var rowWidthPx by remember(path) { mutableStateOf(0f) }
     var rowHeightPx by remember(path) { mutableStateOf(0f) }
 
-    // Stato interno: pesi/width/height + sblocco per cella
-    val count = items.length()
-       // Ordine visuale dei figli (swap volatile, non tocca il JSON)
-       val order = remember(path, count) {
-           MutableList(count) { it }.toMutableStateList()
-       }
+    // Stato interno: pesi/width/height + "sblocco" per cella
     val weights = remember(path, count) {
         MutableList(count) { idx ->
             val it = items.optJSONObject(idx)
             when {
-                it == null -> 0.0f
-                it.optString("type") == "SpacerH" && it.optString("mode","fixed") == "fixed" -> 0.0f
+                it == null -> 0f
+                it.optString("type") == "SpacerH" && it.optString("mode", "fixed") == "fixed" -> 0f
                 else -> {
                     val w = it.optDouble("weight", Double.NaN)
                     if (!w.isNaN()) w.toFloat().coerceIn(0.05f, 0.95f) else 1f / count
@@ -130,20 +131,19 @@ private fun ResizableRow(
     val widthsDp = remember(path, count) {
         MutableList(count) { idx ->
             val it = items.optJSONObject(idx)
-            it?.optDouble("widthDp", Double.NaN)?.takeIf { !it.isNaN() }?.toFloat() ?: 120f
+            it?.optDouble("widthDp", Double.NaN)?.takeIf { d -> !d.isNaN() }?.toFloat() ?: 120f
         }.toMutableStateList()
     }
     val heightsDp = remember(path, count) {
         MutableList(count) { idx ->
             val it = items.optJSONObject(idx)
-            it?.optDouble("heightDp", Double.NaN)?.takeIf { !it.isNaN() }?.toFloat() ?: 0f // 0 = auto
+            it?.optDouble("heightDp", Double.NaN)?.takeIf { d -> !d.isNaN() }?.toFloat() ?: 0f // 0 = auto
         }.toMutableStateList()
     }
     val unlocked = remember(path, count) { MutableList(count) { false }.toMutableStateList() }
 
-    // Disegno “righelli” mentre si trascina: indice bordo attivo (-1 = none)
+    // Righelli durante il drag: indice bordo attivo (-1 nessuno)
     var activeEdge by remember(path) { mutableStateOf(-1) }
-    var activeHGuide by remember(path) { mutableStateOf(-1) }
 
     Row(
         Modifier
@@ -154,36 +154,25 @@ private fun ResizableRow(
                 rowHeightPx = coords.size.height.toFloat()
             }
             .drawBehind {
-                if (activeEdge >= 0 && rowWidthPx > 0f) {
-                    // righe verticali ai confini tra celle (colore tenue)
+                if (activeEdge >= 0 && count > 1 && rowWidthPx > 0f) {
                     val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
                     var acc = 0f
                     for (i in 0 until count) {
                         val wPx = when (sizing) {
-                            "flex" -> rowWidthPx * weights[i].coerceAtLeast(0f)
-                            "fixed" -> with(LocalDensity.current) { widthsDp[i].dp.toPx() }
-                            else -> with(LocalDensity.current) { widthsDp[i].dp.toPx() } // scroll
+                            "flex"  -> rowWidthPx * weights[i].coerceAtLeast(0f)
+                            "fixed" -> widthsDp[i].dp.toPx()
+                            else    -> widthsDp[i].dp.toPx() // "scroll"
                         }
-                            var acc = 0f
-                            for (slot in 0 until count) {
-                                val idx = order[slot]
-                                val wPx = when (sizing) {
-                                    "flex"  -> rowWidthPx * weights[idx].coerceAtLeast(0f)
-                                    "fixed","scroll" -> with(LocalDensity.current) { widthsDp[idx].dp.toPx() }
-                                    else -> 0f
-                                }
-                                acc += wPx
-                                if (slot < count - 1) {
-                                    val thick = if (slot == activeEdge) 3f else 1.5f
-                                    drawLine(
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
-                                        start = Offset(acc, 0f),
-                                        end   = Offset(acc, size.height),
-                                        strokeWidth = thick
-                                    )
-                                }
-                            }
-
+                        acc += wPx
+                        if (i < count - 1) {
+                            val thick = if (i == activeEdge) 3f else 1.5f
+                            drawLine(
+                                color = lineColor,
+                                start = Offset(acc, 0f),
+                                end = Offset(acc, size.height),
+                                strokeWidth = thick
+                            )
+                        }
                     }
                 }
             },
@@ -193,144 +182,104 @@ private fun ResizableRow(
         for (i in 0 until count) {
             val child = items.optJSONObject(i) ?: continue
 
-            // Se SpacerH fixed lo tratto separato (non ridimensionabile)
-            val isFixedSpacer = child.optString("type") == "SpacerH" && child.optString("mode","fixed") == "fixed"
+            // SpacerH in modalità fixed: non ridimensionabile
+            val isFixedSpacer = child.optString("type") == "SpacerH" &&
+                    child.optString("mode", "fixed") == "fixed"
             if (isFixedSpacer) {
                 Spacer(Modifier.width(child.optDouble("widthDp", 16.0).toFloat().dp))
                 continue
             }
 
-            // Modificatore base della cella in base al sizing
+            // Modificatore base cella in base al sizing
             val cellBase = when (sizing) {
-                "flex" -> {
-                    val w = weights[i].coerceAtLeast(0.0001f) // RowScope.weight richiede > 0
-                    Modifier.weight(w, fill = true)
-                }
-                "fixed", "scroll" -> Modifier.width(widthsDp[i].dp)
-                else -> Modifier.weight(1f, fill = true)
-            }.then(
-                if (heightsDp[i] > 0f) Modifier.height(heightsDp[i].dp) else Modifier
-            )
-              for (slot in 0 until count) {
-                  val i = order[slot]                 // indice reale nel JSONArray
-                  val child = items.optJSONObject(i) ?: continue
-                  val isFixedSpacer = child.optString("type") == "SpacerH" &&
-                                      child.optString("mode","fixed") == "fixed"
-                  val cellBase = when (sizing) {
-                      "flex" -> Modifier.weight(weights[i].coerceAtLeast(0.0001f), fill = true)
-                      "fixed","scroll" -> Modifier.width(widthsDp[i].dp)
-                      else -> Modifier.weight(1f, fill = true)
-                  }.then(if (heightsDp[i] > 0f) Modifier.height(heightsDp[i].dp) else Modifier)
+                "flex"  -> Modifier.weight(weights[i].coerceAtLeast(0.0001f), fill = true)
+                "fixed",
+                "scroll"-> Modifier.width(widthsDp[i].dp)
+                else    -> Modifier.weight(1f, fill = true)
+            }.then(if (heightsDp[i] > 0f) Modifier.height(heightsDp[i].dp) else Modifier)
 
-Box(
-    cellBase
-    .pointerInput(resizable, designerMode, unlocked[i]) {
-        if (resizable && !designerMode) {
-            androidx.compose.foundation.gestures.detectTapGestures(
-                onDoubleTap = { unlocked[i] = !unlocked[i] }
-            )
-        }
-    }
-
-    // 1) Contenuto reale del blocco
-    val p2 = "$path/items/$i"
-    RenderBlock(child, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
-
-    // 2) Maniglie di resize se sbloccato
-    if (resizable && !designerMode && unlocked[i]) {
-        // Larghezza (bordo destro) – usa 'slot' per sapere se non è l’ultima cella
-        if (slot < count - 1) {
-            ResizeHandleX(
-                align = Alignment.CenterEnd,
-                onDragStart = { activeEdge = slot },
-                onDrag = { deltaPx ->
-                    when (sizing) {
-                        "flex" -> {
-                            val deltaW = deltaPx / (rowWidthPx.takeIf { it > 0f } ?: 1f)
-                            applyProportionalDelta(weights, i, deltaW, items)
-                        }
-                        "fixed" -> {
-                            val step = 8f
-                            widthsDp[i] = snapDp(widthsDp[i] + pxToDp(deltaPx), step)
-                            // ridistribuisci sugli altri (proporzionalmente uguale)
-                            val others = (0 until count).filter { it != i }
-                            if (others.isNotEmpty()) {
-                                val share = -pxToDp(deltaPx) / others.size
-                                others.forEach { j ->
-                                    widthsDp[j] = snapDp((widthsDp[j] + share).coerceAtLeast(48f), step)
-                                }
-                            }
-                            child.put("widthDp", widthsDp[i].toDouble())
-                            // opzionale: persistenza sugli altri
-                            // others.forEach { j -> items.optJSONObject(j)?.put("widthDp", widthsDp[j].toDouble()) }
-                        }
-                        "scroll" -> {
-                            val step = 8f
-                            widthsDp[i] = snapDp(widthsDp[i] + pxToDp(deltaPx), step)
-                            child.put("widthDp", widthsDp[i].toDouble())
-                            // gli altri NON si toccano
-                        }
+            Box(
+                cellBase.pointerInput(resizable, designerMode, unlocked[i]) {
+                    if (resizable && !designerMode) {
+                        // doppio tap = lock/unlock cella
+                        androidx.compose.foundation.gestures.detectTapGestures(
+                            onDoubleTap = { unlocked[i] = !unlocked[i] }
+                        )
                     }
-                },
-                onDragEnd = { activeEdge = -1 }
-            )
-        }
+                }
+            ) {
+                // Contenuto reale del blocco
+                val childPath = "$path/items/$i"
+                RenderBlock(child, dispatch, uiState, designerMode, childPath, menus, onSelect, onOpenInspector)
 
-        // Altezza (basso)
-        ResizeHandleY(
-            align = Alignment.BottomCenter,
-            onDragStart = { activeHGuide = 1 },
-            onDrag = { dyPx ->
-                val step = 8f
-                val newH = snapDp((heightsDp[i].takeIf { it > 0f } ?: pxToDp(rowHeightPx)) + pxToDp(dyPx), step)
-                heightsDp[i] = newH.coerceAtLeast(32f)
-                child.put("heightDp", heightsDp[i].toDouble())
-            },
-            onDragEnd = { activeHGuide = -1 }
-        )
-        // Altezza (alto)
-        ResizeHandleY(
-            align = Alignment.TopCenter,
-            onDragStart = { activeHGuide = 0 },
-            onDrag = { dyPx ->
-                val step = 8f
-                val newH = snapDp((heightsDp[i].takeIf { it > 0f } ?: pxToDp(rowHeightPx)) - pxToDp(dyPx), step)
-                heightsDp[i] = newH.coerceAtLeast(32f)
-                child.put("heightDp", heightsDp[i].toDouble())
-            },
-            onDragEnd = { activeHGuide = -1 }
-        )
+                // Maniglie visibili solo se sbloccato, non in designer, e resizable=true
+                if (resizable && !designerMode && unlocked[i]) {
+                    // --- Maniglia orizzontale (destra) - no per l'ultima cella
+                    if (i < count - 1) {
+                        ResizeHandleX(
+                            align = Alignment.CenterEnd,
+                            onDragStart = { activeEdge = i },
+                            onDrag = { deltaPx ->
+                                when (sizing) {
+                                    "flex" -> {
+                                        val deltaW = if (rowWidthPx > 0f) deltaPx / rowWidthPx else 0f
+                                        applyProportionalDelta(weights, i, deltaW, items)
+                                    }
+                                    "fixed" -> {
+                                        val step = 8f
+                                        val deltaDp = pxToDp(deltaPx, density)
+                                        widthsDp[i] = snapDp(widthsDp[i] + deltaDp, step)
+                                        val others = (0 until count).filter { it != i }
+                                        if (others.isNotEmpty()) {
+                                            val share = -deltaDp / others.size
+                                            others.forEach { j ->
+                                                widthsDp[j] = snapDp(
+                                                    (widthsDp[j] + share).coerceAtLeast(48f),
+                                                    step
+                                                )
+                                                items.optJSONObject(j)
+                                                    ?.put("widthDp", widthsDp[j].toDouble())
+                                            }
+                                        }
+                                        child.put("widthDp", widthsDp[i].toDouble())
+                                    }
+                                    "scroll" -> {
+                                        val step = 8f
+                                        val deltaDp = pxToDp(deltaPx, density)
+                                        widthsDp[i] = snapDp(widthsDp[i] + deltaDp, step)
+                                        child.put("widthDp", widthsDp[i].toDouble())
+                                    }
+                                    else -> { /* no-op */ }
+                                }
+                            },
+                            onDragEnd = { activeEdge = -1 }
+                        )
+                    }
 
-        // 3) Drag orizzontale per SPOSTARE il blocco (swap progressivo)
-        val thresholdPx = with(LocalDensity.current) { 48.dp.toPx() }
-        var accum by remember(i) { mutableStateOf(0f) }
-        Box(
-            Modifier
-                .matchParentSize()
-                .pointerInput(order) {
-                    androidx.compose.foundation.gestures.detectDragGestures(
-                        onDrag = { _, dragAmount ->
-                            accum += dragAmount.x
-                            var curr = order.indexOf(i)
-                            // sposta a destra
-                            while (accum > thresholdPx && curr < count - 1) {
-                                val next = curr + 1
-                                order.swap(curr, next)
-                                curr = next
-                                accum -= thresholdPx
-                            }
-                            // sposta a sinistra
-                            while (accum < -thresholdPx && curr > 0) {
-                                val prev = curr - 1
-                                order.swap(curr, prev)
-                                curr = prev
-                                accum += thresholdPx
-                            }
-                        },
-                        onDragEnd = { accum = 0f }
+                    // --- Maniglie verticali (alto/basso)
+                    ResizeHandleY(
+                        align = Alignment.BottomCenter,
+                        onDrag = { dyPx ->
+                            val step = 8f
+                            val base = if (heightsDp[i] > 0f) heightsDp[i] else pxToDp(rowHeightPx, density)
+                            val newH = snapDp(base + pxToDp(dyPx, density), step)
+                            heightsDp[i] = newH.coerceAtLeast(32f)
+                            child.put("heightDp", heightsDp[i].toDouble())
+                        }
+                    )
+                    ResizeHandleY(
+                        align = Alignment.TopCenter,
+                        onDrag = { dyPx ->
+                            val step = 8f
+                            val base = if (heightsDp[i] > 0f) heightsDp[i] else pxToDp(rowHeightPx, density)
+                            val newH = snapDp(base - pxToDp(dyPx, density), step)
+                            heightsDp[i] = newH.coerceAtLeast(32f)
+                            child.put("heightDp", heightsDp[i].toDouble())
+                        }
                     )
                 }
-        )
+            }
+        }
     }
 }
 
@@ -354,54 +303,50 @@ private fun BoxScope.ResizeHandleX(
                     onDragStart = { onDragStart() },
                     onDragEnd = { onDragEnd() },
                     onDragCancel = { onDragEnd() },
-                    onDrag = { change, dragAmount ->
-                        change.consume()
-                        onDrag(dragAmount.x)
-                    }
+                    onDrag = { _, dragAmount -> onDrag(dragAmount.x) }
                 )
             }
             .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
     )
 }
 
+/* ---- Handle verticale (alto/basso) ---- */
 @Composable
-private fun ResizeHandleY(
-    active: Boolean,
+private fun BoxScope.ResizeHandleY(
+    align: Alignment,
     onDrag: (Float) -> Unit
 ) {
-    if (!active) return
+    val handleH = 10.dp
     Box(
         Modifier
+            .align(align)
             .fillMaxWidth()
-            .height(12.dp)
+            .height(handleH)
+            .cursorForResizeVert()
             .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectDragGestures(
-                    onDrag = { change, dragAmount ->
-                        change.consume() // o consumePositionChange() a seconda della tua versione di Compose
-                        onDrag(dragAmount.y)
-                    }
-                )
+                androidx.compose.foundation.gestures.detectDragGestures { _, dragAmount ->
+                    onDrag(dragAmount.y)
+                }
             }
+            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
     )
 }
 
-
-
-/* ---- Helpers snapping & proporzioni (5%) ---- */
+/* ---- Helpers snapping & proporzioni ---- */
 private fun snapPercent5(v: Float): Float {
-    // scatti a 5%
     val snaps = (v * 20f).roundToInt().coerceIn(1, 19) // 0.05 .. 0.95
     return snaps / 20f
 }
+
 private fun snapDp(v: Float, step: Float = 8f): Float =
     ((v / step).roundToInt() * step).coerceAtLeast(step)
 
-@Composable private fun pxToDp(px: Float): Float =
-    with(LocalDensity.current) { px.toDp().value }
+private fun pxToDp(px: Float, density: Density): Float =
+    with(density) { px.toDp().value }
 
 /* Distribuisce il delta di weight sull'elemento i
- * e lo sottrae in parti uguali agli altri (non negativi, min 5%)
- * Scrive anche nel JSON la nuova weight.
+ * e lo sottrae in parti uguali agli altri (min 5%).
+ * Aggiorna anche il JSON "weight".
  */
 private fun applyProportionalDelta(
     weights: MutableList<Float>,
@@ -424,10 +369,8 @@ private fun applyProportionalDelta(
     }
     weights[i] = newWi
 
-    // snap 5% e normalizza lieve per tenere somma ≈ 1
-    for (k in 0 until weights.size) {
-        weights[k] = snapPercent5(weights[k])
-    }
+    // snap a 5% e normalizza (somma ≈ 1)
+    for (k in 0 until weights.size) weights[k] = snapPercent5(weights[k])
     val sum = weights.sum().takeIf { it > 0f } ?: 1f
     for (k in 0 until weights.size) {
         weights[k] = (weights[k] / sum).coerceIn(0.05f, 0.95f)
@@ -435,9 +378,9 @@ private fun applyProportionalDelta(
     }
 }
 
-/* ---- “Cursori” fittizi per dare feedback (opzionale) ---- */
-private fun Modifier.cursorForResizeHoriz(): Modifier = this // placeholder per eventuale pointerIcon su Desktop
-private fun Modifier.cursorForResizeVert(): Modifier = this   // idem
+/* “Cursori” fittizi (se vorrai usare pointer icon su Desktop li puoi implementare) */
+private fun Modifier.cursorForResizeHoriz(): Modifier = this
+private fun Modifier.cursorForResizeVert(): Modifier = this
 
 
 @Composable
