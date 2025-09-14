@@ -743,9 +743,9 @@ else            String.format("#%02X%02X%02X", r, g, b)
 }
 
 
-private fun colorFromHex(hex: String?): Color? {
-if (hex.isNullOrBlank()) return null
-return try { Color(android.graphics.Color.parseColor(hex)) } catch (_: Exception) { null }
+private fun colorFromHex(hex: String): Color {
+    // accetta #RRGGBB o #AARRGGBB
+    return Color(android.graphics.Color.parseColor(hex))
 }
 
 
@@ -787,7 +787,8 @@ else -> null
 private val FONT_FAMILY_OPTIONS: List<String> = listOf(
 "(default)",
 "inter", "poppins", "rubik", "manrope", "mulish", "urbanist",
-"space_grotesk", "ibm_plex_sans", "ibm_plex_mono", "jetbrains_mono"
+"space_grotesk", "ibm_plex_sans", "ibm_plex_mono", "jetbrains_mono",
+"inknut_antiqua", "playfair", "sacramento", "space_mono"
 )
 
 private fun fontFamilyFromName(name: String?): FontFamily? {
@@ -1328,17 +1329,18 @@ Spacer(Modifier.height(4.dp))
 
 @Composable
 fun DesignerRoot() {
-val uiState = remember { mutableMapOf<String, Any>() }
-val dispatch: (String) -> Unit = { /* TODO: instrada azioni app */ }
+    val uiState = remember { mutableMapOf<String, Any>() }
+    val dispatch: (String) -> Unit = { /* instrada le azioni della tua app qui */ }
 
-UiScreen(
-screenName = "home",
-dispatch = dispatch,
-uiState = uiState,
-designerMode = true,
-scaffoldPadding = PaddingValues(0.dp)
-)
+    UiScreen(
+        screenName = "home",
+        dispatch = dispatch,
+        uiState = uiState,
+        designerMode = true,
+        scaffoldPadding = PaddingValues(0.dp)
+    )
 }
+
 
 
 /* =========================================================
@@ -1407,39 +1409,41 @@ scaffoldPadding = scaffoldPadding
 
 
 if (designMode) {
-DesignerOverlay(
-screenName = screenName,
-layout = layout!!,
-selectedPath = selectedPath,
-setSelectedPath = { selectedPath = it },
-onLiveChange = { tick++ },
-onLayoutChange = {
-UiLoader.saveDraft(ctx, screenName, layout!!)
-layout = JSONObject(layout.toString())
-tick++
-},
-onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
-onReset = {
-UiLoader.resetPublished(ctx, screenName)
-layout = UiLoader.loadLayout(ctx, screenName)
-selectedPath = null
-tick++
-},
-topPadding = scaffoldPadding.calculateTopPadding(),
-onOverlayHeight = { overlayHeightPx = it },
-onOpenRootInspector = { /* gestito sotto */ },
-onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
-)
+    DesignerOverlay(
+        screenName = screenName,
+        layout = layout!!,
+        selectedPath = selectedPath,
+        setSelectedPath = { selectedPath = it },
+        onLiveChange = { tick++ },
+        onLayoutChange = {
+            UiLoader.saveDraft(ctx, screenName, layout!!)
+            // forza recomposition senza perdere i riferimenti
+            layout = JSONObject(layout.toString())
+            tick++
+        },
+        onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+        onPublish = {
+            UiLoader.saveDraft(ctx, screenName, layout!!)
+            UiLoader.publish(ctx, screenName)
+        },
+        onReset = {
+            UiLoader.resetPublished(ctx, screenName)
+            layout = UiLoader.loadLayout(ctx, screenName)
+            selectedPath = null
+            tick++
+        },
+        topPadding = scaffoldPadding.calculateTopPadding(),
+        onOverlayHeight = { overlayHeightPx = it },
+        onOpenRootInspector = { /* gestito nel pannello root inspector */ },
+        onRootLivePreview = { previewRoot = it }   // live preview page/topBar mentre editi
+    )
 }
 
 // ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
 DesignSwitchKnob(
-isDesigner = designMode,
-onToggle = { designMode = !designMode }
+    isDesigner = designMode,
+    onToggle   = { designMode = !designMode }
 )
-}
-}
 
 /* =========================================================
 * KNOB laterale (trascinabile) per commutare Designer/Anteprima
@@ -4725,26 +4729,50 @@ if (image != null) Icon(image, contentDescription) else Text(".")
 
 @Composable
 private fun parseColorOrRole(source: String?): Color? {
-if (source == null || source.isBlank()) return null
-val cs = MaterialTheme.colorScheme
-return when (source.lowercase()) {
-"primary"      -> cs.primary
-"onprimary"    -> cs.onPrimary
-"secondary"    -> cs.secondary
-"onsecondary"  -> cs.onSecondary
-"tertiary"     -> cs.tertiary
-"ontertiary"   -> cs.onTertiary
-"surface"      -> cs.surface
-"onsurface"    -> cs.onSurface
-"background"   -> cs.background
-"onbackground" -> cs.onBackground
-"error"        -> cs.error
-"onerror"      -> cs.onError
-"success"      -> cs.tertiary       // mappatura “di comodo” per ruoli custom
-"warning"      -> cs.secondary
-"info"         -> cs.primary
-else -> runCatching { Color(android.graphics.Color.parseColor(source)) }.getOrNull()
-}
+    val raw = source?.trim().orEmpty()
+    if (raw.isBlank()) return null
+
+    // HEX (#RRGGBB/#AARRGGBB)
+    if (raw.startsWith("#")) return colorFromHex(raw)
+
+    val cs = MaterialTheme.colorScheme
+    return when (raw.lowercase()) {
+        // ruoli principali
+        "primary" -> cs.primary
+        "onprimary","on_primary" -> cs.onPrimary
+        "primarycontainer","primary_container" -> cs.primaryContainer
+        "onprimarycontainer","on_primary_container" -> cs.onPrimaryContainer
+
+        "secondary" -> cs.secondary
+        "onsecondary","on_secondary" -> cs.onSecondary
+        "secondarycontainer","secondary_container" -> cs.secondaryContainer
+        "onsecondarycontainer","on_secondary_container" -> cs.onSecondaryContainer
+
+        "tertiary" -> cs.tertiary
+        "ontertiary","on_tertiary" -> cs.onTertiary
+        "tertiarycontainer","tertiary_container" -> cs.tertiaryContainer
+        "ontertiarycontainer","on_tertiary_container" -> cs.onTertiaryContainer
+
+        "surface" -> cs.surface
+        "onsurface","on_surface" -> cs.onSurface
+        "surfacevariant","surface_variant" -> cs.surfaceVariant
+        "onsurfacevariant","on_surface_variant" -> cs.onSurfaceVariant
+
+        "background" -> cs.background
+        "onbackground","on_background" -> cs.onBackground
+
+        "error" -> cs.error
+        "onerror","on_error" -> cs.onError
+        "errorcontainer","error_container" -> cs.errorContainer
+        "onerrorcontainer","on_error_container" -> cs.onErrorContainer
+
+        "outline" -> cs.outline
+        "inverseprimary","inverse_primary" -> cs.inversePrimary
+        "inverseonsurface","inverse_on_surface" -> cs.inverseOnSurface
+        "scrim" -> cs.scrim
+
+        else -> null
+    }
 }
 
 private fun bestOnColor(bg: Color): Color =
@@ -5092,23 +5120,41 @@ private fun newList() = JSONObject(
 * TEXT STYLE OVERRIDES
 * ========================================================= */
 @Composable
-private fun applyTextStyleOverrides(owner: JSONObject, base: TextStyle): TextStyle {
-var st = base
-val sizeSp = owner.optDouble("textSizeSp", Double.NaN)
-if (!sizeSp.isNaN()) st = st.copy(fontSize = sizeSp.sp)
-parseFontWeight(owner.optString("fontWeight","").takeIf { it.isNotBlank() })?.let {
-st = st.copy(fontWeight = it)
-}
-fontFamilyFromName(owner.optString("fontFamily","").takeIf { it.isNotBlank() })?.let {
-st = st.copy(fontFamily = it)
-}
-parseColorOrRole(owner.optString("textColor","").takeIf { it.isNotBlank() })?.let {
-st = st.copy(color = it)
-}
-if (owner.optBoolean("italic", false)) {
-st = st.copy(fontStyle = FontStyle.Italic)
-}
-return st
+private fun applyTextStyleOverrides(base: TextStyle, working: JSONObject): TextStyle {
+    var s = base
+
+    // dimensioni
+    val sizeSp = working.optDouble("sizeSp", Double.NaN)
+    if (!sizeSp.isNaN()) s = s.copy(fontSize = sizeSp.sp)
+
+    val lineHeightSp = working.optDouble("lineHeightSp", Double.NaN)
+    if (!lineHeightSp.isNaN()) s = s.copy(lineHeight = lineHeightSp.sp)
+
+    val letterEm = working.optDouble("letterSpacingEm", Double.NaN)
+    if (!letterEm.isNaN()) s = s.copy(letterSpacing = letterEm.em)
+
+    // peso
+    when (working.optString("weight", "").lowercase()) {
+        "w100","thin" -> s = s.copy(fontWeight = FontWeight.W100)
+        "w200","extra_light","extralight" -> s = s.copy(fontWeight = FontWeight.W200)
+        "w300","light" -> s = s.copy(fontWeight = FontWeight.W300)
+        "w400","normal","regular","" -> s = s.copy(fontWeight = FontWeight.W400)
+        "w500","medium" -> s = s.copy(fontWeight = FontWeight.W500)
+        "w600","semibold","semi_bold" -> s = s.copy(fontWeight = FontWeight.W600)
+        "w700","bold" -> s = s.copy(fontWeight = FontWeight.W700)
+        "w800","extrabold","extra_bold" -> s = s.copy(fontWeight = FontWeight.W800)
+        "w900","black" -> s = s.copy(fontWeight = FontWeight.W900)
+    }
+
+    // corsivo
+    if (working.optBoolean("italic", false)) {
+        s = s.copy(fontStyle = FontStyle.Italic)
+    }
+
+    // colore
+    parseColorOrRole(working.optString("color", ""))?.let { s = s.copy(color = it) }
+
+    return s
 }
 
 private fun newRow() = JSONObject(
