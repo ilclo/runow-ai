@@ -81,13 +81,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 
-private fun <T> MutableList<T>.swap(a: Int, b: Int) {
-    if (a != b && a in indices && b in indices) {
-        val t = this[a]; this[a] = this[b]; this[b] = t
-    }
-}
-
-// ===================== RESIZE: ROW & HANDLES =====================
 
 @Composable
 private fun ResizableRow(
@@ -110,17 +103,15 @@ private fun ResizableRow(
     val sizing = rowBlock.optString("sizing", "flex") // "flex" | "fixed" | "scroll"
     val resizable = rowBlock.optBoolean("resizable", true)
 
-    // Misure della row per conversioni px<->percentuali
     var rowWidthPx by remember(path) { mutableStateOf(0f) }
     var rowHeightPx by remember(path) { mutableStateOf(0f) }
 
-    // Stato interno: pesi/width/height + "sblocco" per cella
     val weights = remember(path, count) {
         MutableList(count) { idx ->
             val it = items.optJSONObject(idx)
             when {
                 it == null -> 0f
-                it.optString("type") == "SpacerH" && it.optString("mode", "fixed") == "fixed" -> 0f
+                it.optString("type") == "SpacerH" && it.optString("mode","fixed") == "fixed" -> 0f
                 else -> {
                     val w = it.optDouble("weight", Double.NaN)
                     if (!w.isNaN()) w.toFloat().coerceIn(0.05f, 0.95f) else 1f / count
@@ -137,21 +128,20 @@ private fun ResizableRow(
     val heightsDp = remember(path, count) {
         MutableList(count) { idx ->
             val it = items.optJSONObject(idx)
-            it?.optDouble("heightDp", Double.NaN)?.takeIf { d -> !d.isNaN() }?.toFloat() ?: 0f // 0 = auto
+            it?.optDouble("heightDp", Double.NaN)?.takeIf { d -> !d.isNaN() }?.toFloat() ?: 0f
         }.toMutableStateList()
     }
     val unlocked = remember(path, count) { MutableList(count) { false }.toMutableStateList() }
 
-    // Righelli durante il drag: indice bordo attivo (-1 nessuno)
     var activeEdge by remember(path) { mutableStateOf(-1) }
 
     Row(
         Modifier
             .fillMaxWidth()
             .let { if (sizing == "scroll") it.horizontalScroll(rememberScrollState()) else it }
-            .onGloballyPositioned { coords ->
-                rowWidthPx = coords.size.width.toFloat()
-                rowHeightPx = coords.size.height.toFloat()
+            .onGloballyPositioned {
+                rowWidthPx  = it.size.width.toFloat()
+                rowHeightPx = it.size.height.toFloat()
             }
             .drawBehind {
                 if (activeEdge >= 0 && count > 1 && rowWidthPx > 0f) {
@@ -161,7 +151,7 @@ private fun ResizableRow(
                         val wPx = when (sizing) {
                             "flex"  -> rowWidthPx * weights[i].coerceAtLeast(0f)
                             "fixed" -> widthsDp[i].dp.toPx()
-                            else    -> widthsDp[i].dp.toPx() // "scroll"
+                            else    -> widthsDp[i].dp.toPx()
                         }
                         acc += wPx
                         if (i < count - 1) {
@@ -182,39 +172,31 @@ private fun ResizableRow(
         for (i in 0 until count) {
             val child = items.optJSONObject(i) ?: continue
 
-            // SpacerH in modalità fixed: non ridimensionabile
             val isFixedSpacer = child.optString("type") == "SpacerH" &&
-                    child.optString("mode", "fixed") == "fixed"
+                    child.optString("mode","fixed") == "fixed"
             if (isFixedSpacer) {
                 Spacer(Modifier.width(child.optDouble("widthDp", 16.0).toFloat().dp))
                 continue
             }
 
-            // Modificatore base cella in base al sizing
             val cellBase = when (sizing) {
-                "flex"  -> Modifier.weight(weights[i].coerceAtLeast(0.0001f), fill = true)
+                "flex"   -> Modifier.weight(weights[i].coerceAtLeast(0.0001f), fill = true)
                 "fixed",
-                "scroll"-> Modifier.width(widthsDp[i].dp)
-                else    -> Modifier.weight(1f, fill = true)
+                "scroll" -> Modifier.width(widthsDp[i].dp)
+                else     -> Modifier.weight(1f, fill = true)
             }.then(if (heightsDp[i] > 0f) Modifier.height(heightsDp[i].dp) else Modifier)
 
             Box(
                 cellBase.pointerInput(resizable, designerMode, unlocked[i]) {
                     if (resizable && !designerMode) {
-                        // doppio tap = lock/unlock cella
-                        androidx.compose.foundation.gestures.detectTapGestures(
-                            onDoubleTap = { unlocked[i] = !unlocked[i] }
-                        )
+                        detectTapGestures(onDoubleTap = { unlocked[i] = !unlocked[i] })
                     }
                 }
             ) {
-                // Contenuto reale del blocco
                 val childPath = "$path/items/$i"
                 RenderBlock(child, dispatch, uiState, designerMode, childPath, menus, onSelect, onOpenInspector)
 
-                // Maniglie visibili solo se sbloccato, non in designer, e resizable=true
                 if (resizable && !designerMode && unlocked[i]) {
-                    // --- Maniglia orizzontale (destra) - no per l'ultima cella
                     if (i < count - 1) {
                         ResizeHandleX(
                             align = Alignment.CenterEnd,
@@ -234,8 +216,7 @@ private fun ResizableRow(
                                             val share = -deltaDp / others.size
                                             others.forEach { j ->
                                                 widthsDp[j] = snapDp(
-                                                    (widthsDp[j] + share).coerceAtLeast(48f),
-                                                    step
+                                                    (widthsDp[j] + share).coerceAtLeast(48f), step
                                                 )
                                                 items.optJSONObject(j)
                                                     ?.put("widthDp", widthsDp[j].toDouble())
@@ -249,14 +230,13 @@ private fun ResizableRow(
                                         widthsDp[i] = snapDp(widthsDp[i] + deltaDp, step)
                                         child.put("widthDp", widthsDp[i].toDouble())
                                     }
-                                    else -> { /* no-op */ }
+                                    else -> { /* exhaustive */ }
                                 }
                             },
                             onDragEnd = { activeEdge = -1 }
                         )
                     }
 
-                    // --- Maniglie verticali (alto/basso)
                     ResizeHandleY(
                         align = Alignment.BottomCenter,
                         onDrag = { dyPx ->
@@ -283,7 +263,6 @@ private fun ResizableRow(
     }
 }
 
-/* ---- Handle orizzontale (dx/sx) ---- */
 @Composable
 private fun BoxScope.ResizeHandleX(
     align: Alignment,
@@ -297,9 +276,8 @@ private fun BoxScope.ResizeHandleX(
             .align(align)
             .fillMaxHeight()
             .width(handleW)
-            .cursorForResizeHoriz()
             .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectDragGestures(
+                detectDragGestures(
                     onDragStart = { onDragStart() },
                     onDragEnd = { onDragEnd() },
                     onDragCancel = { onDragEnd() },
@@ -310,7 +288,6 @@ private fun BoxScope.ResizeHandleX(
     )
 }
 
-/* ---- Handle verticale (alto/basso) ---- */
 @Composable
 private fun BoxScope.ResizeHandleY(
     align: Alignment,
@@ -322,32 +299,25 @@ private fun BoxScope.ResizeHandleY(
             .align(align)
             .fillMaxWidth()
             .height(handleH)
-            .cursorForResizeVert()
             .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectDragGestures { _, dragAmount ->
-                    onDrag(dragAmount.y)
-                }
+                detectDragGestures { _, dragAmount -> onDrag(dragAmount.y) }
             }
             .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
     )
 }
 
-/* ---- Helpers snapping & proporzioni ---- */
+// ---- helpers dp/percent ----
 private fun snapPercent5(v: Float): Float {
-    val snaps = (v * 20f).roundToInt().coerceIn(1, 19) // 0.05 .. 0.95
+    val snaps = (v * 20f).roundToInt().coerceIn(1, 19)
     return snaps / 20f
 }
-
 private fun snapDp(v: Float, step: Float = 8f): Float =
     ((v / step).roundToInt() * step).coerceAtLeast(step)
 
 private fun pxToDp(px: Float, density: Density): Float =
     with(density) { px.toDp().value }
 
-/* Distribuisce il delta di weight sull'elemento i
- * e lo sottrae in parti uguali agli altri (min 5%).
- * Aggiorna anche il JSON "weight".
- */
+// redistribuzione proporzionale in flex
 private fun applyProportionalDelta(
     weights: MutableList<Float>,
     i: Int,
@@ -369,7 +339,6 @@ private fun applyProportionalDelta(
     }
     weights[i] = newWi
 
-    // snap a 5% e normalizza (somma ≈ 1)
     for (k in 0 until weights.size) weights[k] = snapPercent5(weights[k])
     val sum = weights.sum().takeIf { it > 0f } ?: 1f
     for (k in 0 until weights.size) {
@@ -378,9 +347,17 @@ private fun applyProportionalDelta(
     }
 }
 
-/* “Cursori” fittizi (se vorrai usare pointer icon su Desktop li puoi implementare) */
+// “cursori” segnaposto (se usi pointer icon desktop li puoi gestire qui)
 private fun Modifier.cursorForResizeHoriz(): Modifier = this
 private fun Modifier.cursorForResizeVert(): Modifier = this
+
+private fun <T> MutableList<T>.swap(a: Int, b: Int) {
+    if (a != b && a in indices && b in indices) {
+        val t = this[a]; this[a] = this[b]; this[b] = t
+    }
+}
+
+
 
 
 @Composable
