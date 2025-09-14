@@ -1,8 +1,12 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+
 
 package ai.runow.ui.renderer
 
-
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.WindowInsets as FWindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides as FSides
 import androidx.compose.foundation.layout.only
@@ -166,9 +170,9 @@ private fun ResizableRow(
                 rowWidthPx  = it.size.width.toFloat()
                 rowHeightPx = it.size.height.toFloat()
             }
+            val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
             .drawBehind {
                 if (activeEdge >= 0 && count > 1 && rowWidthPx > 0f) {
-                    val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
                     var acc = 0f
                     for (i in 0 until count) {
                         val wPx = when (sizing) {
@@ -180,7 +184,7 @@ private fun ResizableRow(
                         if (i < count - 1) {
                             val thick = if (i == activeEdge) 3f else 1.5f
                             drawLine(
-                                color = lineColor,
+                                color = dividerColor,
                                 start = Offset(acc, 0f),
                                 end = Offset(acc, size.height),
                                 strokeWidth = thick
@@ -211,14 +215,14 @@ private fun ResizableRow(
 
             Box(
                 cellBase
-                    .pointerInput(resizable, designerMode, unlocked[i]) {
-                        if (resizable && !designerMode) {
-                            // double‑tap per lock/unlock
-                            androidx.compose.foundation.gestures.detectTapGestures(
-                                onDoubleTap = { unlocked[i] = !unlocked[i] }
+                    .then(
+                        if (resizable && !designerMode)
+                            Modifier.combinedClickable(
+                                onClick = {}, // no-op single tap
+                                onDoubleClick = { unlocked[i] = !unlocked[i] }
                             )
-                        }
-                    }
+                        else Modifier
+                    )
             ) {
                 val childPath = "$path/items/$i"
                 RenderBlock(
@@ -301,7 +305,6 @@ private fun ResizableRow(
     }
 }
 
-
 @Composable
 private fun BoxScope.ResizeHandleX(
     align: Alignment,
@@ -315,14 +318,12 @@ private fun BoxScope.ResizeHandleX(
             .align(align)
             .fillMaxHeight()
             .width(handleW)
-            .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectDragGestures(
-                    onDragStart = { onDragStart() },
-                    onDragEnd = { onDragEnd() },
-                    onDragCancel = { onDragEnd() },
-                    onDrag = { _, dragAmount -> onDrag(dragAmount.x) }
-                )
-            }
+            .draggable(
+                orientation = Orientation.Horizontal,
+                state = rememberDraggableState { delta -> onDrag(delta) },
+                onDragStarted = { onDragStart() },
+                onDragStopped = { onDragEnd() }
+            )
             .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
     )
 }
@@ -338,14 +339,14 @@ private fun BoxScope.ResizeHandleY(
             .align(align)
             .fillMaxWidth()
             .height(handleH)
-            .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectDragGestures(
-                    onDrag = { _, dragAmount -> onDrag(dragAmount.y) }
-                )
-            }
+            .draggable(
+                orientation = Orientation.Vertical,
+                state = rememberDraggableState { delta -> onDrag(delta) }
+            )
             .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
     )
 }
+
 
 
 private fun snapPercent5(v: Float): Float {
@@ -357,6 +358,7 @@ private fun snapDp(v: Float, step: Float = 8f): Float =
 
 private fun pxToDp(px: Float, density: Density): Float =
     with(density) { px.toDp().value }
+
 
 
 
@@ -486,17 +488,17 @@ private fun ScreenScaffoldWithPinnedTopBar(
                 .padding(bottom = extraPaddingBottom)
                 .windowInsetsPadding(FWindowInsets.safeDrawing.only(FSides.Horizontal))
         ) {
-            for (i in 0 until blocks.length()) {
-                val b = blocks.optJSONObject(i) ?: continue
                 RenderBlock(
-                    b,
-                    path = "blocks/$i",
+                    block = b,
                     dispatch = dispatch,
                     uiState = uiState,
+                    designerMode = designerMode,
+                    path = "blocks/$i",
                     menus = menus,
                     onSelect = { selectedPathSetter(it) },
                     onOpenInspector = { selectedPathSetter(it) }
                 )
+
             }
         }
     }
@@ -2839,7 +2841,6 @@ if (ic.isNotBlank()) NamedIconEx(ic, null)
     onSelect = onSelect,
     onOpenInspector = onOpenInspector
 )
-
 
 
 "Progress" -> Wrapper {
