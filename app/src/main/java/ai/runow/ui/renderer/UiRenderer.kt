@@ -174,43 +174,42 @@ private fun ResizableRow(
                 rowWidthPx  = it.size.width.toFloat()
                 rowHeightPx = it.size.height.toFloat()
             }
-// colore dei righelli/guide (non troppo forte)
-        val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-        
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .let { if (sizing == "scroll") it.horizontalScroll(rememberScrollState()) else it }
-                .onGloballyPositioned { coords ->
-                    rowWidthPx  = coords.size.width.toFloat()
-                    rowHeightPx = coords.size.height.toFloat()
-                }
-                .drawBehind {
-                    // Disegna le guide verticali solo quando serve
-                    if (activeEdge >= 0 && count > 1 && rowWidthPx > 0f) {
-                        var acc = 0f
-                        for (j in 0 until count) {
-                            val wPx = when (sizing) {
-                                "flex"  -> rowWidthPx * weights[j].coerceAtLeast(0f)
-                                "fixed" -> widthsDp[j].dp.toPx()    // in DrawScope hai già la Density
-                                else    -> widthsDp[j].dp.toPx()
-                            }
-                            acc += wPx
-                            if (j < count - 1) {
-                                val thick = if (j == activeEdge) 3f else 1.5f
-                                drawLine(
-                                    color = dividerColor,
-                                    start = Offset(acc, 0f),
-                                    end   = Offset(acc, size.height),
-                                    strokeWidth = thick
-                                )
+// colore delle guide (tono tenue)
+            val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+            
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .let { if (sizing == "scroll") it.horizontalScroll(rememberScrollState()) else it }
+                    .onGloballyPositioned { coords ->
+                        rowWidthPx  = coords.size.width.toFloat()
+                        rowHeightPx = coords.size.height.toFloat()
+                    }
+                    .drawBehind {
+                        if (activeEdge >= 0 && count > 1 && rowWidthPx > 0f) {
+                            var acc = 0f
+                            for (j in 0 until count) {
+                                val wPx = when (sizing) {
+                                    "flex"  -> rowWidthPx * weights[j].coerceAtLeast(0f)
+                                    "fixed" -> widthsDp[j].dp.toPx()
+                                    else    -> widthsDp[j].dp.toPx()
+                                }
+                                acc += wPx
+                                if (j < count - 1) {
+                                    val thick = if (j == activeEdge) 3f else 1.5f
+                                    drawLine(
+                                        color = dividerColor,
+                                        start = Offset(acc, 0f),
+                                        end   = Offset(acc, size.height),
+                                        strokeWidth = thick
+                                    )
+                                }
                             }
                         }
-                    }
-                },
-            horizontalArrangement = Arrangement.spacedBy(gap),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+                    },
+                horizontalArrangement = Arrangement.spacedBy(gap),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
         for (i in 0 until count) {
             val child = items.optJSONObject(i) ?: continue
 
@@ -494,7 +493,8 @@ private fun ScreenScaffoldWithPinnedTopBar(
             }
         }
     ) { innerPadding ->
-        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
+
+    val blocks = layout.optJSONArray("blocks") ?: JSONArray()
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -503,17 +503,19 @@ private fun ScreenScaffoldWithPinnedTopBar(
                 .padding(bottom = extraPaddingBottom)
                 .windowInsetsPadding(FWindowInsets.safeDrawing.only(FSides.Horizontal))
         ) {
+            for (i in 0 until blocks.length()) {
+                val b = blocks.optJSONObject(i) ?: continue
+                val path = "/blocks/$i"
                 RenderBlock(
                     block = b,
                     dispatch = dispatch,
                     uiState = uiState,
                     designerMode = designerMode,
-                    path = "blocks/$i",
+                    path = path,
                     menus = menus,
                     onSelect = { selectedPathSetter(it) },
                     onOpenInspector = { selectedPathSetter(it) }
                 )
-
             }
         }
     }
@@ -2846,7 +2848,7 @@ if (ic.isNotBlank()) NamedIconEx(ic, null)
 }
 }
 
-"row" -> ResizableRow(
+"Row", "row" -> ResizableRow(
     rowBlock = block,
     path = path,
     uiState = uiState,
@@ -2856,6 +2858,7 @@ if (ic.isNotBlank()) NamedIconEx(ic, null)
     onSelect = onSelect,
     onOpenInspector = onOpenInspector
 )
+
 
 
 "Progress" -> Wrapper {
