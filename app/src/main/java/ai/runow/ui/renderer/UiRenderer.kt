@@ -327,7 +327,87 @@ private fun BoxScope.ResizeHandles(
     )
 }
 
-// ---- Overlay per reorder a “slot” tra fratelli ------------------------------
+// ──────────────────────────────────────────────────────────────────────────────
+// Handle orizzontale (destra/sinistra) per il resize della larghezza del blocco
+// ──────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun BoxScope.ResizeHandleX(
+    isRight: Boolean,
+    rowWidthPx: Float,
+    handleW: Dp = 16.dp,
+    onResizeHorizontal: (deltaPx: Float, isRightEdge: Boolean, rowWidthPx: Float) -> Unit
+) {
+    val modifierSide = if (isRight) Modifier.align(Alignment.CenterEnd) else Modifier.align(Alignment.CenterStart)
+    Box(
+        modifierSide
+            .width(handleW)
+            .fillMaxHeight()
+            .pointerHoverIcon(PointerIconDefaults.Crosshair)
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    // ⚠️ NO named args sui function-types: passaggio posizionale
+                    onResizeHorizontal(drag.x, false, rowWidthPx) // lato SINISTRO
+                }
+            }
+    )
+
+    Box(
+        modifierSide
+            .width(handleW)
+            .fillMaxHeight()
+            .pointerHoverIcon(PointerIconDefaults.Crosshair)
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    // ⚠️ NO named args sui function-types: passaggio posizionale
+                    onResizeHorizontal(drag.x, true, rowWidthPx)  // lato DESTRO
+                }
+            }
+    )
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Handle verticale (alto/basso) per il resize dell’altezza del blocco
+// ──────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun BoxScope.ResizeHandleY(
+    handleH: Dp = 14.dp,
+    onResizeVertical: (deltaPx: Float, isBottomEdge: Boolean) -> Unit
+) {
+    // SOPRA
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(handleH)
+            .align(Alignment.TopCenter)
+            .pointerHoverIcon(PointerIconDefaults.Crosshair)
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    // ⚠️ NO named args sui function-types: passaggio posizionale
+                    onResizeVertical(drag.y, false) // bordo superiore
+                }
+            }
+    )
+
+    // SOTTO
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(handleH)
+            .align(Alignment.BottomCenter)
+            .pointerHoverIcon(PointerIconDefaults.Crosshair)
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    // ⚠️ NO named args sui function-types: passaggio posizionale
+                    onResizeVertical(drag.y, true)  // bordo inferiore
+                }
+            }
+    )
+}
+
 
 @Composable
 private fun BoxScope.DraggableReorderOverlay(
@@ -1694,119 +1774,6 @@ fun UiScreen(
     }
 }
 
-
-
-/* =========================================================
-* RENDER DI UNA SCHERMATA JSON (con Scaffold di root e levetta)
-* ========================================================= */
-
-@Composable
-fun UiScreen(
-screenName: String,
-dispatch: (String) -> Unit,
-uiState: MutableMap<String, Any>,
-designerMode: Boolean = false,
-scaffoldPadding: PaddingValues = PaddingValues(0.dp)
-) {
-val ctx = LocalContext.current
-var layout: JSONObject? by remember(screenName) {
-mutableStateOf(UiLoader.loadLayout(ctx, screenName))
-}
-var tick by remember { mutableStateOf(0) }
-
-if (layout == null) {
-Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-Text("Layout '$screenName' non trovato", style = MaterialTheme.typography.bodyLarge)
-}
-return
-}
-
-// Menù raccolti dal layout + selezione corrente
-val menus = remember(layout, tick) { collectMenus(layout!!) }
-var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
-
-// Stato barra designer in basso (per lasciare spazio ai contenuti)
-var overlayHeightPx by remember { mutableStateOf(0) }
-val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
-
-// Modalità designer persistente per schermata
-var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
-
-// ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
-var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
-fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
-val out = JSONObject(base.toString())
-listOf("page", "topBar").forEach { k ->
-if (preview.has(k)) out.put(k, preview.opt(k))
-}
-return out
-}
-val effectiveLayout = remember(layout, previewRoot) {
-if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
-}
-// Modalità App (Real / Designer / Resize)
-// Se attivo designMode => Designer; altrimenti ricordiamo l'ultima scelta (Real/Resize)
-var appMode by rememberSaveable(screenName) {
-    mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
-}
-LaunchedEffect(designMode) {
-    appMode = if (designMode) AppMode.Designer else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
-}
-
-Box(Modifier.fillMaxSize()) {
-// ====== SFONDO PAGINA (colore/gradient/immagine) ======
-RenderPageBackground(effectiveLayout.optJSONObject("page"))
-
-ScreenScaffoldWithPinnedTopBar(
-layout = effectiveLayout,
-dispatch = dispatch,
-uiState = uiState,
-designerMode = designMode,
-menus = menus,
-selectedPathSetter = { selectedPath = it },
-extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-scaffoldPadding = scaffoldPadding
-)
-
-
-if (designMode) {
-DesignerOverlay(
-screenName = screenName,
-layout = layout!!,
-selectedPath = selectedPath,
-setSelectedPath = { selectedPath = it },
-onLiveChange = { tick++ },
-onLayoutChange = {
-UiLoader.saveDraft(ctx, screenName, layout!!)
-layout = JSONObject(layout.toString())
-tick++
-},
-onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
-onReset = {
-UiLoader.resetPublished(ctx, screenName)
-layout = UiLoader.loadLayout(ctx, screenName)
-selectedPath = null
-tick++
-},
-topPadding = scaffoldPadding.calculateTopPadding(),
-onOverlayHeight = { overlayHeightPx = it },
-onOpenRootInspector = { /* gestito sotto */ },
-onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
-)
-}
-
-// ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
-DesignSwitchKnob(
-isDesigner = designMode,
-onToggle = { designMode = !designMode }
-)
-}
-}
-
-/* =========================================================
-* KNOB laterale (trascinabile) per commutare Designer/Anteprima
-* ========================================================= */
 @Composable
 private fun BoxScope.DesignSwitchKnob(
 isDesigner: Boolean,
