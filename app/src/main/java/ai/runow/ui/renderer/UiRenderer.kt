@@ -10,7 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -25,8 +24,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.draw.*
 import android.content.Intent
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.input.pointer.pointerInput // used with detectVerticalDragGestures
 import androidx.compose.ui.unit.IntOffset
@@ -57,8 +54,6 @@ import androidx.compose.material3.*
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import android.net.Uri
-import android.graphics.BitmapFactory
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import org.json.JSONArray
@@ -80,6 +75,29 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
+// --- IMPORT da aggiungere in testa al file (se non già presenti) ---
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+
+// --- UTIL da incollare in un punto top-level di UiRenderer.kt ---
+@Composable
+private fun rememberImageBitmapFromUri(source: String): ImageBitmap? {
+    val context = LocalContext.current
+    return remember(source) {
+        try {
+            if (source.isBlank()) return@remember null
+            val uri = Uri.parse(source)
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream)?.asImageBitmap()
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+}
 
 
 @Composable
@@ -3479,37 +3497,48 @@ onChange()
 }
 }
 
-else -> { // "spacer"
-var mode by remember { mutableStateOf(item.optString("mode", "fixed")) }
-ExposedDropdown(
-value = mode, label = "mode",
-options = listOf("fixed", "expand")
-) { sel ->
-mode = sel
-item.put("mode", sel)
-onChange()
-}
-if (mode == "fixed") {
-var width by remember { mutableStateOf(item.optDouble("widthDp", 16.0).toInt().toString()) }
-ExposedDropdown(
-value = width, label = "width (dp)",
-options = listOf("8", "12", "16", "20", "24", "32", "40", "48", "64")
-) { sel ->
-width = sel
-item.put("widthDp", sel.toDouble())
-onChange()
-}
-}
-}
-}
-}
+// --- dentro when(type) { "spacer" -> { ... } } di BarItemsEditor ---
+"spacer" -> {
+    val modes = listOf("expand", "fixed")
+    var mode by remember { mutableStateOf(item.optString("mode", "expand")) }
+
+    LabeledField("Spazio") {
+        ExposedDropdown(
+            items = modes,
+            selected = mode,
+            label = "Comportamento",
+            onSelect = { sel ->
+                mode = sel
+                item.put("mode", sel)
+                if (sel == "expand") {
+                    // lo spazio prende tutto il residuo, nessuna width fissa
+                    if (item.has("widthDp")) item.remove("widthDp")
+                } else {
+                    // default sensato se vado su "fixed"
+                    item.put("widthDp", item.optDouble("widthDp", 24.0))
+                }
+            }
+        )
+
+        if (mode == "fixed") {
+            Spacer(Modifier.height(8.dp))
+            var w by remember { mutableStateOf(item.optDouble("widthDp", 24.0).toFloat()) }
+
+            Text("Larghezza (dp): ${w.toInt()}", style = MaterialTheme.typography.labelMedium)
+            Slider(
+                value = w,
+                onValueChange = { nv ->
+                    w = nv
+                    item.put("widthDp", nv.toDouble())
+                },
+                // 8..160 dp (step 8dp)
+                valueRange = 8f..160f,
+                steps = 19 // ((160f - 8f) / 8f).toInt() - 1 = 19
+            )
+        }
+    }
 }
 
-Spacer(Modifier.height(8.dp))
-}
-
-AddBarItemButtons(arr = arr, onChange = onChange)
-}
 
 
 /* =========================================================
