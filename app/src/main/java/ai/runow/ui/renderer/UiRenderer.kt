@@ -106,16 +106,15 @@ private fun <T> MutableList<T>.swap(a: Int, b: Int) {
 }
 
 @Composable
-@Composable
 private fun ResizableRow(
     rowBlock: JSONObject,
-    path: List<Int>,
-    uiState: UiState,
-    menus: Menus,
-    dispatch: (Action) -> Unit,
-    designerMode: Boolean = false,   // <-- default per chiudere l'errore
-    onSelect: (List<Int>) -> Unit,
-    onOpenInspector: (List<Int>) -> Unit
+    path: String,
+    uiState: MutableMap<String, Any>,
+    menus: Map<String, JSONArray>,
+    dispatch: (String) -> Unit,
+    designerMode: Boolean = false,
+    onSelect: (String) -> Unit,
+    onOpenInspector: (String) -> Unit
 ) {
     val items = rowBlock.optJSONArray("items") ?: JSONArray()
     val count = items.length()
@@ -197,7 +196,7 @@ private fun ResizableRow(
             val child = items.optJSONObject(i) ?: continue
 
             val isFixedSpacer = child.optString("type") == "SpacerH" &&
-                                child.optString("mode","fixed") == "fixed"
+                    child.optString("mode","fixed") == "fixed"
             if (isFixedSpacer) {
                 Spacer(Modifier.width(child.optDouble("widthDp", 16.0).toFloat().dp))
                 continue
@@ -214,6 +213,7 @@ private fun ResizableRow(
                 cellBase
                     .pointerInput(resizable, designerMode, unlocked[i]) {
                         if (resizable && !designerMode) {
+                            // double‑tap per lock/unlock
                             androidx.compose.foundation.gestures.detectTapGestures(
                                 onDoubleTap = { unlocked[i] = !unlocked[i] }
                             )
@@ -221,9 +221,19 @@ private fun ResizableRow(
                     }
             ) {
                 val childPath = "$path/items/$i"
-                RenderBlock(child, dispatch, uiState, designerMode, childPath, menus, onSelect, onOpenInspector)
+                RenderBlock(
+                    block = child,
+                    dispatch = dispatch,
+                    uiState = uiState,
+                    designerMode = designerMode,
+                    path = childPath,
+                    menus = menus,
+                    onSelect = onSelect,
+                    onOpenInspector = onOpenInspector
+                )
 
                 if (resizable && !designerMode && unlocked[i]) {
+                    // Handle verticale (destra) per regolare la larghezza
                     if (i < count - 1) {
                         ResizeHandleX(
                             align = Alignment.CenterEnd,
@@ -257,13 +267,14 @@ private fun ResizableRow(
                                         widthsDp[i] = snapDp(widthsDp[i] + deltaDp, step)
                                         child.put("widthDp", widthsDp[i].toDouble())
                                     }
-                                    else -> { /* exhaustive */ }
+                                    else -> Unit
                                 }
                             },
                             onDragEnd = { activeEdge = -1 }
                         )
                     }
 
+                    // Handle orizzontali (su/giù) per variare l'altezza locale
                     ResizeHandleY(
                         align = Alignment.BottomCenter,
                         onDrag = { dyPx ->
@@ -289,6 +300,7 @@ private fun ResizableRow(
         }
     }
 }
+
 
 @Composable
 private fun BoxScope.ResizeHandleX(
@@ -343,7 +355,9 @@ private fun snapPercent5(v: Float): Float {
 private fun snapDp(v: Float, step: Float = 8f): Float =
     ((v / step).roundToInt() * step).coerceAtLeast(step)
 
-private fun pxToDp(px: Float, density: Density): Dp = with(density) { px.toDp() }
+private fun pxToDp(px: Float, density: Density): Float =
+    with(density) { px.toDp().value }
+
 
 
 private fun applyProportionalDelta(
@@ -2821,10 +2835,11 @@ if (ic.isNotBlank()) NamedIconEx(ic, null)
     uiState = uiState,
     menus = menus,
     dispatch = dispatch,
-    designerMode = designerMode,   // <— questo mancava
+    designerMode = designerMode,
     onSelect = onSelect,
     onOpenInspector = onOpenInspector
 )
+
 
 
 "Progress" -> Wrapper {
