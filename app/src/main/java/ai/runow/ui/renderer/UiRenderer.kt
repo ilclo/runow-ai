@@ -3,6 +3,10 @@
 
 package ai.runow.ui.renderer
 
+
+
+
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -170,33 +174,43 @@ private fun ResizableRow(
                 rowWidthPx  = it.size.width.toFloat()
                 rowHeightPx = it.size.height.toFloat()
             }
-            )
-            val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-            .drawBehind {
-                if (activeEdge >= 0 && count > 1 && rowWidthPx > 0f) {
-                    var acc = 0f
-                    for (i in 0 until count) {
-                        val wPx = when (sizing) {
-                            "flex"  -> rowWidthPx * weights[i].coerceAtLeast(0f)
-                            "fixed" -> widthsDp[i].dp.toPx()
-                            else    -> widthsDp[i].dp.toPx()
-                        }
-                        acc += wPx
-                        if (i < count - 1) {
-                            val thick = if (i == activeEdge) 3f else 1.5f
-                            drawLine(
-                                color = dividerColor,
-                                start = Offset(acc, 0f),
-                                end = Offset(acc, size.height),
-                                strokeWidth = thick
-                            )
+// colore dei righelli/guide (non troppo forte)
+        val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+        
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .let { if (sizing == "scroll") it.horizontalScroll(rememberScrollState()) else it }
+                .onGloballyPositioned { coords ->
+                    rowWidthPx  = coords.size.width.toFloat()
+                    rowHeightPx = coords.size.height.toFloat()
+                }
+                .drawBehind {
+                    // Disegna le guide verticali solo quando serve
+                    if (activeEdge >= 0 && count > 1 && rowWidthPx > 0f) {
+                        var acc = 0f
+                        for (j in 0 until count) {
+                            val wPx = when (sizing) {
+                                "flex"  -> rowWidthPx * weights[j].coerceAtLeast(0f)
+                                "fixed" -> widthsDp[j].dp.toPx()    // in DrawScope hai già la Density
+                                else    -> widthsDp[j].dp.toPx()
+                            }
+                            acc += wPx
+                            if (j < count - 1) {
+                                val thick = if (j == activeEdge) 3f else 1.5f
+                                drawLine(
+                                    color = dividerColor,
+                                    start = Offset(acc, 0f),
+                                    end   = Offset(acc, size.height),
+                                    strokeWidth = thick
+                                )
+                            }
                         }
                     }
-                }
-            },
-        horizontalArrangement = Arrangement.spacedBy(gap),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+                },
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
         for (i in 0 until count) {
             val child = items.optJSONObject(i) ?: continue
 
