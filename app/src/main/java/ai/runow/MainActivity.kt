@@ -18,6 +18,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.*
 import ai.runow.ui.renderer.UiScreen
 import java.util.Locale
+// MainActivity.kt (in alto con gli altri import)
+import ai.runow.ui.renderer.DesignerRoot
+
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
