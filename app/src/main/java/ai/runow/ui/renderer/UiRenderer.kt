@@ -778,9 +778,9 @@ when (name?.lowercase()?.trim()) {
 null, "", "(default)", "default" -> null
 "sans", "sansserif", "inter", "roboto", "urbanist", "poppins",
 "manrope", "mulish", "rubik", "space_grotesk", "ibm_plex_sans" -> FontFamily.SansSerif
-"serif", "ibm_plex_serif", "noto_serif" -> FontFamily.Serif
-"mono", "monospace", "ibm_plex_mono", "jetbrains_mono" -> FontFamily.Monospace
-"cursive" -> FontFamily.Cursive
+"serif", "ibm_plex_serif", "noto_serif", "inknut_antiqua", "playfair" -> FontFamily.Serif
+"mono", "monospace", "ibm_plex_mono", "jetbrains_mono", "space_mono" -> FontFamily.Monospace
+"cursive", "sacramento" -> FontFamily.Cursive
 else -> null
 }
 
@@ -860,9 +860,36 @@ Font(R.font.jetbrains_mono_medium,  FontWeight.Medium),
 Font(R.font.jetbrains_mono_bold,    FontWeight.Bold),
 Font(R.font.jetbrains_mono_italic,  FontWeight.Normal, FontStyle.Italic)
 )
+"inknut_antiqua" -> FontFamily(
+Font(R.font.inknut_antiqua_regular, FontWeight.Normal),
+// commenta o rimuovi quelli che non hai nel pacchetto:
+Font(R.font.inknut_antiqua_medium,  FontWeight.Medium),
+Font(R.font.inknut_antiqua_semibold,FontWeight.SemiBold),
+Font(R.font.inknut_antiqua_bold,    FontWeight.Bold)
+)
+"playfair" -> FontFamily(
+Font(R.font.playfair_regular,        FontWeight.Normal),
+// se presenti:
+Font(R.font.playfair_italic,         FontWeight.Normal, FontStyle.Italic),
+Font(R.font.playfair_semibold,       FontWeight.SemiBold),
+Font(R.font.playfair_semibold_italic,FontWeight.SemiBold, FontStyle.Italic),
+Font(R.font.playfair_bold,           FontWeight.Bold),
+Font(R.font.playfair_bold_italic,    FontWeight.Bold, FontStyle.Italic)
+)
+"sacramento" -> FontFamily(
+// normalmente ha solo Regular
+Font(R.font.sacramento_regular, FontWeight.Normal)
+)
+"space_mono" -> FontFamily(
+Font(R.font.space_mono_regular,     FontWeight.Normal),
+Font(R.font.space_mono_italic,      FontWeight.Normal, FontStyle.Italic),
+Font(R.font.space_mono_bold,        FontWeight.Bold),
+Font(R.font.space_mono_bold_italic, FontWeight.Bold,   FontStyle.Italic)
+)
 else -> null
 }
 }
+
 
 private val FONT_WEIGHT_OPTIONS: List<Pair<String, FontWeight>> = listOf(
 "Thin" to FontWeight.Thin,
