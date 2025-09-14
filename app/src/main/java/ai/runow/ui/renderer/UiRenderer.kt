@@ -170,6 +170,7 @@ private fun ResizableRow(
                 rowWidthPx  = it.size.width.toFloat()
                 rowHeightPx = it.size.height.toFloat()
             }
+            )
             val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
             .drawBehind {
                 if (activeEdge >= 0 && count > 1 && rowWidthPx > 0f) {
