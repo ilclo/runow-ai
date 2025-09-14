@@ -224,14 +224,14 @@ private fun ResizableRow(
 
 Box(
     cellBase
-        .pointerInput(resizable, designerMode, unlocked[i]) {
-            if (resizable && !designerMode) {
-                androidx.compose.foundation.gestures.detectTapGestures(
-                    onDoubleTap = { unlocked[i] = !unlocked[i] } // sblocca/lock
-                )
-            }
+    .pointerInput(resizable, designerMode, unlocked[i]) {
+        if (resizable && !designerMode) {
+            androidx.compose.foundation.gestures.detectTapGestures(
+                onDoubleTap = { unlocked[i] = !unlocked[i] }
+            )
         }
-) {
+    }
+
     // 1) Contenuto reale del blocco
     val p2 = "$path/items/$i"
     RenderBlock(child, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
@@ -365,33 +365,26 @@ private fun BoxScope.ResizeHandleX(
 }
 
 @Composable
-private fun BoxScope.ResizeHandleY(
-    align: Alignment,
-    onDragStart: () -> Unit = {},
-    onDrag: (Float) -> Unit,
-    onDragEnd: () -> Unit = {}
+private fun ResizeHandleY(
+    active: Boolean,
+    onDrag: (Float) -> Unit
 ) {
-    val handleH = 10.dp
+    if (!active) return
     Box(
         Modifier
-            .align(align)
             .fillMaxWidth()
-            .height(handleH)
-            .cursorForResizeVert()
+            .height(12.dp)
             .pointerInput(Unit) {
                 androidx.compose.foundation.gestures.detectDragGestures(
-                    onDragStart = { onDragStart() },
-                    onDragEnd = { onDragEnd() },
-                    onDragCancel = { onDragEnd() },
                     onDrag = { change, dragAmount ->
-                        // change.consume() opzionale; evitare import extra se dà noia
+                        change.consume() // o consumePositionChange() a seconda della tua versione di Compose
                         onDrag(dragAmount.y)
                     }
                 )
             }
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
     )
 }
+
 
 
 /* ---- Helpers snapping & proporzioni (5%) ---- */
@@ -1444,44 +1437,61 @@ val effectiveLayout = remember(layout, previewRoot) {
 if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
 }
 
+// ... dentro UiScreen, dopo aver calcolato 'effectiveLayout'
 Box(Modifier.fillMaxSize()) {
-// ====== SFONDO PAGINA (colore/gradient/immagine) ======
-RenderPageBackground(effectiveLayout.optJSONObject("page"))
+    // ====== SFONDO PAGINA ======
+    RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
-ScreenScaffoldWithPinnedTopBar(
-layout = effectiveLayout,
-dispatch = dispatch,
-uiState = uiState,
-designerMode = designMode,
-menus = menus,
-selectedPathSetter = { selectedPath = it },
-extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-scaffoldPadding = scaffoldPadding
-)
+    // ====== CONTENUTO con Scaffold di ROOT ======
+    RenderRootScaffold(
+        layout = effectiveLayout,
+        dispatch = dispatch,
+        uiState = uiState,
+        designerMode = designMode,
+        menus = menus,
+        selectedPathSetter = { selectedPath = it },
+        extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+        scaffoldPadding = scaffoldPadding
+    )
 
+    if (designMode) {
+        DesignerOverlay(
+            screenName = screenName,
+            layout = layout!!,
+            selectedPath = selectedPath,
+            setSelectedPath = { selectedPath = it },
+            onLiveChange = { tick++ },
+            onLayoutChange = {
+                UiLoader.saveDraft(ctx, screenName, layout!!)
+                layout = JSONObject(layout.toString())
+                tick++
+            },
+            onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+            onPublish = {
+                UiLoader.saveDraft(ctx, screenName, layout!!)
+                UiLoader.publish(ctx, screenName)
+            },
+            onReset = {
+                UiLoader.resetPublished(ctx, screenName)
+                layout = UiLoader.loadLayout(ctx, screenName)
+                selectedPath = null
+                tick++
+            },
+            topPadding = scaffoldPadding.calculateTopPadding(),
+            onOverlayHeight = { overlayHeightPx = it },
+            onOpenRootInspector = { /* gestito sotto */ },
+            onRootLivePreview = { previewRoot = it }
+        )
+    }
 
-if (designMode) {
-DesignerOverlay(
-    screenName = screenName,
-    layout = layout!!,
-    selectedPath = selectedPath,
-    setSelectedPath = { selectedPath = it },
-    onLiveChange = { tick++ },
-    onLayoutChange = {
-        UiLoader.saveDraft(ctx, screenName, layout!!)
-        // forzo un nuovo oggetto per triggerare recomposition
-        layout = JSONObject(layout.toString())
-        tick++
-    },
-    onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-    onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!) }
-) { measuredHeightPx ->
-    // aggiorna l’altezza dell’overlay (se il tuo DesignerOverlay espone questa callback)
-    overlayHeightPx = measuredHeightPx
-}
-} // end if (designMode)
-} // end Box(Modifier.fillMaxSize())
-} // end fun UiScreen(...)
+    // ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
+    DesignSwitchKnob(
+        isDesigner = designMode,
+        onToggle = { designMode = !designMode }
+    )
+} // <- chiude Box
+} // <- chiude UiScreen
+
 
 /* =========================================================
 * KNOB laterale (trascinabile) per commutare Designer/Anteprima
