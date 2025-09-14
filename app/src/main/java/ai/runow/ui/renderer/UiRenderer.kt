@@ -1547,16 +1547,8 @@ fun UiScreen(
     var overlayHeightPx by remember { mutableStateOf(0) }
     val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
 
-    // Modalità persistenti per schermata
+    // Modalità designer persistente per schermata
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
-
-    // --- NUOVO: modalità "Resize" runtime (ridimensiona/sposta blocchi reali)
-    var resizeMode by rememberSaveable(screenName) { mutableStateOf(false) }
-
-    // Espone lo stato di resize nel uiState, così i blocchi possono reagire.
-    LaunchedEffect(resizeMode) {
-        uiState["_runtimeResize"] = resizeMode
-    }
 
     // ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
     var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
@@ -1586,7 +1578,6 @@ fun UiScreen(
             scaffoldPadding = scaffoldPadding
         )
 
-        // ====== OVERLAY DESIGNER (comportamento invariato) ======
         if (designMode) {
             DesignerOverlay(
                 screenName = screenName,
@@ -1600,7 +1591,10 @@ fun UiScreen(
                     tick++
                 },
                 onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
+                onPublish = {
+                    UiLoader.saveDraft(ctx, screenName, layout!!)
+                    UiLoader.publish(ctx, screenName)
+                },
                 onReset = {
                     UiLoader.resetPublished(ctx, screenName)
                     layout = UiLoader.loadLayout(ctx, screenName)
@@ -1609,168 +1603,16 @@ fun UiScreen(
                 },
                 topPadding = scaffoldPadding.calculateTopPadding(),
                 onOverlayHeight = { overlayHeightPx = it },
-                onOpenRootInspector = { /* gestito sotto */ },
+                onOpenRootInspector = { /* gestito altrove se serve */ },
                 onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
             )
         }
 
-        // ====== NUOVO: HUD MODALITÀ RESIZE (leggero, non invasivo) ======
-        if (resizeMode) {
-            ResizeHud(onExit = { resizeMode = false })
-        }
-
-        // ====== NUOVO: SPEED‑DIAL radiale per scegliere la modalità ======
-        ModeSpeedDial(
+        // ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
+        DesignSwitchKnob(
             isDesigner = designMode,
-            isResize = resizeMode,
-            onPick = { mode ->
-                when (mode) {
-                    Mode.Preview -> { designMode = false; resizeMode = false }
-                    Mode.Resize  -> { designMode = false; resizeMode = true  }
-                    Mode.Designer-> { resizeMode = false; designMode = true  }
-                }
-            }
+            onToggle = { designMode = !designMode }
         )
-    }
-
-    // ------------------------------------------------------------
-    // Composable locali di supporto (nessuna dipendenza esterna)
-    // ------------------------------------------------------------
-
-    enum class Mode { Preview, Resize, Designer }
-
-    @Composable
-    fun BoxScope.ResizeHud(onExit: () -> Unit) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            tonalElevation = 8.dp,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 12.dp, start = 12.dp, end = 12.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(Icons.Filled.Tune, contentDescription = null)
-                Text(
-                    "Modalità resize attiva: tieni premuto un blocco reale per mostrare i bordi drag. Doppio tap per spostarlo; tocca fuori per uscire.",
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Spacer(Modifier.width(4.dp))
-                TextButton(onClick = onExit) { Text("Esci") }
-            }
-        }
-    }
-
-    @Composable
-    fun BoxScope.ModeSpeedDial(
-        isDesigner: Boolean,
-        isResize: Boolean,
-        onPick: (Mode) -> Unit
-    ) {
-        var expanded by remember { mutableStateOf(false) }
-        val current = when {
-            isDesigner -> Mode.Designer
-            isResize -> Mode.Resize
-            else -> Mode.Preview
-        }
-
-        // Ancorato a destra, a metà schermo (coerente con il knob esistente)
-        val anchorMod = Modifier
-            .align(Alignment.CenterEnd)
-            .padding(end = 12.dp)
-
-        // FAB principale: tap = cicla modalità, long‑press = apre il radiale
-        Box(anchorMod) {
-            FloatingActionButton(
-                onClick = {
-                    val next = when (current) {
-                        Mode.Preview  -> Mode.Designer
-                        Mode.Designer -> Mode.Resize
-                        Mode.Resize   -> Mode.Preview
-                    }
-                    onPick(next)
-                },
-                modifier = Modifier.pointerInput(Unit) {
-                    // Long‑press per aprire/chiudere lo Speed‑Dial (FQN per evitare import extra)
-                    androidx.compose.foundation.gestures.detectTapGestures(
-                        onLongPress = { expanded = !expanded }
-                    )
-                },
-                containerColor = when (current) {
-                    Mode.Designer -> MaterialTheme.colorScheme.primary
-                    Mode.Resize   -> MaterialTheme.colorScheme.secondaryContainer
-                    Mode.Preview  -> MaterialTheme.colorScheme.surfaceVariant
-                },
-                contentColor = when (current) {
-                    Mode.Designer -> MaterialTheme.colorScheme.onPrimary
-                    Mode.Resize   -> MaterialTheme.colorScheme.onSecondaryContainer
-                    Mode.Preview  -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                shape = CircleShape
-            ) {
-                val icon = when (current) {
-                    Mode.Designer -> Icons.Filled.Build
-                    Mode.Resize   -> Icons.Filled.Tune
-                    Mode.Preview  -> Icons.Filled.Visibility
-                }
-                Icon(icon, contentDescription = "Cambia modalità")
-            }
-
-            // Radiale “semplice”: tre azioni disposte a sinistra (alto/centro/basso)
-            if (expanded) {
-                // Scrim per chiudere
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .clickable { expanded = false }
-                )
-
-                val dist = with(LocalDensity.current) { 88.dp.toPx().toInt() }
-                val gap  = with(LocalDensity.current) { 72.dp.toPx().toInt() }
-
-                // Helper per un piccolo FAB posizionato a offset relativo all'anchor
-                @Composable
-                fun ActionFab(offset: IntOffset, icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
-                    SmallFloatingActionButton(
-                        onClick = {
-                            expanded = false
-                            onClick()
-                        },
-                        modifier = Modifier.offset { offset },
-                        containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                        shape = CircleShape
-                    ) {
-                        Icon(icon, contentDescription = label)
-                    }
-                }
-
-                // Posizioni: sinistra‑alto, sinistra‑centro, sinistra‑basso
-                ActionFab(
-                    offset = IntOffset(-dist, -gap),
-                    icon = Icons.Filled.Visibility,
-                    label = "Anteprima",
-                    selected = current == Mode.Preview
-                ) { onPick(Mode.Preview) }
-
-                ActionFab(
-                    offset = IntOffset(-dist, 0),
-                    icon = Icons.Filled.Tune,
-                    label = "Resize",
-                    selected = current == Mode.Resize
-                ) { onPick(Mode.Resize) }
-
-                ActionFab(
-                    offset = IntOffset(-dist, +gap),
-                    icon = Icons.Filled.Build,
-                    label = "Designer",
-                    selected = current == Mode.Designer
-                ) { onPick(Mode.Designer) }
-            }
-        }
     }
 }
 
