@@ -447,199 +447,110 @@ private fun Modifier.cursorForResizeHoriz(): Modifier = this // placeholder per 
 private fun Modifier.cursorForResizeVert(): Modifier = this   // idem
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 @Composable
 private fun ScreenScaffoldWithPinnedTopBar(
-layout: JSONObject,
-dispatch: (String) -> Unit,
-uiState: MutableMap<String, Any>,
-designerMode: Boolean,
-menus: Map<String, JSONArray>,
-selectedPathSetter: (String) -> Unit,
-extraPaddingBottom: Dp,
-scaffoldPadding: PaddingValues
+    layout: JSONObject,
+    dispatch: (String) -> Unit,
+    uiState: MutableMap<String, Any>,
+    designerMode: Boolean,
+    menus: Map<String, JSONArray>,
+    selectedPathSetter: (String) -> Unit,
+    extraPaddingBottom: Dp,
+    scaffoldPadding: PaddingValues
 ) {
-val title = layout.optString("topTitle", "")
-val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // legacy fallback
-val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy fallback
+    val title = layout.optString("topTitle", "")
+    val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // legacy fallback
+    val bottomBarNode  = layout.optJSONObject("bottomBar")
+    val bottomBarItems = bottomBarNode?.optJSONArray("items")
+    val fab   = layout.optJSONObject("fab")
+    val topBarConf = layout.optJSONObject("topBar")
 
-val bottomBarNode  = layout.optJSONObject("bottomBar")
-val bottomBarCfg   = bottomBarNode?.optJSONObject("container")
-val bottomBarItems = bottomBarNode?.optJSONArray("items")
-val fab   = layout.optJSONObject("fab")
-val scroll = layout.optBoolean("scroll", true)
-val topBarConf = layout.optJSONObject("topBar")
+    // pinned/enterAlways/exitUntilCollapsed
+    val topScrollBehavior =
+        when (topBarConf?.optString("scroll", "none")) {
+            "pinned"             -> TopAppBarDefaults.pinnedScrollBehavior()
+            "enterAlways"        -> TopAppBarDefaults.enterAlwaysScrollBehavior()
+            "exitUntilCollapsed" -> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+            else                 -> null
+        }
 
-// Pinned per difetto se 'scroll' nella top bar è "pinned"
-val topScrollBehavior =
-when (topBarConf?.optString("scroll", "none")) {
-"pinned"            -> TopAppBarDefaults.pinnedScrollBehavior()
-"enterAlways"       -> TopAppBarDefaults.enterAlwaysScrollBehavior()
-"exitUntilCollapsed"-> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-else                -> null
-}
+    Scaffold(
+        modifier = if (topScrollBehavior != null)
+            Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
+        else Modifier,
 
-Scaffold(
-// Colleghiamo lo scroll behavior della top bar
-modifier = if (topScrollBehavior != null)
-Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
-else Modifier,
+        // niente riduzione del contenuto: gestiamo noi gli insets
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
 
-// Evitiamo che l'IME (tastiera) o i system insets facciano “rimpicciolire” lo spazio del body
-// La TopBar resta ferma; il contenuto gestisce gli insets manualmente.
-contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            if (topBarConf != null) {
+                RenderTopBar(topBarConf, dispatch, topScrollBehavior)
+            } else if (title.isNotBlank() || topActions.length() > 0) {
+                TopAppBar(
+                    title = { Text(title) },
+                    actions = {
+                        for (i in 0 until topActions.length()) {
+                            val a = topActions.optJSONObject(i) ?: continue
+                            IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                                NamedIconEx(a.optString("icon", "more_vert"), null)
+                            }
+                        }
+                    }
+                )
+            }
+        },
 
-topBar = {
-if (topBarConf != null) {
-RenderTopBar(topBarConf, dispatch, topScrollBehavior)
-} else {
-// Fallback legacy: topTitle/topActions
-if (title.isNotBlank() || topActions.length() > 0) {
-TopAppBar(
-title = { Text(title) },
-actions = {
-for (i in 0 until topActions.length()) {
-val a = topActions.optJSONObject(i) ?: continue
-IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-NamedIconEx(a.optString("icon", "more_vert"), null)
-}
-}
-}
-)
-}
-}
-},
+        bottomBar = {
+            if (bottomBarItems != null && bottomBarItems.length() > 0) {
+                BottomAppBar {
+                    for (i in 0 until bottomBarItems.length()) {
+                        val it = bottomBarItems.optJSONObject(i) ?: continue
+                        when (it.optString("type", "button")) {
+                            "button" -> {
+                                val act = it.optString("actionId")
+                                IconButton(onClick = { if (act.isNotBlank()) dispatch(act) }) {
+                                    NamedIconEx(it.optString("icon", "radio_button_unchecked"), null)
+                                }
+                            }
+                            else -> Unit
+                        }
+                    }
+                }
+            }
+        },
 
-bottomBar = {
-// Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
-val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
-JSONArray().apply {
-for (i in 0 until bottomButtons.length()) {
-val it = bottomButtons.optJSONObject(i) ?: continue
-put(JSONObject().apply {
-put("type", "button")
-put("label", it.optString("label","Button"))
-put("actionId", it.optString("actionId",""))
-put("style", "text")
-})
-}
-}
-} else null
-
-if (items != null && items.length() > 0) {
-StyledContainer(
-cfg = bottomBarCfg ?: JSONObject(),
-contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-) {
-Row(
-Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.spacedBy(8.dp),
-verticalAlignment = Alignment.CenterVertically
-) {
-RenderBarItemsRow(items, dispatch)
-}
-}
-}
-},
-
-floatingActionButton = {
-fab?.let {
-FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
-NamedIconEx(it.optString("icon", "play_arrow"), null)
-}
-}
-},
-
-containerColor = Color.Transparent
-) { innerPadding ->
-// Contenuti body
-val blocks = layout.optJSONArray("blocks") ?: JSONArray()
-
-val host: @Composable () -> Unit = {
-Column(
-Modifier
-.fillMaxSize()
-// Padding fornito dallo Scaffold (topBar/bottomBar), poi padding esterno dello screen
-.padding(innerPadding)
-.padding(scaffoldPadding)
-// Evita che la tastiera sovrapponga i contenuti: la TopBar resta fissa
-.imePadding()
-// Protezione per notch/bordi orizzontali (la TopBar gestisce già il top)
-.windowInsetsPadding(
-WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-)
-.padding(
-start = 16.dp,
-end = 16.dp,
-top = 16.dp,
-bottom = extraPaddingBottom
-),
-verticalArrangement = Arrangement.spacedBy(12.dp)
-) {
-for (i in 0 until blocks.length()) {
-val block = blocks.optJSONObject(i) ?: continue
-val path = "/blocks/$i"
-RenderBlock(
-block = block,
-dispatch = dispatch,
-uiState = uiState,
-designerMode = designerMode,
-path = path,
-menus = menus,
-onSelect = { p -> selectedPathSetter(p) },
-onOpenInspector = { p -> selectedPathSetter(p) }
-)
-}
-}
-}
-
-if (scroll) {
-Column(Modifier.verticalScroll(rememberScrollState())) { host() }
-} else {
-host()
-}
-}
+        floatingActionButton = {
+            if (fab != null) {
+                val act = fab.optString("actionId")
+                FloatingActionButton(onClick = { if (act.isNotBlank()) dispatch(act) }) {
+                    NamedIconEx(fab.optString("icon", "add"), null)
+                }
+            }
+        }
+    ) { innerPadding ->
+        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(scaffoldPadding)
+                .padding(bottom = extraPaddingBottom)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+        ) {
+            for (i in 0 until blocks.length()) {
+                val b = blocks.optJSONObject(i) ?: continue
+                RenderBlock(
+                    b,
+                    path = "blocks/$i",
+                    dispatch = dispatch,
+                    uiState = uiState,
+                    menus = menus,
+                    onSelect = { selectedPathSetter(it) },
+                    onOpenInspector = { selectedPathSetter(it) }
+                )
+            }
+        }
+    }
 }
 
 
