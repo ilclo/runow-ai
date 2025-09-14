@@ -2,9 +2,10 @@
 
 package ai.runow.ui.renderer
 
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -87,229 +88,361 @@ import androidx.compose.foundation.layout.WindowInsets
 enum class AppMode { Real, Designer, Resize }
 val LocalAppMode = compositionLocalOf { AppMode.Real }
 
+
 @Composable
 private fun ResizableRow(
     rowBlock: JSONObject,
     path: String,
-    items: JSONArray,
     gap: Dp,
+    scrollable: Boolean,
     dispatch: (String) -> Unit,
     uiState: MutableMap<String, Any>,
-    designerMode: Boolean,
-    menus: Map<String, JSONArray>,
-    onSelect: (String) -> Unit,
-    onOpenInspector: (String) -> Unit
+    menus: Map<String, JSONArray>
 ) {
-    // sizing: flex (weight), fixed (dp), scroll (gli altri non si toccano)
-    val sizing = rowBlock.optString("sizing", "flex")
-    val count = items.length()
+    val items = rowBlock.optJSONArray("items") ?: JSONArray()
+    val density = LocalDensity.current
+    val guideColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
 
-    // misure row
-    var rowWidthPx by remember(path) { mutableStateOf(0f) }
-    var rowHeightPx by remember(path) { mutableStateOf(0f) }
+    // Stato: pesi correnti (solo per non scrollabile)
+    val weightsState = remember(path) { mutableStateOf(loadOrInitWeights(rowBlock)) }
 
-    // stato locale: widths/weights/heights
-    val weights = remember(path, count) {
-        MutableList(count) { idx ->
-            val it = items.optJSONObject(idx)
-            when {
-                it == null -> 0f
-                it.optString("type") == "SpacerH" && it.optString("mode","fixed") == "fixed" -> 0f
-                else -> it.optDouble("weight", Double.NaN).takeIf { d -> !d.isNaN() }?.toFloat()
-                    ?: (1f / count.coerceAtLeast(1))
-            }
-        }.toMutableStateList()
-    }
-    val widthsDp = remember(path, count) {
-        MutableList(count) { idx ->
-            items.optJSONObject(idx)?.optDouble("widthDp", Double.NaN)?.takeIf { !it.isNaN() }?.toFloat()
-                ?: 120f
-        }.toMutableStateList()
-    }
-    val heightsDp = remember(path, count) {
-        MutableList(count) { idx ->
-            items.optJSONObject(idx)?.optDouble("heightDp", Double.NaN)?.takeIf { !it.isNaN() }?.toFloat()
-                ?: 0f // 0 = auto
-        }.toMutableStateList()
-    }
+    // Stato: indice elemento in "resize unlocked" (long-press) o "move mode" (double-tap)
+    var activeResize by remember(path) { mutableStateOf<Int?>(null) }
+    var activeMove by remember(path) { mutableStateOf<Int?>(null) }
 
-    // indice bordo attivo: -1 = nessuno
-    var activeEdge by remember(path) { mutableStateOf(-1) }
-
-    // colore tenue per guide
-    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-
-    Row(
+    // Tap fuori dai blocchi = chiude modalità
+    Column(
         Modifier
             .fillMaxWidth()
-            .let { if (sizing == "scroll") it.horizontalScroll(rememberScrollState()) else it }
-            .onGloballyPositioned { coords ->
-                rowWidthPx = coords.size.width.toFloat()
-                rowHeightPx = coords.size.height.toFloat()
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = {
+                    activeResize = null
+                    activeMove = null
+                })
             }
-            .drawBehind {
-                if (activeEdge >= 0 && count > 1 && rowWidthPx > 0) {
-                    var acc = 0f
-                    for (j in 0 until count) {
-                        val wPx = when (sizing) {
-                            "flex"  -> rowWidthPx * weights[j].coerceAtLeast(0f)
-                            "fixed" -> widthsDp[j].dp.toPx()
-                            else    -> widthsDp[j].dp.toPx()
-                        }
-                        acc += wPx
-                        if (j < count - 1) {
-                            val thick = if (j == activeEdge) 3f else 1.5f
-                            drawLine(
-                                color = dividerColor,
-                                start = Offset(acc, 0f),
-                                end   = Offset(acc, size.height),
-                                strokeWidth = thick
-                            )
-                        }
-                    }
-                }
-            },
-        horizontalArrangement = Arrangement.spacedBy(gap),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        for (i in 0 until count) {
-            val child = items.optJSONObject(i) ?: continue
-            val isFixedSpacer = child.optString("type") == "SpacerH" && child.optString("mode","fixed") == "fixed"
-            if (isFixedSpacer) {
-                Spacer(Modifier.width(child.optDouble("widthDp", 16.0).toFloat().dp))
-                continue
-            }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val count = items.length()
 
-            // base size del box
-            val baseMod = when (sizing) {
-                "flex"  -> Modifier.weight(weights[i].coerceAtLeast(0.0001f), fill = true)
-                "fixed",
-                "scroll"-> Modifier.width(widthsDp[i].dp)
-                else    -> Modifier.weight(1f, fill = true)
-            }.then(if (heightsDp[i] > 0f) Modifier.height(heightsDp[i].dp) else Modifier)
+            for (i in 0 until count) {
+                val child = items.optJSONObject(i) ?: continue
+                val childPath = "$path/items/$i"
 
-            Box(baseMod) {
-                val p2 = "$path/items/$i"
-                // contenuto reale
-                RenderBlock(child, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
+                val itemMod = if (!scrollable) {
+                    // usa i pesi per distribuire la riga
+                    val w = weightsState.value.getOrNull(i) ?: 1f
+                    Modifier.weight(w, fill = true)
+                } else {
+                    Modifier // in scroll manteniamo dimensioni intrinseche / fixed dp
+                }
 
-                // — maniglie orizzontali (dx) per larghezza —
-                if (i < count - 1) {
+                Box(itemMod) {
+                    // Contenuto reale
+                    RenderBlock(child, dispatch, uiState, designerMode = false, path = childPath, menus = menus, onSelect = {}, onOpenInspector = {})
+
+                    // Layer gesture: long-press per sbloccare resize; double-tap per move mode
                     Box(
                         Modifier
-                            .align(Alignment.CenterEnd)
-                            .width(12.dp)
-                            .fillMaxHeight()
-                            .pointerInput(sizing, rowWidthPx) {
-                                detectDragGestures(
-                                    onDragStart = { activeEdge = i },
-                                    onDragEnd   = { activeEdge = -1 },
-                                    onDragCancel= { activeEdge = -1 },
-                                ) { change, drag ->
-                                    change.consume()
+                            .matchParentSize()
+                            .pointerInput(i) {
+                                detectTapGestures(
+                                    onLongPress = { activeResize = i; activeMove = null },
+                                    onDoubleTap = { activeMove = if (activeMove == i) null else i }
+                                )
+                            }
+                    )
 
-                                    when (sizing) {
-                                        "flex" -> {
-                                            if (rowWidthPx <= 0f) return@detectDragGestures
-                                            val delta = (drag.x / rowWidthPx)
-                                            // distribuisci su tutti gli altri (non spacer fissi)
-                                            val others = (0 until count).filter { it != i && !(items.optJSONObject(it)?.let { o -> o.optString("type")=="SpacerH" && o.optString("mode","fixed")=="fixed" } ?: false) }
-                                            if (others.isEmpty()) return@detectDragGestures
-                                            val newWi = (weights[i] + delta).coerceIn(0.05f, 0.95f)
-                                            val applied = newWi - weights[i]
-                                            if (applied == 0f) return@detectDragGestures
-                                            val share = -applied / others.size
-                                            weights[i] = newWi
-                                            others.forEach { j -> weights[j] = (weights[j] + share).coerceIn(0.05f, 0.95f) }
-                                            // snap 5% e normalizza
-                                            var sum = 0f
-                                            for (k in 0 until count) { weights[k] = ((weights[k]*20f).roundToInt().coerceIn(1,19)/20f); sum += weights[k] }
-                                            if (sum > 0f) for (k in 0 until count) weights[k] = (weights[k]/sum).coerceIn(0.05f,0.95f)
-                                            // scrivi su JSON
-                                            items.optJSONObject(i)?.put("weight", weights[i].toDouble())
-                                            others.forEach { j -> items.optJSONObject(j)?.put("weight", weights[j].toDouble()) }
-                                        }
-                                        "fixed" -> {
-                                            val step = 8f
-                                            widthsDp[i] = (((widthsDp[i] + drag.x.toDp().value) / step).roundToInt() * step).coerceAtLeast(48f)
-                                            items.optJSONObject(i)?.put("widthDp", widthsDp[i].toDouble())
-                                            // ridistribuisci gli altri (se non scroll)
-                                            val others = (0 until count).filter { it != i }
-                                            if (others.isNotEmpty()) {
-                                                val share = -drag.x.toDp().value / others.size
-                                                others.forEach { j ->
-                                                    widthsDp[j] = (((widthsDp[j] + share) / step).roundToInt() * step).coerceAtLeast(48f)
-                                                    items.optJSONObject(j)?.put("widthDp", widthsDp[j].toDouble())
-                                                }
-                                            }
-                                        }
-                                        else -> { // scroll
-                                            val step = 8f
-                                            widthsDp[i] = (((widthsDp[i] + drag.x.toDp().value) / step).roundToInt() * step).coerceAtLeast(48f)
-                                            items.optJSONObject(i)?.put("widthDp", widthsDp[i].toDouble())
+                    // Maniglie + righelli quando unlocked
+                    if (activeResize == i) {
+                        ResizeHandles(
+                            onResizeHorizontal = { deltaPx, isRightEdge, rowWidthPx ->
+                                if (!scrollable) {
+                                    val newWeights = applyHorizontalDeltaToWeights(
+                                        current = weightsState.value,
+                                        index = i,
+                                        deltaPx = if (isRightEdge) deltaPx else -deltaPx,
+                                        rowWidthPx = rowWidthPx
+                                    )
+                                    weightsState.value = newWeights
+                                    // Commit nel JSON (salviamo i pesi nei figli)
+                                    commitWeightsToRow(rowBlock, newWeights)
+                                } else {
+                                    // Scrollabile: larghezza fissa in dp sul container del child
+                                    val dp = with(density) { deltaPx.toDp() }
+                                    growChildWidthDp(child, dp * (if (isRightEdge) 1f else -1f))
+                                }
+                            },
+                            onResizeVertical = { deltaPx, isBottomEdge ->
+                                val dp = with(density) { deltaPx.toDp() }
+                                growChildHeightDp(child, if (isBottomEdge) dp else -dp)
+                            },
+                            guideColor = guideColor
+                        )
+                    }
+
+                    // Riordino tra fratelli con drag orizzontale (dopo double-tap)
+                    if (activeMove == i) {
+                        DraggableReorderOverlay(
+                            index = i,
+                            count = count,
+                            onMove = { from, to ->
+                                if (from != to) {
+                                    moveInArray(items, from, to)
+                                    // riallinea anche i pesi se presenti
+                                    if (!scrollable) {
+                                        val ws = weightsState.value.toMutableList()
+                                        if (from in ws.indices && to in ws.indices) {
+                                            val w = ws.removeAt(from)
+                                            ws.add(to, w)
+                                            weightsState.value = ws
+                                            commitWeightsToRow(rowBlock, ws)
                                         }
                                     }
+                                    activeMove = to
                                 }
                             }
-                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                    )
+                        )
+                    }
                 }
-
-                // — maniglie verticali (alto/basso) per altezza —
-                listOf(Alignment.TopCenter to -1, Alignment.BottomCenter to +1).forEach { (align, sign) ->
-                    Box(
-                        Modifier
-                            .align(align)
-                            .fillMaxWidth()
-                            .height(10.dp)
-                            .pointerInput(Unit) {
-                                detectDragGestures { change, drag ->
-                                    change.consume()
-                                    val step = 8f
-                                    val deltaDp = drag.y.toDp().value * sign
-                                    val base = heightsDp[i].takeIf { it > 0f } ?: (rowHeightPx.toDp().value)
-                                    heightsDp[i] = (((base + deltaDp) / step).roundToInt() * step).coerceAtLeast(32f)
-                                    items.optJSONObject(i)?.put("heightDp", heightsDp[i].toDouble())
-                                }
-                            }
-                            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                    )
-                }
-
-                // — doppio tap: spostamento (swap) —
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .pointerInput(count) {
-                            detectTapGestures(
-                                onDoubleTap = {
-                                    // semplice esempio: scambia col precedente (se c'è)
-                                    val j = (i - 1).coerceAtLeast(0)
-                                    if (j != i) moveInArray(items, i, -1)
-                                }
-                            )
-                        }
-                )
             }
         }
     }
 }
 
+// ---- Maniglie/righelli ------------------------------------------------------
 
 @Composable
-private fun BoxScope.ResizeModeFab(isResize: Boolean, onToggle: () -> Unit) {
-    FloatingActionButton(
-        onClick = onToggle,
-        modifier = Modifier
+private fun BoxScope.ResizeHandles(
+    onResizeHorizontal: (deltaPx: Float, isRightEdge: Boolean, rowWidthPx: Float) -> Unit,
+    onResizeVertical:   (deltaPx: Float, isBottomEdge: Boolean) -> Unit,
+    guideColor: Color
+) {
+    val density = LocalDensity.current
+    val handleW = 14.dp
+    val handleH = 14.dp
+    var rowWidthPx by remember { mutableStateOf(1f) }
+
+    // Misura larghezza del box per calcolare il delta in peso
+    Box(Modifier.matchParentSize().onGloballyPositioned { coords ->
+        rowWidthPx = coords.size.width.toFloat().coerceAtLeast(1f)
+    })
+
+    // Vertical guides (destra/sinistra)
+    // SINISTRA
+    Box(
+        Modifier
+            .fillMaxHeight()
+            .width(handleW)
+            .align(Alignment.CenterStart)
+            .drawWithContent {
+                drawContent()
+                // linea guida
+                drawLine(
+                    color = guideColor,
+                    start = Offset(x = size.width, y = 0f),
+                    end   = Offset(x = size.width, y = size.height),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    onResizeHorizontal(drag.x, isRightEdge = false, rowWidthPx = rowWidthPx)
+                }
+            }
+    )
+
+    // DESTRA
+    Box(
+        Modifier
+            .fillMaxHeight()
+            .width(handleW)
             .align(Alignment.CenterEnd)
-            .offset(x = 0.dp, y = 88.dp), // sotto la levetta attuale
-        containerColor = if (isResize) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = if (isResize) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-        shape = CircleShape
-    ) {
-        Icon(Icons.Filled.OpenWith, contentDescription = "Resize mode")
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    color = guideColor,
+                    start = Offset(x = 0f, y = 0f),
+                    end   = Offset(x = 0f, y = size.height),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    onResizeHorizontal(drag.x, isRightEdge = true, rowWidthPx = rowWidthPx)
+                }
+            }
+    )
+
+    // Horizontal guides (sopra/sotto)
+    // SOPRA
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(handleH)
+            .align(Alignment.TopCenter)
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    color = guideColor,
+                    start = Offset(x = 0f, y = size.height),
+                    end   = Offset(x = size.width, y = size.height),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    onResizeVertical(drag.y, isBottomEdge = false)
+                }
+            }
+    )
+
+    // SOTTO
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(handleH)
+            .align(Alignment.BottomCenter)
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    color = guideColor,
+                    start = Offset(x = 0f, y = 0f),
+                    end   = Offset(x = size.width, y = 0f),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    onResizeVertical(drag.y, isBottomEdge = true)
+                }
+            }
+    )
+}
+
+// ---- Overlay per reorder a “slot” tra fratelli ------------------------------
+
+@Composable
+private fun BoxScope.DraggableReorderOverlay(
+    index: Int,
+    count: Int,
+    onMove: (from: Int, to: Int) -> Unit
+) {
+    val density = LocalDensity.current
+    var accDx by remember { mutableStateOf(0f) }
+
+    Box(
+        Modifier
+            .matchParentSize()
+            .pointerInput(index, count) {
+                detectDragGestures(
+                    onDrag = { change, drag ->
+                        change.consume()
+                        accDx += drag.x
+                        val stepPx = with(density) { 48.dp.toPx() } // soglia semplice per scambiare slot
+                        while (accDx > stepPx && index < count - 1) {
+                            onMove(index, index + 1)
+                            accDx -= stepPx
+                        }
+                        while (accDx < -stepPx && index > 0) {
+                            onMove(index, index - 1)
+                            accDx += stepPx
+                        }
+                    },
+                    onDragEnd = { accDx = 0f }
+                )
+            }
+    )
+}
+
+// ---- Gestione pesi per righe non scrollabili -------------------------------
+
+private fun loadOrInitWeights(row: JSONObject): MutableList<Float> {
+    val items = row.optJSONArray("items") ?: JSONArray()
+    // se esistono pesi, li leggiamo, altrimenti li inizializziamo tutti = 1f (saltando SpacerH fixed)
+    val ws = MutableList(items.length()) { 1f }
+    var any = false
+    for (i in 0 until items.length()) {
+        val c = items.optJSONObject(i) ?: continue
+        if (c.optString("type") == "SpacerH" && c.optString("mode","fixed") != "expand") {
+            ws[i] = 0.5f // un minimo, ma resta “stretto”
+        }
+        val w = c.optDouble("weight", Double.NaN)
+        if (!w.isNaN()) { ws[i] = w.toFloat(); any = true }
+    }
+    if (!any) {
+        // normalizza per sicurezza
+        val sum = ws.sum().takeIf { it > 0f } ?: 1f
+        for (i in ws.indices) ws[i] = ws[i] / sum
+    }
+    return ws
+}
+
+private fun applyHorizontalDeltaToWeights(
+    current: List<Float>,
+    index: Int,
+    deltaPx: Float,
+    rowWidthPx: Float
+): MutableList<Float> {
+    val ws = current.toMutableList()
+    val total = ws.sum().takeIf { it > 0f } ?: 1f
+    val deltaW = (deltaPx / rowWidthPx) * total
+    if (deltaW == 0f) return ws
+
+    val n = ws.size
+    val others = (n - 1).coerceAtLeast(1)
+
+    // prova: sposto deltaW dall'/verso gli altri in parti uguali
+    ws[index] = (ws[index] + deltaW).coerceAtLeast(0.1f)
+    val share = (deltaW / others)
+
+    for (i in ws.indices) {
+        if (i == index) continue
+        ws[i] = (ws[i] - share).coerceAtLeast(0.1f)
+    }
+
+    // rinormalizza a "total"
+    val sum = ws.sum()
+    if (sum > 0f) {
+        val scale = total / sum
+        for (i in ws.indices) ws[i] = ws[i] * scale
+    }
+    return ws
+}
+
+private fun commitWeightsToRow(row: JSONObject, weights: List<Float>) {
+    val items = row.optJSONArray("items") ?: return
+    for (i in 0 until items.length()) {
+        val c = items.optJSONObject(i) ?: continue
+        c.put("weight", weights.getOrNull(i)?.toDouble() ?: 1.0)
     }
 }
+
+// ---- Crescita dimensioni fisse sul child (scrollabile) ---------------------
+
+private fun growChildWidthDp(child: JSONObject, deltaDp: Dp) {
+    val cont = child.optJSONObject("container") ?: JSONObject().also { child.put("container", it) }
+    val cur = cont.optDouble("widthDp", Double.NaN)
+    val base = if (cur.isNaN()) 160.0 else cur
+    cont.put("widthMode", "fixed_dp")
+    cont.put("widthDp", (base + deltaDp.value).coerceAtLeast(48.0))
+}
+
+private fun growChildHeightDp(child: JSONObject, deltaDp: Dp) {
+    val cont = child.optJSONObject("container") ?: JSONObject().also { child.put("container", it) }
+    val cur = cont.optDouble("heightDp", Double.NaN)
+    val base = if (cur.isNaN()) 48.0 else cur
+    cont.put("heightMode", "fixed_dp")
+    cont.put("heightDp", (base + deltaDp.value).coerceAtLeast(24.0))
+}
+
 
 @Composable
 private fun ScreenScaffoldWithPinnedTopBar(
@@ -1305,11 +1438,6 @@ scaffoldPadding = PaddingValues(0.dp)
 )
 }
 
-
-/* =========================================================
-* RENDER DI UNA SCHERMATA JSON (con Scaffold di root e levetta)
-* ========================================================= */
-
 @Composable
 fun UiScreen(
     screenName: String,
@@ -1339,8 +1467,16 @@ fun UiScreen(
     var overlayHeightPx by remember { mutableStateOf(0) }
     val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
 
-    // Modalità designer persistente per schermata
+    // Modalità persistenti per schermata
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
+
+    // --- NUOVO: modalità "Resize" runtime (ridimensiona/sposta blocchi reali)
+    var resizeMode by rememberSaveable(screenName) { mutableStateOf(false) }
+
+    // Espone lo stato di resize nel uiState, così i blocchi possono reagire.
+    LaunchedEffect(resizeMode) {
+        uiState["_runtimeResize"] = resizeMode
+    }
 
     // ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
     var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
@@ -1355,77 +1491,318 @@ fun UiScreen(
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
 
-    // === AGGIUNTA: modalità App (Real / Designer / Resize) ===
-    var appMode by rememberSaveable(screenName) {
-        mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
-    }
-    // Mantieni sincronizzato appMode con il toggle designer
-    LaunchedEffect(designMode) {
-        appMode = if (designMode) AppMode.Designer else AppMode.Real
-    }
+    Box(Modifier.fillMaxSize()) {
+        // ====== SFONDO PAGINA (colore/gradient/immagine) ======
+        RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
-    CompositionLocalProvider(LocalAppMode provides appMode) {
-        Box(Modifier.fillMaxSize()) {
-            // ====== SFONDO PAGINA (colore/gradient/immagine) ======
-            RenderPageBackground(effectiveLayout.optJSONObject("page"))
+        ScreenScaffoldWithPinnedTopBar(
+            layout = effectiveLayout,
+            dispatch = dispatch,
+            uiState = uiState,
+            designerMode = designMode,
+            menus = menus,
+            selectedPathSetter = { selectedPath = it },
+            extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+            scaffoldPadding = scaffoldPadding
+        )
 
-            ScreenScaffoldWithPinnedTopBar(
-                layout = effectiveLayout,
-                dispatch = dispatch,
-                uiState = uiState,
-                designerMode = designMode,
-                menus = menus,
-                selectedPathSetter = { selectedPath = it },
-                extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-                scaffoldPadding = scaffoldPadding
+        // ====== OVERLAY DESIGNER (comportamento invariato) ======
+        if (designMode) {
+            DesignerOverlay(
+                screenName = screenName,
+                layout = layout!!,
+                selectedPath = selectedPath,
+                setSelectedPath = { selectedPath = it },
+                onLiveChange = { tick++ },
+                onLayoutChange = {
+                    UiLoader.saveDraft(ctx, screenName, layout!!)
+                    layout = JSONObject(layout.toString())
+                    tick++
+                },
+                onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+                onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
+                onReset = {
+                    UiLoader.resetPublished(ctx, screenName)
+                    layout = UiLoader.loadLayout(ctx, screenName)
+                    selectedPath = null
+                    tick++
+                },
+                topPadding = scaffoldPadding.calculateTopPadding(),
+                onOverlayHeight = { overlayHeightPx = it },
+                onOpenRootInspector = { /* gestito sotto */ },
+                onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
             )
+        }
 
-            if (designMode) {
-                DesignerOverlay(
-                    screenName = screenName,
-                    layout = layout!!,
-                    selectedPath = selectedPath,
-                    setSelectedPath = { selectedPath = it },
-                    onLiveChange = { tick++ },
-                    onLayoutChange = {
-                        UiLoader.saveDraft(ctx, screenName, layout!!)
-                        layout = JSONObject(layout.toString())
-                        tick++
-                    },
-                    onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                    onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
-                    onReset = {
-                        UiLoader.resetPublished(ctx, screenName)
-                        layout = UiLoader.loadLayout(ctx, screenName)
-                        selectedPath = null
-                        tick++
-                    },
-                    topPadding = scaffoldPadding.calculateTopPadding(),
-                    onOverlayHeight = { overlayHeightPx = it },
-                    onOpenRootInspector = { /* gestito sotto */ },
-                    onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
+        // ====== NUOVO: HUD MODALITÀ RESIZE (leggero, non invasivo) ======
+        if (resizeMode) {
+            ResizeHud(onExit = { resizeMode = false })
+        }
+
+        // ====== NUOVO: SPEED‑DIAL radiale per scegliere la modalità ======
+        ModeSpeedDial(
+            isDesigner = designMode,
+            isResize = resizeMode,
+            onPick = { mode ->
+                when (mode) {
+                    Mode.Preview -> { designMode = false; resizeMode = false }
+                    Mode.Resize  -> { designMode = false; resizeMode = true  }
+                    Mode.Designer-> { resizeMode = false; designMode = true  }
+                }
+            }
+        )
+    }
+
+    // ------------------------------------------------------------
+    // Composable locali di supporto (nessuna dipendenza esterna)
+    // ------------------------------------------------------------
+
+    enum class Mode { Preview, Resize, Designer }
+
+    @Composable
+    fun BoxScope.ResizeHud(onExit: () -> Unit) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            tonalElevation = 8.dp,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 12.dp, start = 12.dp, end = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Filled.Tune, contentDescription = null)
+                Text(
+                    "Modalità resize attiva: tieni premuto un blocco reale per mostrare i bordi drag. Doppio tap per spostarlo; tocca fuori per uscire.",
+                    style = MaterialTheme.typography.labelMedium
                 )
+                Spacer(Modifier.width(4.dp))
+                TextButton(onClick = onExit) { Text("Esci") }
+            }
+        }
+    }
+
+    @Composable
+    fun BoxScope.ModeSpeedDial(
+        isDesigner: Boolean,
+        isResize: Boolean,
+        onPick: (Mode) -> Unit
+    ) {
+        var expanded by remember { mutableStateOf(false) }
+        val current = when {
+            isDesigner -> Mode.Designer
+            isResize -> Mode.Resize
+            else -> Mode.Preview
+        }
+
+        // Ancorato a destra, a metà schermo (coerente con il knob esistente)
+        val anchorMod = Modifier
+            .align(Alignment.CenterEnd)
+            .padding(end = 12.dp)
+
+        // FAB principale: tap = cicla modalità, long‑press = apre il radiale
+        Box(anchorMod) {
+            FloatingActionButton(
+                onClick = {
+                    val next = when (current) {
+                        Mode.Preview  -> Mode.Designer
+                        Mode.Designer -> Mode.Resize
+                        Mode.Resize   -> Mode.Preview
+                    }
+                    onPick(next)
+                },
+                modifier = Modifier.pointerInput(Unit) {
+                    // Long‑press per aprire/chiudere lo Speed‑Dial (FQN per evitare import extra)
+                    androidx.compose.foundation.gestures.detectTapGestures(
+                        onLongPress = { expanded = !expanded }
+                    )
+                },
+                containerColor = when (current) {
+                    Mode.Designer -> MaterialTheme.colorScheme.primary
+                    Mode.Resize   -> MaterialTheme.colorScheme.secondaryContainer
+                    Mode.Preview  -> MaterialTheme.colorScheme.surfaceVariant
+                },
+                contentColor = when (current) {
+                    Mode.Designer -> MaterialTheme.colorScheme.onPrimary
+                    Mode.Resize   -> MaterialTheme.colorScheme.onSecondaryContainer
+                    Mode.Preview  -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                shape = CircleShape
+            ) {
+                val icon = when (current) {
+                    Mode.Designer -> Icons.Filled.Build
+                    Mode.Resize   -> Icons.Filled.Tune
+                    Mode.Preview  -> Icons.Filled.Visibility
+                }
+                Icon(icon, contentDescription = "Cambia modalità")
             }
 
-            // ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
-            DesignSwitchKnob(
-                isDesigner = designMode,
-                onToggle = { designMode = !designMode }
-            )
-
-            // === AGGIUNTA: FAB per entrare/uscire da "Resize" (solo quando non in Designer) ===
-            if (!designMode) {
-                ResizeModeFab(
-                    isResize = (appMode == AppMode.Resize),
-                    onToggle = {
-                        appMode = if (appMode == AppMode.Resize) AppMode.Real else AppMode.Resize
-                    }
+            // Radiale “semplice”: tre azioni disposte a sinistra (alto/centro/basso)
+            if (expanded) {
+                // Scrim per chiudere
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .clickable { expanded = false }
                 )
+
+                val dist = with(LocalDensity.current) { 88.dp.toPx().toInt() }
+                val gap  = with(LocalDensity.current) { 72.dp.toPx().toInt() }
+
+                // Helper per un piccolo FAB posizionato a offset relativo all'anchor
+                @Composable
+                fun ActionFab(offset: IntOffset, icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+                    SmallFloatingActionButton(
+                        onClick = {
+                            expanded = false
+                            onClick()
+                        },
+                        modifier = Modifier.offset { offset },
+                        containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        shape = CircleShape
+                    ) {
+                        Icon(icon, contentDescription = label)
+                    }
+                }
+
+                // Posizioni: sinistra‑alto, sinistra‑centro, sinistra‑basso
+                ActionFab(
+                    offset = IntOffset(-dist, -gap),
+                    icon = Icons.Filled.Visibility,
+                    label = "Anteprima",
+                    selected = current == Mode.Preview
+                ) { onPick(Mode.Preview) }
+
+                ActionFab(
+                    offset = IntOffset(-dist, 0),
+                    icon = Icons.Filled.Tune,
+                    label = "Resize",
+                    selected = current == Mode.Resize
+                ) { onPick(Mode.Resize) }
+
+                ActionFab(
+                    offset = IntOffset(-dist, +gap),
+                    icon = Icons.Filled.Build,
+                    label = "Designer",
+                    selected = current == Mode.Designer
+                ) { onPick(Mode.Designer) }
             }
         }
     }
 }
 
+
+
+/* =========================================================
+* RENDER DI UNA SCHERMATA JSON (con Scaffold di root e levetta)
+* ========================================================= */
+
+@Composable
+fun UiScreen(
+screenName: String,
+dispatch: (String) -> Unit,
+uiState: MutableMap<String, Any>,
+designerMode: Boolean = false,
+scaffoldPadding: PaddingValues = PaddingValues(0.dp)
+) {
+val ctx = LocalContext.current
+var layout: JSONObject? by remember(screenName) {
+mutableStateOf(UiLoader.loadLayout(ctx, screenName))
+}
+var tick by remember { mutableStateOf(0) }
+
+if (layout == null) {
+Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+Text("Layout '$screenName' non trovato", style = MaterialTheme.typography.bodyLarge)
+}
+return
+}
+
+// Menù raccolti dal layout + selezione corrente
+val menus = remember(layout, tick) { collectMenus(layout!!) }
+var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
+
+// Stato barra designer in basso (per lasciare spazio ai contenuti)
+var overlayHeightPx by remember { mutableStateOf(0) }
+val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
+
+// Modalità designer persistente per schermata
+var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
+
+// ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
+var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
+fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
+val out = JSONObject(base.toString())
+listOf("page", "topBar").forEach { k ->
+if (preview.has(k)) out.put(k, preview.opt(k))
+}
+return out
+}
+val effectiveLayout = remember(layout, previewRoot) {
+if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
+}
+// Modalità App (Real / Designer / Resize)
+// Se attivo designMode => Designer; altrimenti ricordiamo l'ultima scelta (Real/Resize)
+var appMode by rememberSaveable(screenName) {
+    mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
+}
+LaunchedEffect(designMode) {
+    appMode = if (designMode) AppMode.Designer else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
+}
+
+Box(Modifier.fillMaxSize()) {
+// ====== SFONDO PAGINA (colore/gradient/immagine) ======
+RenderPageBackground(effectiveLayout.optJSONObject("page"))
+
+ScreenScaffoldWithPinnedTopBar(
+layout = effectiveLayout,
+dispatch = dispatch,
+uiState = uiState,
+designerMode = designMode,
+menus = menus,
+selectedPathSetter = { selectedPath = it },
+extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+scaffoldPadding = scaffoldPadding
+)
+
+
+if (designMode) {
+DesignerOverlay(
+screenName = screenName,
+layout = layout!!,
+selectedPath = selectedPath,
+setSelectedPath = { selectedPath = it },
+onLiveChange = { tick++ },
+onLayoutChange = {
+UiLoader.saveDraft(ctx, screenName, layout!!)
+layout = JSONObject(layout.toString())
+tick++
+},
+onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
+onReset = {
+UiLoader.resetPublished(ctx, screenName)
+layout = UiLoader.loadLayout(ctx, screenName)
+selectedPath = null
+tick++
+},
+topPadding = scaffoldPadding.calculateTopPadding(),
+onOverlayHeight = { overlayHeightPx = it },
+onOpenRootInspector = { /* gestito sotto */ },
+onRootLivePreview = { previewRoot = it }   // << live preview page/topBar
+)
+}
+
+// ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
+DesignSwitchKnob(
+isDesigner = designMode,
+onToggle = { designMode = !designMode }
+)
+}
+}
 
 /* =========================================================
 * KNOB laterale (trascinabile) per commutare Designer/Anteprima
@@ -1454,6 +1831,66 @@ shape = CircleShape
 ) {
 Icon(if (isDesigner) Icons.Filled.Build else Icons.Filled.Visibility, contentDescription = "Designer toggle")
 }
+}
+
+
+
+
+@Composable
+private fun BoxScope.ModeFabRadial(
+    current: AppMode,
+    onPick: (AppMode) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val cs = MaterialTheme.colorScheme
+
+    Box(
+        Modifier
+            .align(Alignment.CenterEnd)
+            .padding(end = 12.dp)
+    ) {
+        // Pulsante principale
+        FloatingActionButton(
+            onClick = { expanded = !expanded },
+            containerColor = when (current) {
+                AppMode.Designer -> cs.primary
+                AppMode.Resize   -> cs.tertiaryContainer
+                else             -> cs.secondaryContainer
+            }
+        ) {
+            Icon(
+                imageVector = when (current) {
+                    AppMode.Designer -> Icons.Filled.Build
+                    AppMode.Resize   -> Icons.Filled.Tune
+                    else             -> Icons.Filled.Visibility
+                },
+                contentDescription = "Mode"
+            )
+        }
+
+        // Menu radiale (semplice semicerchio)
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn() + slideInHorizontally { it/2 },
+            exit  = fadeOut() + slideOutHorizontally { it/2 }
+        ) {
+            Row(
+                Modifier.padding(end = 72.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SmallFloatingActionButton(onClick = { expanded = false; onPick(AppMode.Real) }) {
+                    Icon(Icons.Filled.Visibility, contentDescription = "Real")
+                }
+                SmallFloatingActionButton(onClick = { expanded = false; onPick(AppMode.Resize) }) {
+                    Icon(Icons.Filled.Tune, contentDescription = "Resize")
+                }
+                SmallFloatingActionButton(onClick = { expanded = false; onPick(AppMode.Designer) }) {
+                    Icon(Icons.Filled.Build, contentDescription = "Designer")
+                }
+            }
+        }
+    }
 }
 
 /* =========================================================
@@ -2785,40 +3222,60 @@ if (ic.isNotBlank()) NamedIconEx(ic, null)
 }
 
 "Row" -> Wrapper {
-    val appMode = LocalAppMode.current
+    val mode = LocalAppMode.current
     val items = block.optJSONArray("items") ?: JSONArray()
     val gap = block.optDouble("gapDp", 8.0).toFloat().dp
+    val scrollX = block.optBoolean("scrollX", false) // opzionale: abilita barra scrollabile
 
-    if (appMode == AppMode.Resize) {
+    if (mode == AppMode.Resize) {
         ResizableRow(
             rowBlock = block,
             path = path,
-            items = items,
             gap = gap,
+            scrollable = scrollX,
             dispatch = dispatch,
             uiState = uiState,
-            designerMode = designerMode,
-            menus = menus,
-            onSelect = onSelect,
-            onOpenInspector = onOpenInspector
+            menus = menus
         )
     } else {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(gap),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            for (i in 0 until items.length()) {
-                val child = items.optJSONObject(i) ?: continue
-                when (child.optString("type")) {
-                    "SpacerH" -> {
+        // Rendering normale (come prima)
+        if (scrollX) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(gap),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (i in 0 until items.length()) {
+                    val child = items.optJSONObject(i) ?: continue
+                    val p2 = "$path/items/$i"
+                    if (child.optString("type") == "SpacerH") {
                         when (child.optString("mode","fixed")) {
-                            "expand" -> Spacer(Modifier.weight(1f))
-                            else     -> Spacer(Modifier.width(child.optDouble("widthDp", 16.0).toFloat().dp))
+                            "expand" -> Spacer(Modifier.width((child.optDouble("widthDp", 16.0)).toFloat().dp))
+                            else     -> Spacer(Modifier.width((child.optDouble("widthDp", 16.0)).toFloat().dp))
                         }
+                    } else {
+                        RenderBlock(child, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
                     }
-                    else -> {
-                        val p2 = "$path/items/$i"
+                }
+            }
+        } else {
+            // non scrollabile: uso weight se presente, altrimenti wrap come prima
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(gap),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (i in 0 until items.length()) {
+                    val child = items.optJSONObject(i) ?: continue
+                    val p2 = "$path/items/$i"
+                    val w = child.optDouble("weight", Double.NaN)
+                    if (!w.isNaN()) {
+                        Box(Modifier.weight(w.toFloat(), fill = true)) {
+                            RenderBlock(child, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
+                        }
+                    } else {
                         RenderBlock(child, dispatch, uiState, designerMode, p2, menus, onSelect, onOpenInspector)
                     }
                 }
