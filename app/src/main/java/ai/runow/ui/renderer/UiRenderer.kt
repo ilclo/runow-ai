@@ -80,7 +80,29 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
+// Gesti
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+// Layout/insets utili
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.imePadding
+// Density e math
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import kotlin.math.roundToInt
 
+
+private fun <T> MutableList<T>.swap(a: Int, b: Int) {
+    if (a != b && a in indices && b in indices) {
+        val t = this[a]; this[a] = this[b]; this[b] = t
+    }
+}
 
 @Composable
 private fun ResizableRow(
@@ -173,7 +195,7 @@ private fun ResizableRow(
             val child = items.optJSONObject(i) ?: continue
 
             val isFixedSpacer = child.optString("type") == "SpacerH" &&
-                    child.optString("mode","fixed") == "fixed"
+                                child.optString("mode","fixed") == "fixed"
             if (isFixedSpacer) {
                 Spacer(Modifier.width(child.optDouble("widthDp", 16.0).toFloat().dp))
                 continue
@@ -187,11 +209,14 @@ private fun ResizableRow(
             }.then(if (heightsDp[i] > 0f) Modifier.height(heightsDp[i].dp) else Modifier)
 
             Box(
-                cellBase.pointerInput(resizable, designerMode, unlocked[i]) {
-                    if (resizable && !designerMode) {
-                        detectTapGestures(onDoubleTap = { unlocked[i] = !unlocked[i] })
+                cellBase
+                    .pointerInput(resizable, designerMode, unlocked[i]) {
+                        if (resizable && !designerMode) {
+                            androidx.compose.foundation.gestures.detectTapGestures(
+                                onDoubleTap = { unlocked[i] = !unlocked[i] }
+                            )
+                        }
                     }
-                }
             ) {
                 val childPath = "$path/items/$i"
                 RenderBlock(child, dispatch, uiState, designerMode, childPath, menus, onSelect, onOpenInspector)
@@ -277,7 +302,7 @@ private fun BoxScope.ResizeHandleX(
             .fillMaxHeight()
             .width(handleW)
             .pointerInput(Unit) {
-                detectDragGestures(
+                androidx.compose.foundation.gestures.detectDragGestures(
                     onDragStart = { onDragStart() },
                     onDragEnd = { onDragEnd() },
                     onDragCancel = { onDragEnd() },
@@ -300,13 +325,14 @@ private fun BoxScope.ResizeHandleY(
             .fillMaxWidth()
             .height(handleH)
             .pointerInput(Unit) {
-                detectDragGestures { _, dragAmount -> onDrag(dragAmount.y) }
+                androidx.compose.foundation.gestures.detectDragGestures { _, dragAmount ->
+                    onDrag(dragAmount.y)
+                }
             }
             .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
     )
 }
 
-// ---- helpers dp/percent ----
 private fun snapPercent5(v: Float): Float {
     val snaps = (v * 20f).roundToInt().coerceIn(1, 19)
     return snaps / 20f
@@ -317,7 +343,6 @@ private fun snapDp(v: Float, step: Float = 8f): Float =
 private fun pxToDp(px: Float, density: Density): Float =
     with(density) { px.toDp().value }
 
-// redistribuzione proporzionale in flex
 private fun applyProportionalDelta(
     weights: MutableList<Float>,
     i: Int,
@@ -347,17 +372,11 @@ private fun applyProportionalDelta(
     }
 }
 
-// “cursori” segnaposto (se usi pointer icon desktop li puoi gestire qui)
+
+
+/* “Cursori” fittizi (se vorrai usare pointer icon su Desktop li puoi implementare) */
 private fun Modifier.cursorForResizeHoriz(): Modifier = this
 private fun Modifier.cursorForResizeVert(): Modifier = this
-
-private fun <T> MutableList<T>.swap(a: Int, b: Int) {
-    if (a != b && a in indices && b in indices) {
-        val t = this[a]; this[a] = this[b]; this[b] = t
-    }
-}
-
-
 
 
 @Composable
@@ -1311,6 +1330,29 @@ scaffoldPadding = PaddingValues(0.dp)
 /* =========================================================
 * RENDER DI UNA SCHERMATA JSON (con Scaffold di root e levetta)
 * ========================================================= */
+
+@Composable
+private fun RenderRootScaffold(
+    layout: JSONObject,
+    dispatch: (String) -> Unit,
+    uiState: MutableMap<String, Any>,
+    designerMode: Boolean,
+    menus: Map<String, JSONArray>,
+    selectedPathSetter: (String) -> Unit,
+    extraPaddingBottom: Dp,
+    scaffoldPadding: PaddingValues
+) {
+    ScreenScaffoldWithPinnedTopBar(
+        layout = layout,
+        dispatch = dispatch,
+        uiState = uiState,
+        designerMode = designerMode,
+        menus = menus,
+        selectedPathSetter = selectedPathSetter,
+        extraPaddingBottom = extraPaddingBottom,
+        scaffoldPadding = scaffoldPadding
+    )
+}
 
 @Composable
 fun UiScreen(
@@ -2776,7 +2818,7 @@ if (ic.isNotBlank()) NamedIconEx(ic, null)
     uiState = uiState,
     menus = menus,
     dispatch = dispatch,
-    designerMode = designerMode,
+    designerMode = designerMode,   // <— questo mancava
     onSelect = onSelect,
     onOpenInspector = onOpenInspector
 )
