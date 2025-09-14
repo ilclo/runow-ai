@@ -1206,26 +1206,7 @@ Text(title, style = MaterialTheme.typography.titleMedium)
 IconButton(onClick = onClose) { NamedIconEx("close", "Close") }
 }
 }
-for (i in 0 until items.length()) {
-val block = items.optJSONObject(i) ?: continue
-val path = "/sidePanels/${panel.optString("id")}/items/$i"
-RenderBlock(
-block = block,
-dispatch = dispatch,
-uiState = mutableMapOf(),
-designerMode = false,
-path = path,
-menus = menus,
-onSelect = {},
-onOpenInspector = {}
-)
-}
-}
-}
-}
-}
-}
-}
+
 
 
 @Composable
@@ -3231,15 +3212,19 @@ Modifier.padding(8.dp)
 }
 }
 
-else -> {
-if (designerMode) {
-Surface(tonalElevation = 1.dp) {
-Text("Blocco non supportato: ${block.optString("type")}", color = Color.Red)
-}
-}
-}
-}
-}
+        else -> {
+            if (designerMode) {
+                Surface(tonalElevation = 1.dp) {
+                    Text(
+                        "Blocco non supportato: ${block.optString("type")}",
+                        color = Color.Red
+                    )
+                }
+            }
+        }
+    } // <- chiude la when
+}   // <- chiude la Wrapper(cfg) { ... } o il contenitore immediato, se presente
+}   
 
 /* =========================================================
 * GRID
