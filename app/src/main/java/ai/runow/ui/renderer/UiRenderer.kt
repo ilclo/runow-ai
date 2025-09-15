@@ -2,6 +2,15 @@
 package ai.runow.ui.renderer
 
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.LastBaseline
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -89,6 +98,79 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.IntSize
+
+@Composable
+private fun BlockGestureSelectionWrapper(
+    path: String,
+    uiState: MutableMap<String, Any>,
+    enabled: Boolean,
+    content: @Composable () -> Unit
+) {
+    if (!enabled) {
+        content()
+        return
+    }
+
+    val selectedPath = (uiState["_runtimeSelectedPath"] as? String)
+    val isSelected = selectedPath == path
+
+    val scope = rememberCoroutineScope()
+    val scale = remember { Animatable(1f) }
+    val halo = remember { Animatable(0f) }
+    val haptic = LocalHapticFeedback.current
+    val ringColor = MaterialTheme.colorScheme.tertiary
+
+    fun triggerPulse() {
+        scope.launch {
+            uiState["_runtimeSelectedPath"] = path
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            repeat(2) {
+                // piccolo “respiro” + alone radiale
+                launch {
+                    scale.animateTo(1.05f, tween(140, easing = FastOutLinearInEasing))
+                    scale.animateTo(1f,    tween(190, easing = LinearOutSlowInEasing))
+                }
+                halo.animateTo(1f, tween(140))
+                halo.animateTo(0f, tween(190))
+            }
+        }
+    }
+
+    Box(
+        Modifier
+            .graphicsLayer { val s = scale.value; scaleX = s; scaleY = s }
+            .pointerInput(path) {
+                detectTapGestures(
+                    onLongPress = { triggerPulse() },
+                    onDoubleTap = { triggerPulse() }
+                )
+            }
+            .drawWithContent {
+                drawContent()
+
+                // alone radiale breve durante il pulse
+                if (halo.value > 0f) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(ringColor.copy(alpha = 0.25f * halo.value), Color.Transparent)
+                        ),
+                        radius = size.minDimension * 0.6f,
+                        center = center
+                    )
+                }
+                // contorno tenue se selezionato
+                if (isSelected) {
+                    val stroke = 2.dp.toPx()
+                    drawRect(
+                        color = ringColor.copy(alpha = 0.18f),
+                        style = Stroke(width = stroke)
+                    )
+                }
+            }
+    ) {
+        content()
+    }
+}
 
 
 @Composable
@@ -1349,6 +1431,16 @@ fun UiScreen(
     // Modalità designer persistente
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
 
+    var showResizeHint by rememberSaveable(appMode) { mutableStateOf(false) }
+
+    LaunchedEffect(appMode) {
+        if (appMode == AppMode.Resize) {
+            showResizeHint = true
+            delay(10_000)
+            showResizeHint = false
+        }
+    }
+
     // Modalità "app" (Real / Designer / Resize)
     var appMode by rememberSaveable(screenName) {
         mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
@@ -1417,9 +1509,17 @@ fun UiScreen(
             )
         }
 
-        // ====== HUD RESIZE (leggero) ======
         if (appMode == AppMode.Resize) {
-            ResizeHud(onExit = { appMode = AppMode.Real })
+            AnimatedVisibility(
+                visible = showResizeHint,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                ResizeHud(
+                    onDismiss = { showResizeHint = false },   // tap sull’avviso => sparisce subito
+                    onExit = { appMode = AppMode.Real }       // pulsante “Esci”
+                )
+            }
         }
 
         // ====== FAB radiale per modalità ======
@@ -1431,23 +1531,27 @@ fun UiScreen(
                 uiState["_runtimeResize"] = (mode == AppMode.Resize)
             }
         )
-
-        // (Opzionale) levetta laterale storica per Designer/Anteprima
-        DesignSwitchKnob(
-            isDesigner = designMode,
-            onToggle = { designMode = !designMode }
-        )
     }
 }
 
 @Composable
-private fun BoxScope.ResizeHud(onExit: () -> Unit) {
+private fun BoxScope.ResizeHud(
+    onDismiss: () -> Unit,
+    onExit: () -> Unit
+) {
     Surface(
+        color = Color.Transparent,              // <— sfondo trasparente
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(12.dp),
-        tonalElevation = 8.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         modifier = Modifier
             .align(Alignment.TopCenter)
             .padding(top = 12.dp, start = 12.dp, end = 12.dp)
+            .clickable(                          // <— un tap sull’avviso lo chiude
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) { onDismiss() }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1456,7 +1560,7 @@ private fun BoxScope.ResizeHud(onExit: () -> Unit) {
         ) {
             Icon(Icons.Filled.Tune, contentDescription = null)
             Text(
-                "Resize attivo: long‑press su un blocco reale per drag dei bordi. Doppio tap per spostarlo; tap fuori per uscire.",
+                "Resize attivo: long‑press per selezionare, doppio tap per richiamare il blocco. Trascina i bordi per ridimensionare. Tap qui per chiudere l’aiuto.",
                 style = MaterialTheme.typography.labelMedium
             )
             Spacer(Modifier.width(4.dp))
@@ -1464,6 +1568,7 @@ private fun BoxScope.ResizeHud(onExit: () -> Unit) {
         }
     }
 }
+
 
 
 
@@ -2571,16 +2676,26 @@ content()
 Box(Modifier.matchParentSize().clickable(onClick = { onSelect(path) }))
 }
 } else {
-val containerCfg = block.optJSONObject("container")
-if (containerCfg != null) {
-StyledContainer(containerCfg, Modifier.fillMaxWidth(), contentPadding = PaddingValues(12.dp)) {
-content()
+    val containerCfg = block.optJSONObject("container")
+    val isResize = (uiState["_runtimeResize"] as? Boolean) == true
+
+    BlockGestureSelectionWrapper(
+        path = path,
+        uiState = uiState,
+        enabled = isResize
+    ) {
+        if (containerCfg != null) {
+            StyledContainer(
+                containerCfg,
+                Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(12.dp)
+            ) { content() }
+        } else {
+            Box { content() }
+        }
+    }
 }
-} else {
-Box { content() }
-}
-}
-}
+
 
 when (block.optString("type")) {
 "AppBar" -> Wrapper {
