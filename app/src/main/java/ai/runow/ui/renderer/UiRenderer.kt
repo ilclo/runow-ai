@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.alignByBaseline
 // se usi alignBy(FirstBaseline) / alignBy(LastBaseline)
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.LastBaseline
-import androidx.compose.foundation.layout.alignBy
-import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGestures
