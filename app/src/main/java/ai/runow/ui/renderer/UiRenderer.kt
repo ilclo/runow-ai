@@ -2,7 +2,10 @@
 
 package ai.runow.ui.renderer
 
-
+import androidx.compose.foundation.layout.alignByBaseline
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -531,156 +534,156 @@ private fun growChildHeightDp(child: JSONObject, deltaDp: Dp) {
 
 @Composable
 private fun ScreenScaffoldWithPinnedTopBar(
-layout: JSONObject,
-dispatch: (String) -> Unit,
-uiState: MutableMap<String, Any>,
-designerMode: Boolean,
-menus: Map<String, JSONArray>,
-selectedPathSetter: (String) -> Unit,
-extraPaddingBottom: Dp,
-scaffoldPadding: PaddingValues
+    layout: JSONObject,
+    dispatch: (String) -> Unit,
+    uiState: MutableMap<String, Any>,
+    designerMode: Boolean,
+    menus: Map<String, JSONArray>,
+    selectedPathSetter: (String) -> Unit,
+    extraPaddingBottom: Dp,
+    scaffoldPadding: PaddingValues
 ) {
-val title = layout.optString("topTitle", "")
-val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // legacy fallback
-val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy fallback
+    val title = layout.optString("topTitle", "")
+    val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // legacy fallback
+    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy fallback
 
-val bottomBarNode  = layout.optJSONObject("bottomBar")
-val bottomBarCfg   = bottomBarNode?.optJSONObject("container")
-val bottomBarItems = bottomBarNode?.optJSONArray("items")
-val fab   = layout.optJSONObject("fab")
-val scroll = layout.optBoolean("scroll", true)
-val topBarConf = layout.optJSONObject("topBar")
+    val bottomBarNode  = layout.optJSONObject("bottomBar")
+    val bottomBarCfg   = bottomBarNode?.optJSONObject("container")
+    val bottomBarItems = bottomBarNode?.optJSONArray("items")
+    val fab   = layout.optJSONObject("fab")
+    val scroll = layout.optBoolean("scroll", true)
+    val topBarConf = layout.optJSONObject("topBar")
 
-// Pinned per difetto se 'scroll' nella top bar è "pinned"
-val topScrollBehavior =
-when (topBarConf?.optString("scroll", "none")) {
-"pinned"            -> TopAppBarDefaults.pinnedScrollBehavior()
-"enterAlways"       -> TopAppBarDefaults.enterAlwaysScrollBehavior()
-"exitUntilCollapsed"-> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-else                -> null
+    // Pinned per difetto se 'scroll' nella top bar è "pinned"
+    val topScrollBehavior =
+        when (topBarConf?.optString("scroll", "none")) {
+            "pinned"             -> TopAppBarDefaults.pinnedScrollBehavior()
+            "enterAlways"        -> TopAppBarDefaults.enterAlwaysScrollBehavior()
+            "exitUntilCollapsed" -> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+            else                 -> null
+        }
+
+    Scaffold(
+        // Colleghiamo lo scroll behavior della top bar
+        modifier = if (topScrollBehavior != null)
+            Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
+        else Modifier,
+
+        // Evitiamo che l'IME o i system insets “mangino” spazio alla top bar
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+
+        topBar = {
+            if (topBarConf != null) {
+                RenderTopBar(topBarConf, dispatch, topScrollBehavior)
+            } else {
+                // Fallback legacy: topTitle/topActions
+                if (title.isNotBlank() || topActions.length() > 0) {
+                    TopAppBar(
+                        title = { Text(title) },
+                        actions = {
+                            for (i in 0 until topActions.length()) {
+                                val a = topActions.optJSONObject(i) ?: continue
+                                IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                                    NamedIconEx(a.optString("icon", "more_vert"), null)
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        },
+
+        bottomBar = {
+            // Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
+            val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
+                JSONArray().apply {
+                    for (i in 0 until bottomButtons.length()) {
+                        val it = bottomButtons.optJSONObject(i) ?: continue
+                        put(JSONObject().apply {
+                            put("type", "button")
+                            put("label", it.optString("label","Button"))
+                            put("actionId", it.optString("actionId",""))
+                            put("style", "text")
+                        })
+                    }
+                }
+            } else null
+
+            if (items != null && items.length() > 0) {
+                StyledContainer(
+                    cfg = bottomBarCfg ?: JSONObject(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RenderBarItemsRow(items, dispatch)
+                    }
+                }
+            }
+        },
+
+        floatingActionButton = {
+            fab?.let {
+                FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
+                    NamedIconEx(it.optString("icon", "play_arrow"), null)
+                }
+            }
+        },
+
+        containerColor = Color.Transparent
+    ) { innerPadding ->
+        // Contenuti body
+        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
+
+        val host: @Composable () -> Unit = {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    // Padding fornito dallo Scaffold (top/bottom), poi padding esterno dello screen
+                    .padding(innerPadding)
+                    .padding(scaffoldPadding)
+                    // Evita che la tastiera sovrapponga i contenuti: la TopBar resta fissa
+                    .imePadding()
+                    // Protezione per notch/bordi orizzontali (la TopBar gestisce già il top)
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+                    )
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 16.dp,
+                        bottom = extraPaddingBottom
+                    ),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                for (i in 0 until blocks.length()) {
+                    val block = blocks.optJSONObject(i) ?: continue
+                    val path = "/blocks/$i"
+                    RenderBlock(
+                        block = block,
+                        dispatch = dispatch,
+                        uiState = uiState,
+                        designerMode = designerMode,
+                        path = path,
+                        menus = menus,
+                        onSelect = { p -> selectedPathSetter(p) },
+                        onOpenInspector = { p -> selectedPathSetter(p) }
+                    )
+                }
+            }
+        }
+
+        if (scroll) {
+            Column(Modifier.verticalScroll(rememberScrollState())) { host() }
+        } else {
+            host()
+        }
+    }
 }
 
-Scaffold(
-// Colleghiamo lo scroll behavior della top bar
-modifier = if (topScrollBehavior != null)
-Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
-else Modifier,
-
-// Evitiamo che l'IME (tastiera) o i system insets facciano “rimpicciolire” lo spazio del body
-// La TopBar resta ferma; il contenuto gestisce gli insets manualmente.
-contentWindowInsets = WindowInsets(0, 0, 0, 0),
-
-topBar = {
-if (topBarConf != null) {
-RenderTopBar(topBarConf, dispatch, topScrollBehavior)
-} else {
-// Fallback legacy: topTitle/topActions
-if (title.isNotBlank() || topActions.length() > 0) {
-TopAppBar(
-title = { Text(title) },
-actions = {
-for (i in 0 until topActions.length()) {
-val a = topActions.optJSONObject(i) ?: continue
-IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-NamedIconEx(a.optString("icon", "more_vert"), null)
-}
-}
-}
-)
-}
-}
-},
-
-bottomBar = {
-// Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
-val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
-JSONArray().apply {
-for (i in 0 until bottomButtons.length()) {
-val it = bottomButtons.optJSONObject(i) ?: continue
-put(JSONObject().apply {
-put("type", "button")
-put("label", it.optString("label","Button"))
-put("actionId", it.optString("actionId",""))
-put("style", "text")
-})
-}
-}
-} else null
-
-if (items != null && items.length() > 0) {
-StyledContainer(
-cfg = bottomBarCfg ?: JSONObject(),
-contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-) {
-Row(
-Modifier.fillMaxWidth(),
-horizontalArrangement = Arrangement.spacedBy(8.dp),
-verticalAlignment = Alignment.CenterVertically
-) {
-RenderBarItemsRow(items, dispatch)
-}
-}
-}
-},
-
-floatingActionButton = {
-fab?.let {
-FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
-NamedIconEx(it.optString("icon", "play_arrow"), null)
-}
-}
-},
-
-containerColor = Color.Transparent
-) { innerPadding ->
-// Contenuti body
-val blocks = layout.optJSONArray("blocks") ?: JSONArray()
-
-val host: @Composable () -> Unit = {
-Column(
-Modifier
-.fillMaxSize()
-// Padding fornito dallo Scaffold (topBar/bottomBar), poi padding esterno dello screen
-.padding(innerPadding)
-.padding(scaffoldPadding)
-// Evita che la tastiera sovrapponga i contenuti: la TopBar resta fissa
-.imePadding()
-// Protezione per notch/bordi orizzontali (la TopBar gestisce già il top)
-.windowInsetsPadding(
-WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-)
-.padding(
-start = 16.dp,
-end = 16.dp,
-top = 16.dp,
-bottom = extraPaddingBottom
-),
-verticalArrangement = Arrangement.spacedBy(12.dp)
-) {
-for (i in 0 until blocks.length()) {
-val block = blocks.optJSONObject(i) ?: continue
-val path = "/blocks/$i"
-RenderBlock(
-block = block,
-dispatch = dispatch,
-uiState = uiState,
-designerMode = designerMode,
-path = path,
-menus = menus,
-onSelect = { p -> selectedPathSetter(p) },
-onOpenInspector = { p -> selectedPathSetter(p) }
-)
-}
-}
-}
-
-if (scroll) {
-Column(Modifier.verticalScroll(rememberScrollState())) { host() }
-} else {
-host()
-}
-}
-}
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1544,23 +1547,26 @@ fun UiScreen(
         return
     }
 
-    // Menù raccolti dal layout + selezione corrente
+    // Menù + selezione corrente
     val menus = remember(layout, tick) { collectMenus(layout!!) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
 
-    // Stato barra designer in basso (per lasciare spazio ai contenuti)
+    // Spazio per overlay designer in basso
     var overlayHeightPx by remember { mutableStateOf(0) }
     val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
 
-    // Modalità designer persistente per schermata
+    // Modalità Designer persistente
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
-    // Modalità runtime (Preview / Resize / Designer)
-    var appMode by rememberSaveable(screenName) { mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real) }
-    LaunchedEffect(designMode) {
-        appMode = if (designMode) AppMode.Designer else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
+
+    // Modalità Resize runtime (ridimensiona/sposta blocchi reali)
+    var resizeMode by rememberSaveable(screenName) { mutableStateOf(false) }
+
+    // Pubblica lo stato nel uiState (per eventuali figli che lo leggono)
+    LaunchedEffect(resizeMode) {
+        uiState["_runtimeResize"] = resizeMode
     }
 
-    // ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
+    // Live preview del root (page + topBar) mentre si edita
     var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
     fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
         val out = JSONObject(base.toString())
@@ -1573,101 +1579,224 @@ fun UiScreen(
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
 
+    // AppMode globale (CompositionLocal) – Real / Designer / Resize
+    enum class AppMode { Real, Designer, Resize }
+    val LocalAppMode = compositionLocalOf { AppMode.Real }
+
+    // Scegli lo stato corrente (Designer ha precedenza)
+    val appMode = when {
+        designMode -> AppMode.Designer
+        resizeMode -> AppMode.Resize
+        else       -> AppMode.Real
+    }
+
     CompositionLocalProvider(LocalAppMode provides appMode) {
-    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()) {
+            // Sfondo pagina
+            RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
-        if (designMode) {
-        if (designMode) {
-            DesignerOverlay(
-                screenName = screenName,
-
+            // Root scaffold (con top‑bar “pinned/styled”)
+            ScreenScaffoldWithPinnedTopBar(
+                layout = effectiveLayout,
+                dispatch = dispatch,
+                uiState = uiState,
+                designerMode = designMode,
+                menus = menus,
+                selectedPathSetter = { selectedPath = it },
+                extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+                scaffoldPadding = scaffoldPadding
             )
-        }
 
-        // HUD e switch veloce tra Preview/Resize/Designer
-        if (LocalAppMode.current == AppMode.Resize) {
-            ResizeHud(onExit = { appMode = AppMode.Real })
-        }
-        ModeSpeedDial(
-            isDesigner = designMode,
-            isResize = LocalAppMode.current == AppMode.Resize,
-            onPick = { mode ->
-                when (mode) {
-                    Mode.Preview -> { appMode = AppMode.Real;  }
-                    Mode.Resize  -> { appMode = AppMode.Resize; }
-                    Mode.Designer-> { appMode = AppMode.Designer; designMode = true }
-                }
+            // Overlay Designer (comportamento invariato)
+            if (designMode) {
+                DesignerOverlay(
+                    screenName = screenName,
+                    layout = layout!!,
+                    selectedPath = selectedPath,
+                    setSelectedPath = { selectedPath = it },
+                    onLiveChange = { tick++ },
+                    onLayoutChange = {
+                        UiLoader.saveDraft(ctx, screenName, layout!!)
+                        layout = JSONObject(layout.toString())
+                        tick++
+                    },
+                    onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+                    onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
+                    onReset = {
+                        UiLoader.resetPublished(ctx, screenName)
+                        layout = UiLoader.loadLayout(ctx, screenName)
+                        selectedPath = null
+                        tick++
+                    },
+                    topPadding = scaffoldPadding.calculateTopPadding(),
+                    onOverlayHeight = { overlayHeightPx = it },
+                    onOpenRootInspector = { /* gestito altrove */ },
+                    onRootLivePreview = { previewRoot = it }
+                )
             }
-        )
-        // ====== SFONDO PAGINA (colore/gradient/immagine) ======
-        RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
-        ScreenScaffoldWithPinnedTopBar(
-            layout = effectiveLayout,
-            dispatch = dispatch,
-            uiState = uiState,
-            designerMode = designMode,
-            menus = menus,
-            selectedPathSetter = { selectedPath = it },
-            extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-            scaffoldPadding = scaffoldPadding
-        )
-
-        if (designMode) {
-            DesignerOverlay(
-                screenName = screenName,
-
-            )
-        }
-        // HUD e switch veloce tra Preview/Resize/Designer
-        if (LocalAppMode.current == AppMode.Resize) {
-            ResizeHud(onExit = { appMode = AppMode.Real })
-        }
-        ModeSpeedDial(
-            isDesigner = designMode,
-            isResize = LocalAppMode.current == AppMode.Resize,
-            onPick = { mode ->
-                when (mode) {
-                    Mode.Preview -> { appMode = AppMode.Real;  }
-                    Mode.Resize  -> { appMode = AppMode.Resize; }
-                    Mode.Designer-> { appMode = AppMode.Designer; designMode = true }
-                }
+            // HUD Modalità Resize (leggero)
+            if (resizeMode) {
+                ResizeHud(onExit = { resizeMode = false })
             }
-        )
-        
-            DesignerOverlay(
-                screenName = screenName,
-                layout = layout!!,
-                selectedPath = selectedPath,
-                setSelectedPath = { selectedPath = it },
-                onLiveChange = { tick++ },
-                onLayoutChange = {
-                    UiLoader.saveDraft(ctx, screenName, layout!!)
-                    layout = JSONObject(layout.toString())
-                    tick++
-                },
-                onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
-                onReset = {
-                    UiLoader.resetPublished(ctx, screenName)
-                    layout = UiLoader.loadLayout(ctx, screenName)
-                    selectedPath = null
-                    tick++
-                },
-                topPadding = scaffoldPadding.calculateTopPadding(),
-                onOverlayHeight = { overlayHeightPx = it },
-                onOpenRootInspector = { /* gestito altrove */ },
-                onRootLivePreview = { previewRoot = it }
+
+            // Speed‑Dial radiale a destra (Preview / Resize / Designer)
+            ModeSpeedDial(
+                isDesigner = designMode,
+                isResize = resizeMode,
+                onPick = { mode ->
+                    when (mode) {
+                        Mode.Preview  -> { designMode = false; resizeMode = false }
+                        Mode.Resize   -> { designMode = false; resizeMode = true  }
+                        Mode.Designer -> { resizeMode = false; designMode = true  }
+                    }
+                }
             )
         }
+    }
 
-        // ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
-        DesignSwitchKnob(
-            isDesigner = designMode,
-            onToggle = { designMode = !designMode }
-        )
+    // -------- Composable locali di supporto (HUD + Speed‑Dial) --------
+
+    enum class Mode { Preview, Resize, Designer }
+
+    @Composable
+    fun BoxScope.ResizeHud(onExit: () -> Unit) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            tonalElevation = 8.dp,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 12.dp, start = 12.dp, end = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Filled.Tune, contentDescription = null)
+                Text(
+                    "Modalità resize attiva: tieni premuto un blocco reale per mostrare i bordi drag. Doppio tap per spostarlo; tocca fuori per uscire.",
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Spacer(Modifier.width(4.dp))
+                TextButton(onClick = onExit) { Text("Esci") }
+            }
+        }
+    }
+
+    @Composable
+    fun BoxScope.ModeSpeedDial(
+        isDesigner: Boolean,
+        isResize: Boolean,
+        onPick: (Mode) -> Unit
+    ) {
+        var expanded by remember { mutableStateOf(false) }
+        val current = when {
+            isDesigner -> Mode.Designer
+            isResize   -> Mode.Resize
+            else       -> Mode.Preview
+        }
+
+        val anchorMod = Modifier
+            .align(Alignment.CenterEnd)
+            .padding(end = 12.dp)
+
+        Box(anchorMod) {
+            // FAB principale: tap = cicla modalità, long‑press = apre il radiale
+            FloatingActionButton(
+                onClick = {
+                    val next = when (current) {
+                        Mode.Preview  -> Mode.Designer
+                        Mode.Designer -> Mode.Resize
+                        Mode.Resize   -> Mode.Preview
+                    }
+                    onPick(next)
+                },
+                modifier = Modifier.pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = { expanded = !expanded }
+                    )
+                },
+                containerColor = when (current) {
+                    Mode.Designer -> MaterialTheme.colorScheme.primary
+                    Mode.Resize   -> MaterialTheme.colorScheme.secondaryContainer
+                    Mode.Preview  -> MaterialTheme.colorScheme.surfaceVariant
+                },
+                contentColor = when (current) {
+                    Mode.Designer -> MaterialTheme.colorScheme.onPrimary
+                    Mode.Resize   -> MaterialTheme.colorScheme.onSecondaryContainer
+                    Mode.Preview  -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                shape = CircleShape
+            ) {
+                val icon = when (current) {
+                    Mode.Designer -> Icons.Filled.Build
+                    Mode.Resize   -> Icons.Filled.Tune
+                    Mode.Preview  -> Icons.Filled.Visibility
+                }
+                Icon(icon, contentDescription = "Cambia modalità")
+            }
+
+            // Radiale “semplice”: tre azioni disposte a sinistra (alto/centro/basso)
+            if (expanded) {
+                // Scrim per chiudere
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .clickable { expanded = false }
+                )
+
+                val dist = with(LocalDensity.current) { 88.dp.toPx().toInt() }
+                val gap  = with(LocalDensity.current) { 72.dp.toPx().toInt() }
+
+                @Composable
+                fun ActionFab(
+                    offset: IntOffset,
+                    icon: ImageVector,
+                    label: String,
+                    selected: Boolean,
+                    onClick: () -> Unit
+                ) {
+                    SmallFloatingActionButton(
+                        onClick = {
+                            expanded = false
+                            onClick()
+                        },
+                        modifier = Modifier.offset { offset },
+                        containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        shape = CircleShape
+                    ) {
+                        Icon(icon, contentDescription = label)
+                    }
+                }
+
+                // Posizioni: sinistra‑alto, sinistra‑centro, sinistra‑basso
+                ActionFab(
+                    offset = IntOffset(-dist, -gap),
+                    icon = Icons.Filled.Visibility,
+                    label = "Anteprima",
+                    selected = current == Mode.Preview
+                ) { onPick(Mode.Preview) }
+
+                ActionFab(
+                    offset = IntOffset(-dist, 0),
+                    icon = Icons.Filled.Tune,
+                    label = "Resize",
+                    selected = current == Mode.Resize
+                ) { onPick(Mode.Resize) }
+
+                ActionFab(
+                    offset = IntOffset(-dist, +gap),
+                    icon = Icons.Filled.Build,
+                    label = "Designer",
+                    selected = current == Mode.Designer
+                ) { onPick(Mode.Designer) }
+            }
+        }
     }
 }
+
 
 
 
