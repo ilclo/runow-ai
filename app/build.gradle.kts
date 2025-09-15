@@ -52,6 +52,7 @@ dependencies {
 
     // Icone Material (Icons.Default.*)
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.foundation:foundation-layout")
 
     // Activity-Compose
     implementation("androidx.activity:activity-compose:1.9.2")
