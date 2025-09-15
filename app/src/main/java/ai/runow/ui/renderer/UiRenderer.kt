@@ -109,25 +109,19 @@ private fun RenderRootScaffold(
     extraPaddingBottom: Dp,
     scaffoldPadding: PaddingValues
 ) {
-    // --- Config generali (top/bottom bar, fab)
-    val topBarConf    = layout.optJSONObject("topBar")
-    val bottomBarNode = layout.optJSONObject("bottomBar")
-    val bottomBarCfg  = bottomBarNode?.optJSONObject("container")
-    val bottomItems   = bottomBarNode?.optJSONArray("items")
-    val legacyTopTitle   = layout.optString("topTitle", "")
-    val legacyTopActions = layout.optJSONArray("topActions") ?: JSONArray()
-    val legacyBottomBtns = layout.optJSONArray("bottomButtons") ?: JSONArray()
-    val fab = layout.optJSONObject("fab")
+    val title = layout.optString("topTitle", "")
+    val topActions = layout.optJSONArray("topActions") ?: JSONArray()       // fallback legacy
+    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // fallback legacy
 
-    // --- PAGE: blocchi + scroll (corretto: leggo da page.blocks)
-    val page   = layout.optJSONObject("page")
-    val blocks = page?.optJSONArray("blocks")
-        ?: layout.optJSONArray("blocks") /* fallback legacy */ 
-        ?: JSONArray()
-    val scroll = page?.optBoolean("scroll", layout.optBoolean("scroll", true))
-        ?: true
+    val bottomBarNode  = layout.optJSONObject("bottomBar")
+    val bottomBarCfg   = bottomBarNode?.optJSONObject("container")
+    val bottomBarItems = bottomBarNode?.optJSONArray("items")
 
-    // --- Scroll behavior per TopAppBar su richiesta
+    val fab   = layout.optJSONObject("fab")
+    val scroll = layout.optBoolean("scroll", true)
+    val topBarConf = layout.optJSONObject("topBar")
+
+    // Scroll behavior per la top bar (pinned/enterAlways/exitUntilCollapsed)
     val topScrollBehavior =
         when (topBarConf?.optString("scroll", "none")) {
             "pinned"             -> TopAppBarDefaults.pinnedScrollBehavior()
@@ -136,23 +130,26 @@ private fun RenderRootScaffold(
             else                 -> null
         }
 
-    Scaffold(
+    androidx.compose.material3.Scaffold(
         modifier = if (topScrollBehavior != null)
             Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
         else Modifier,
+
+        // Lasciamo la responsibility degli inset alla top bar/padding manuale
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
 
         topBar = {
             if (topBarConf != null) {
+                // Usa la tua RenderTopBar già presente
                 RenderTopBar(topBarConf, dispatch, topScrollBehavior)
             } else {
                 // Fallback legacy: topTitle/topActions
-                if (legacyTopTitle.isNotBlank() || legacyTopActions.length() > 0) {
+                if (title.isNotBlank() || topActions.length() > 0) {
                     TopAppBar(
-                        title = { Text(legacyTopTitle) },
+                        title = { Text(title) },
                         actions = {
-                            for (i in 0 until legacyTopActions.length()) {
-                                val a = legacyTopActions.optJSONObject(i) ?: continue
+                            for (i in 0 until topActions.length()) {
+                                val a = topActions.optJSONObject(i) ?: continue
                                 IconButton(onClick = { dispatch(a.optString("actionId")) }) {
                                     NamedIconEx(a.optString("icon", "more_vert"), null)
                                 }
@@ -164,15 +161,15 @@ private fun RenderRootScaffold(
         },
 
         bottomBar = {
-            // Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons -> tradotti in "button"
-            val items = bottomItems ?: if (legacyBottomBtns.length() > 0) {
+            // Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
+            val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
                 JSONArray().apply {
-                    for (i in 0 until legacyBottomBtns.length()) {
-                        val it = legacyBottomBtns.optJSONObject(i) ?: continue
+                    for (i in 0 until bottomButtons.length()) {
+                        val it = bottomButtons.optJSONObject(i) ?: continue
                         put(JSONObject().apply {
                             put("type", "button")
-                            put("label", it.optString("label","Button"))
-                            put("actionId", it.optString("actionId",""))
+                            put("label", it.optString("label", "Button"))
+                            put("actionId", it.optString("actionId", ""))
                             put("style", "text")
                         })
                     }
@@ -205,26 +202,29 @@ private fun RenderRootScaffold(
 
         containerColor = Color.Transparent
     ) { innerPadding ->
-        // --- Body
+        // Corpo
+        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
+
         val host: @Composable () -> Unit = {
             Column(
                 Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)           // padding dallo Scaffold
-                    .padding(scaffoldPadding)        // padding esterno schermo
+                    // padding: Scaffold -> padding esterno screen -> safe insets orizzontali -> margini contenuti
+                    .padding(innerPadding)
+                    .padding(scaffoldPadding)
                     .imePadding()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
                     .padding(
                         start = 16.dp,
                         end = 16.dp,
-                        top = 16.dp,
+                        top  = 16.dp,
                         bottom = extraPaddingBottom
                     ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 for (i in 0 until blocks.length()) {
                     val block = blocks.optJSONObject(i) ?: continue
-                    val path = "/page/blocks/$i" // path corretto dentro page
+                    val path = "/blocks/$i"
                     RenderBlock(
                         block = block,
                         dispatch = dispatch,
@@ -246,6 +246,7 @@ private fun RenderRootScaffold(
         }
     }
 }
+
 
 
 @Composable
@@ -1456,6 +1457,16 @@ fun UiScreen(
             appDispatch     = dispatch
         )
     }
+    // Stato overlay: side panel & center menu
+    var openSidePanelId by remember { mutableStateOf<String?>(null) }
+    var openCenterMenuId by remember { mutableStateOf<String?>(null) }
+    
+    // Dispatch che intercetta comandi overlay e inoltra il resto all'app
+    val dispatchWrapped = wrapDispatchForOverlays(
+        openPanelSetter = { id -> openSidePanelId = id },
+        openMenuSetter  = { id -> openCenterMenuId = id },
+        appDispatch     = dispatch
+    )
 
     Box(Modifier.fillMaxSize()) {
         // SFONDO
@@ -1464,7 +1475,7 @@ fun UiScreen(
         // ROOT SCAFFOLD (TopBar pinned, BottomBar, FAB) – ora legge page.blocks
         RenderRootScaffold(
             layout = effectiveLayout,
-            dispatch = dispatchWithOverlays,  // <— importante: così si aprono SidePanel/Menu
+            dispatch = dispatchWrapped,
             uiState = uiState,
             designerMode = designMode,
             menus = menus,
