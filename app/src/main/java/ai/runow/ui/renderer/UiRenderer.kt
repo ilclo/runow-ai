@@ -1808,7 +1808,7 @@ fun StyledContainer(
             Box(modifier = Modifier, content = content)
         }
     }
-
+}
 
 
 
