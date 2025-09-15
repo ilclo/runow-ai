@@ -98,16 +98,29 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.IntSize
 
+// === PATCH 1: risoluzione unica dell'array blocchi ===========================
+private fun resolveBlocksArray(root: JSONObject): Pair<JSONArray, String> {
+    val page = root.optJSONObject("page")
+    return if (page != null) {
+        val arr = page.optJSONArray("blocks") ?: JSONArray().also { page.put("blocks", it) }
+        arr to "/page/blocks"
+    } else {
+        val arr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
+        arr to "/blocks"
+    }
+}
+
+
 @Composable
-private fun RenderRootScaffold(
+internal fun RenderRootScaffold(
     layout: JSONObject,
     dispatch: (String) -> Unit,
     uiState: MutableMap<String, Any>,
-    designerMode: Boolean,
     menus: Map<String, JSONArray>,
-    selectedPathSetter: (String) -> Unit,
-    extraPaddingBottom: Dp,
-    scaffoldPadding: PaddingValues
+    mode: AppMode,
+    onSelect: (String) -> Unit,
+    onOpenInspector: (String) -> Unit,
+    onLayoutChange: () -> Unit
 ) {
     val title = layout.optString("topTitle", "")
     val topActions = layout.optJSONArray("topActions") ?: JSONArray()       // fallback legacy
@@ -130,6 +143,34 @@ private fun RenderRootScaffold(
             else                 -> null
         }
 
+    val (blocks, blocksBasePath) = remember(layout) { resolveBlocksArray(layout) }
+
+    val contentHost: @Composable () -> Unit = {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            val count = blocks.length()
+            for (i in 0 until count) {
+                val block = blocks.optJSONObject(i) ?: continue
+                val path = "$blocksBasePath/$i"
+                // Disegna ogni blocco
+                RenderBlock(
+                    block = block,
+                    dispatch = dispatch,
+                    uiState = uiState,
+                    designerMode = (mode != AppMode.Real),
+                    path = path,
+                    menus = menus,
+                    onSelect = onSelect,
+                    onOpenInspector = onOpenInspector
+                )
+            }
+        }
+    }
+       
     androidx.compose.material3.Scaffold(
         modifier = if (topScrollBehavior != null)
             Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
@@ -4913,42 +4954,50 @@ internal fun RenderBlock(
         p.first.put(p.second, JSONObject(newNode.toString()))
     }
 
-    private fun insertBlockAndReturnPath(root: JSONObject, selectedPath: String?, block: JSONObject, position: String): String {
-        val parentArr: JSONArray
-        val idx: Int
-        val parentPath: String
-
-        if (selectedPath != null) {
-            val pair = getParentAndIndex(root, selectedPath)
-            if (pair != null) {
-                parentArr = pair.first
-                idx = pair.second
-                parentPath = selectedPath.substringBeforeLast("/")
-            } else {
-                parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
-                idx = parentArr.length() - 1
-                parentPath = "/blocks"
-            }
+    // === PATCH 2: inserimento coerente con la risoluzione dei blocchi ============
+    private fun insertBlockAndReturnPath(
+        root: JSONObject,
+        selectedPath: String?,
+        newBlock: JSONObject,
+        position: String = "after" // "before" | "after" | "child_end"
+    ): String {
+        // 1) calcolo parent e indice ancorandomi al selectedPath, se valido
+        val parentAndIndex = selectedPath?.let { getParentAndIndex(root, it) }
+        val (defaultArr, defaultParentPath) = resolveBlocksArray(root)
+    
+        val (parentArr, parentPath, anchorIndex) = if (parentAndIndex != null) {
+            val (arr, idx) = parentAndIndex
+            Triple(arr, selectedPath.substringBeforeLast("/"), idx)
         } else {
-            parentArr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
-            idx = parentArr.length() - 1
-            parentPath = "/blocks"
+            // Nessuna selezione: append in fondo all'array dei blocchi "canonico"
+            Triple(defaultArr, defaultParentPath, defaultArr.length() - 1)
         }
-
-        val insertIndex = when (position) { "before" -> idx; else -> idx + 1 }.coerceIn(0, parentArr.length())
-
-        val tmp = mutableListOf<Any?>()
-        for (i in 0 until parentArr.length()) {
-            if (i == insertIndex) tmp.add(block)
-            tmp.add(parentArr.get(i))
+    
+        // 2) calcolo indice di inserimento in base alla posizione richiesta
+        val insertIndex = when (position) {
+            "before"   -> anchorIndex.coerceAtLeast(0)
+            "after"    -> (anchorIndex + 1).coerceAtLeast(0)
+            "child_end" -> {
+                // Se il selectedPath punta ad un contenitore con "items", inserisco in coda lì.
+                // Altrimenti, uso il parent/anchor come "after".
+                val maybeContainer = jsonAtPath(root, selectedPath ?: "")
+                val items = (maybeContainer as? JSONObject)?.optJSONArray("items")
+                if (items != null) {
+                    // inserisco in coda agli items
+                    insertAt(items, items.length(), newBlock)
+                    return "$selectedPath/items/${items.length() - 1}"
+                } else {
+                    (anchorIndex + 1).coerceAtLeast(0)
+                }
+            }
+            else       -> (anchorIndex + 1).coerceAtLeast(0)
         }
-        if (insertIndex == parentArr.length()) tmp.add(block)
-
-        while (parentArr.length() > 0) parentArr.remove(parentArr.length() - 1)
-        tmp.forEach { parentArr.put(it) }
-
+    
+        // 3) inserisco e ritorno il path del nuovo blocco
+        insertAt(parentArr, insertIndex, newBlock)
         return "$parentPath/$insertIndex"
     }
+
 
     private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
         val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
