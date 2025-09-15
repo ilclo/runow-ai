@@ -2,8 +2,6 @@
 package ai.runow.ui.renderer
 
 
-import androidx.compose.foundation.layout.alignBy
-import androidx.compose.foundation.layout.alignByBaseline
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.LastBaseline
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -1787,24 +1785,29 @@ fun StyledContainer(
             .background(backgroundColor)
     }
 
+        // Mappa hAlign/vAlign sull'allineamento della Box
+    val contentAlignment =
+        when {
+            vAlign == Alignment.Top && hAlign == Alignment.Start -> Alignment.TopStart
+            vAlign == Alignment.Top && hAlign == Alignment.CenterHorizontally -> Alignment.TopCenter
+            vAlign == Alignment.Top && hAlign == Alignment.End -> Alignment.TopEnd
+            vAlign == Alignment.CenterVertically && hAlign == Alignment.Start -> Alignment.CenterStart
+            vAlign == Alignment.CenterVertically && hAlign == Alignment.CenterHorizontally -> Alignment.Center
+            vAlign == Alignment.CenterVertically && hAlign == Alignment.End -> Alignment.CenterEnd
+            vAlign == Alignment.Bottom && hAlign == Alignment.Start -> Alignment.BottomStart
+            vAlign == Alignment.Bottom && hAlign == Alignment.CenterHorizontally -> Alignment.BottomCenter
+            vAlign == Alignment.Bottom && hAlign == Alignment.End -> Alignment.BottomEnd
+            else -> Alignment.Center
+        }
+
     Box(
         modifier = base.padding(pad),
-        contentAlignment = Alignment.Center
+        contentAlignment = contentAlignment
     ) {
         CompositionLocalProvider(LocalContentColor provides contentColor) {
-            Box(
-                modifier = Modifier
-                    .then(
-                        when (hAlign) {
-                            Alignment.Start -> Modifier.alignBy(FirstBaseline)
-                            else -> Modifier
-                        }
-                    ),
-                content = content
-            )
+            Box(modifier = Modifier, content = content)
         }
     }
-}
 
 
 
