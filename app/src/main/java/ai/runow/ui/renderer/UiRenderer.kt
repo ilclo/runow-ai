@@ -1554,6 +1554,11 @@ fun UiScreen(
 
     // Modalità designer persistente per schermata
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
+    // Modalità runtime (Preview / Resize / Designer)
+    var appMode by rememberSaveable(screenName) { mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real) }
+    LaunchedEffect(designMode) {
+        appMode = if (designMode) AppMode.Designer else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
+    }
 
     // ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
     var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
@@ -1568,7 +1573,32 @@ fun UiScreen(
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
 
+    CompositionLocalProvider(LocalAppMode provides appMode) {
     Box(Modifier.fillMaxSize()) {
+
+        if (designMode) {
+        if (designMode) {
+            DesignerOverlay(
+                screenName = screenName,
+
+            )
+        }
+
+        // HUD e switch veloce tra Preview/Resize/Designer
+        if (LocalAppMode.current == AppMode.Resize) {
+            ResizeHud(onExit = { appMode = AppMode.Real })
+        }
+        ModeSpeedDial(
+            isDesigner = designMode,
+            isResize = LocalAppMode.current == AppMode.Resize,
+            onPick = { mode ->
+                when (mode) {
+                    Mode.Preview -> { appMode = AppMode.Real;  }
+                    Mode.Resize  -> { appMode = AppMode.Resize; }
+                    Mode.Designer-> { appMode = AppMode.Designer; designMode = true }
+                }
+            }
+        )
         // ====== SFONDO PAGINA (colore/gradient/immagine) ======
         RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
@@ -1584,6 +1614,27 @@ fun UiScreen(
         )
 
         if (designMode) {
+            DesignerOverlay(
+                screenName = screenName,
+
+            )
+        }
+        // HUD e switch veloce tra Preview/Resize/Designer
+        if (LocalAppMode.current == AppMode.Resize) {
+            ResizeHud(onExit = { appMode = AppMode.Real })
+        }
+        ModeSpeedDial(
+            isDesigner = designMode,
+            isResize = LocalAppMode.current == AppMode.Resize,
+            onPick = { mode ->
+                when (mode) {
+                    Mode.Preview -> { appMode = AppMode.Real;  }
+                    Mode.Resize  -> { appMode = AppMode.Resize; }
+                    Mode.Designer-> { appMode = AppMode.Designer; designMode = true }
+                }
+            }
+        )
+        
             DesignerOverlay(
                 screenName = screenName,
                 layout = layout!!,
