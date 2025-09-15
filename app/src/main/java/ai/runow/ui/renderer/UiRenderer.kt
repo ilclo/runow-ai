@@ -2,6 +2,10 @@
 
 package ai.runow.ui.renderer
 
+
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.draw.drawWithContent
@@ -251,7 +255,7 @@ private fun BoxScope.ResizeHandles(
             .pointerInput(Unit) {
                 detectDragGestures { change, drag ->
                     change.consume()
-                    onResizeHorizontal(drag.x, isRightEdge = false, rowWidthPx = rowWidthPx)
+                    onResizeHorizontal(drag.x, false, rowWidthPx)
                 }
             }
     )
@@ -274,7 +278,7 @@ private fun BoxScope.ResizeHandles(
             .pointerInput(Unit) {
                 detectDragGestures { change, drag ->
                     change.consume()
-                    onResizeHorizontal(drag.x, isRightEdge = true, rowWidthPx = rowWidthPx)
+                    onResizeHorizontal(drag.x, true,  rowWidthPx)
                 }
             }
     )
@@ -298,7 +302,7 @@ private fun BoxScope.ResizeHandles(
             .pointerInput(Unit) {
                 detectDragGestures { change, drag ->
                     change.consume()
-                    onResizeVertical(drag.y, isBottomEdge = false)
+                    onResizeVertical(drag.y,  false)
                 }
             }
     )
@@ -321,15 +325,12 @@ private fun BoxScope.ResizeHandles(
             .pointerInput(Unit) {
                 detectDragGestures { change, drag ->
                     change.consume()
-                    onResizeVertical(drag.y, isBottomEdge = true)
+                    onResizeVertical(drag.y,  true)
                 }
             }
     )
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Handle orizzontale (destra/sinistra) per il resize della larghezza del blocco
-// ──────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun BoxScope.ResizeHandleX(
     isRight: Boolean,
@@ -337,72 +338,82 @@ private fun BoxScope.ResizeHandleX(
     handleW: Dp = 16.dp,
     onResizeHorizontal: (deltaPx: Float, isRightEdge: Boolean, rowWidthPx: Float) -> Unit
 ) {
-    val modifierSide = if (isRight) Modifier.align(Alignment.CenterEnd) else Modifier.align(Alignment.CenterStart)
-    Box(
-        modifierSide
-            .width(handleW)
-            .fillMaxHeight()
-            .pointerHoverIcon(PointerIconDefaults.Crosshair)
-            .pointerInput(Unit) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    // ⚠️ NO named args sui function-types: passaggio posizionale
-                    onResizeHorizontal(drag.x, false, rowWidthPx) // lato SINISTRO
-                }
-            }
-    )
+    val density = LocalDensity.current
+    val sideMod = if (isRight) Modifier.align(Alignment.CenterEnd) else Modifier.align(Alignment.CenterStart)
 
     Box(
-        modifierSide
+        sideMod
             .width(handleW)
             .fillMaxHeight()
-            .pointerHoverIcon(PointerIconDefaults.Crosshair)
-            .pointerInput(Unit) {
+            .drawWithContent {
+                drawContent()
+                val guideX = if (isRight) 0f else size.width
+                drawLine(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                    start = Offset(x = guideX, y = 0f),
+                    end   = Offset(x = guideX, y = size.height),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+            .pointerInput(isRight, rowWidthPx) {
                 detectDragGestures { change, drag ->
                     change.consume()
-                    // ⚠️ NO named args sui function-types: passaggio posizionale
-                    onResizeHorizontal(drag.x, true, rowWidthPx)  // lato DESTRO
+                    onResizeHorizontal(drag.x, isRight, rowWidthPx)
                 }
             }
     )
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Handle verticale (alto/basso) per il resize dell’altezza del blocco
-// ──────────────────────────────────────────────────────────────────────────────
+
 @Composable
 private fun BoxScope.ResizeHandleY(
     handleH: Dp = 14.dp,
     onResizeVertical: (deltaPx: Float, isBottomEdge: Boolean) -> Unit
 ) {
-    // SOPRA
+    val density = LocalDensity.current
+
+    // TOP
     Box(
         Modifier
             .fillMaxWidth()
             .height(handleH)
             .align(Alignment.TopCenter)
-            .pointerHoverIcon(PointerIconDefaults.Crosshair)
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                    start = Offset(x = 0f, y = size.height),
+                    end   = Offset(x = size.width, y = size.height),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
             .pointerInput(Unit) {
                 detectDragGestures { change, drag ->
                     change.consume()
-                    // ⚠️ NO named args sui function-types: passaggio posizionale
-                    onResizeVertical(drag.y, false) // bordo superiore
+                    onResizeVertical(drag.y, false) // bordo superiore fisso
                 }
             }
     )
 
-    // SOTTO
+    // BOTTOM
     Box(
         Modifier
             .fillMaxWidth()
             .height(handleH)
             .align(Alignment.BottomCenter)
-            .pointerHoverIcon(PointerIconDefaults.Crosshair)
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                    start = Offset(x = 0f, y = 0f),
+                    end   = Offset(x = size.width, y = 0f),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
             .pointerInput(Unit) {
                 detectDragGestures { change, drag ->
                     change.consume()
-                    // ⚠️ NO named args sui function-types: passaggio posizionale
-                    onResizeVertical(drag.y, true)  // bordo inferiore
+                    onResizeVertical(drag.y, true)  // bordo inferiore fisso
                 }
             }
     )
