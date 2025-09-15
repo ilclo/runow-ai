@@ -1423,37 +1423,41 @@ fun UiScreen(
     val menus = remember(layout, tick) { collectMenus(layout!!) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
 
-    // Stato barra designer in basso (per lasciare spazio ai contenuti)
+    // Spazio per overlay designer in basso
     var overlayHeightPx by remember { mutableStateOf(0) }
     val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
 
-    // Modalità designer persistente
+    // Modalità Designer persistente
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
 
-    var showResizeHint by rememberSaveable(appMode) { mutableStateOf(false) }
+    // ------- DICHIARA appMode PRIMA DI USARLO --------
+    var appMode by rememberSaveable(screenName) {
+        mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
+    }
+    // Mantieni coerenza quando entro/esco dal Designer
+    LaunchedEffect(designMode) {
+        appMode = if (designMode) AppMode.Designer
+        else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
+    }
+    // Pubblica nel uiState se il runtime-resize è attivo
+    LaunchedEffect(appMode) {
+        uiState["_runtimeResize"] = (appMode == AppMode.Resize)
+    }
 
+    // HUD "istruzioni resize" – trasparente, per 10s, tappabile per nascondere
+    var showResizeHint by rememberSaveable(appMode) { mutableStateOf(false) }
     LaunchedEffect(appMode) {
         if (appMode == AppMode.Resize) {
             showResizeHint = true
             delay(10_000)
             showResizeHint = false
+        } else {
+            showResizeHint = false
         }
     }
+    // -----------------------------------------------
 
-    // Modalità "app" (Real / Designer / Resize)
-    var appMode by rememberSaveable(screenName) {
-        mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
-    }
-    // Se entro/esco dal designer, mantieni appMode coerente
-    LaunchedEffect(designMode) {
-        appMode = if (designMode) AppMode.Designer else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
-    }
-    // Espone a runtime ai blocchi che il resize è attivo
-    LaunchedEffect(appMode) {
-        uiState["_runtimeResize"] = (appMode == AppMode.Resize)
-    }
-
-    // ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
+    // Live preview del root (page + topBar) durante l’editing
     var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
     fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
         val out = JSONObject(base.toString())
@@ -1464,74 +1468,84 @@ fun UiScreen(
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
 
-    Box(Modifier.fillMaxSize()) {
-        // ====== SFONDO PAGINA ======
-        RenderPageBackground(effectiveLayout.optJSONObject("page"))
+    CompositionLocalProvider(LocalAppMode provides appMode) {
+        Box(Modifier.fillMaxSize()) {
+            // Sfondo pagina
+            RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
-        // ====== SCAFFOLD ROOT (TopBar pinned, BottomBar, FAB) ======
-        ScreenScaffoldWithPinnedTopBar(
-            layout = effectiveLayout,
-            dispatch = dispatch,
-            uiState = uiState,
-            designerMode = designMode,
-            menus = menus,
-            selectedPathSetter = { selectedPath = it },
-            extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-            scaffoldPadding = scaffoldPadding
-        )
-
-        // ====== OVERLAY DESIGNER ======
-        if (designMode) {
-            DesignerOverlay(
-                screenName = screenName,
-                layout = layout!!,
-                selectedPath = selectedPath,
-                setSelectedPath = { selectedPath = it },
-                onLiveChange = { tick++ },
-                onLayoutChange = {
-                    UiLoader.saveDraft(ctx, screenName, layout!!)
-                    layout = JSONObject(layout.toString())
-                    tick++
-                },
-                onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
-                onReset = {
-                    UiLoader.resetPublished(ctx, screenName)
-                    layout = UiLoader.loadLayout(ctx, screenName)
-                    selectedPath = null
-                    tick++
-                },
-                topPadding = scaffoldPadding.calculateTopPadding(),
-                onOverlayHeight = { overlayHeightPx = it },
-                onOpenRootInspector = { /* gestito altrove */ },
-                onRootLivePreview = { previewRoot = it }
+            // Root scaffold (con top‑bar “pinned/styled”)
+            ScreenScaffoldWithPinnedTopBar(
+                layout = effectiveLayout,
+                dispatch = dispatch,
+                uiState = uiState,
+                designerMode = designMode,
+                menus = menus,
+                selectedPathSetter = { selectedPath = it },
+                extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+                scaffoldPadding = scaffoldPadding
             )
-        }
 
-        if (appMode == AppMode.Resize) {
-            AnimatedVisibility(
-                visible = showResizeHint,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                ResizeHud(
-                    onDismiss = { showResizeHint = false },   // tap sull’avviso => sparisce subito
-                    onExit = { appMode = AppMode.Real }       // pulsante “Esci”
+            // Overlay Designer (invariato)
+            if (designMode) {
+                DesignerOverlay(
+                    screenName = screenName,
+                    layout = layout!!,
+                    selectedPath = selectedPath,
+                    setSelectedPath = { selectedPath = it },
+                    onLiveChange = { tick++ },
+                    onLayoutChange = {
+                        UiLoader.saveDraft(ctx, screenName, layout!!)
+                        layout = JSONObject(layout.toString())
+                        tick++
+                    },
+                    onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+                    onPublish = {
+                        UiLoader.saveDraft(ctx, screenName, layout!!)
+                        UiLoader.publish(ctx, screenName)
+                    },
+                    onReset = {
+                        UiLoader.resetPublished(ctx, screenName)
+                        layout = UiLoader.loadLayout(ctx, screenName)
+                        selectedPath = null
+                        tick++
+                    },
+                    topPadding = scaffoldPadding.calculateTopPadding(),
+                    onOverlayHeight = { overlayHeightPx = it },
+                    onOpenRootInspector = { /* gestito altrove */ },
+                    onRootLivePreview = { previewRoot = it }
                 )
             }
-        }
 
-        // ====== FAB radiale per modalità ======
-        ModeFabRadial(
-            current = appMode,
-            onPick = { mode: AppMode ->
-                appMode = mode
-                designMode = (mode == AppMode.Designer)
-                uiState["_runtimeResize"] = (mode == AppMode.Resize)
+            // ====== HUD Resize (trasparente, tappabile, auto-hide 10s) ======
+            if (appMode == AppMode.Resize) {
+                AnimatedVisibility(
+                    visible = showResizeHint,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    ResizeHud(
+                        onDismiss = { showResizeHint = false },     // tap sull’avviso
+                        onExit = { appMode = AppMode.Real }          // bottone “Esci”
+                    )
+                }
             }
-        )
+
+            // ====== FAB radiale con le 3 modalità (unico pulsante) ======
+            ModeFabRadial(
+                current = appMode
+            ) { picked ->
+                when (picked) {
+                    AppMode.Real -> { designMode = false; appMode = AppMode.Real }
+                    AppMode.Resize -> { designMode = false; appMode = AppMode.Resize }
+                    AppMode.Designer -> { designMode = true; appMode = AppMode.Designer }
+                }
+            }
+
+            // 🔕 Nessun "vecchio" knob laterale: rimosso come richiesto
+        }
     }
 }
+
 
 @Composable
 private fun BoxScope.ResizeHud(
@@ -1539,7 +1553,7 @@ private fun BoxScope.ResizeHud(
     onExit: () -> Unit
 ) {
     Surface(
-        color = Color.Transparent,              // <— sfondo trasparente
+        color = Color.Transparent,                // sfondo trasparente
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(12.dp),
         tonalElevation = 0.dp,
@@ -1547,7 +1561,7 @@ private fun BoxScope.ResizeHud(
         modifier = Modifier
             .align(Alignment.TopCenter)
             .padding(top = 12.dp, start = 12.dp, end = 12.dp)
-            .clickable(                          // <— un tap sull’avviso lo chiude
+            .clickable(                           // un tap sull’avviso lo chiude subito
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
             ) { onDismiss() }
