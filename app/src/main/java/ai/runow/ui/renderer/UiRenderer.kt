@@ -98,23 +98,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.IntSize
 
-// Inserisce 'value' nella JSONArray a posizione 'index' spostando a destra gli elementi successivi.
-// Evita l'uso di remove() così non dipendiamo da eventuali estensioni omonime.
-private fun JSONArray.insertAt(index: Int, value: Any) {
-    val old = (0 until length()).map { opt(it) }
-    val i = index.coerceIn(0, old.size)
-    // Sovrascrivo sequenzialmente con put(pos, ...)
-    for (p in 0 until i) {
-        this.put(p, old[p])
-    }
-    this.put(i, value)
-    for (p in i until old.size) {
-        this.put(p + 1, old[p])
-    }
-}
 
-
-// === PATCH 1: risoluzione unica dell'array blocchi ===========================
+// --- Unico punto di verità: dove stanno i blocchi della pagina
 private fun resolveBlocksArray(root: JSONObject): Pair<JSONArray, String> {
     val page = root.optJSONObject("page")
     return if (page != null) {
@@ -124,6 +109,106 @@ private fun resolveBlocksArray(root: JSONObject): Pair<JSONArray, String> {
         val arr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
         arr to "/blocks"
     }
+}
+
+// --- Utility per inserire in mezzo a una JSONArray (senza perdere elementi)
+private fun JSONArray.insertAt(index: Int, value: Any) {
+    val old = (0 until length()).map { opt(it) }
+    val i = index.coerceIn(0, old.size)
+    for (p in 0 until i) put(p, old[p])
+    put(i, value)
+    for (p in i until old.size) put(p + 1, old[p])
+}
+
+// --- Helpers di path (se già presenti, tieni UNA sola versione)
+private fun jsonAtPath(root: JSONObject, path: String): Any? {
+    if (!path.startsWith("/")) return null
+    val segs = path.trim('/').split('/')
+    var node: Any = root
+    var i = 0
+    while (i < segs.size) {
+        when (node) {
+            is JSONObject -> { node = node.opt(segs[i]) ?: return null; i++ }
+            is JSONArray  -> {
+                val idx = segs[i].toIntOrNull() ?: return null
+                node = node.opt(idx) ?: return null; i++
+            }
+            else -> return null
+        }
+    }
+    return node
+}
+
+private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, Int>? {
+    if (!path.startsWith("/")) return null
+    val segs = path.trim('/').split('/')
+    var node: Any = root
+    var parentArr: JSONArray? = null
+    var index = -1
+    var i = 0
+    while (i < segs.size) {
+        when (node) {
+            is JSONObject -> { node = node.opt(segs[i]) ?: return null; i++ }
+            is JSONArray  -> {
+                val idx = segs[i].toIntOrNull() ?: return null
+                parentArr = node
+                index = idx
+                node = parentArr.opt(idx) ?: return null
+                i++
+            }
+        }
+    }
+    return if (parentArr != null && index >= 0) parentArr!! to index else null
+}
+
+// --- INSERIMENTO COERENTE con resolveBlocksArray (prima causa del “non si vede”)
+private fun insertBlockAndReturnPath(
+    root: JSONObject,
+    selectedPath: String?,
+    newBlock: JSONObject,
+    position: String = "after" // "before" | "after" | "child_end"
+): String {
+    // 1) Provo ad ancorarmi alla selezione corrente
+    val parentAndIndex = selectedPath?.let { getParentAndIndex(root, it) }
+
+    // 2) Altrimenti vado sull’array “canonico” dei blocchi (page.blocks o blocks)
+    val (defaultArr, defaultParentPath) = resolveBlocksArray(root)
+
+    val (parentArr, parentPath, anchorIndex) = if (parentAndIndex != null) {
+        val (arr, idx) = parentAndIndex
+        Triple(arr, selectedPath!!.substringBeforeLast("/"), idx)
+    } else {
+        Triple(defaultArr, defaultParentPath, defaultArr.length() - 1)
+    }
+
+    // 3) Decido dove inserire
+    val insertIndex = when (position) {
+        "before"    -> anchorIndex.coerceAtLeast(0)
+        "after"     -> (anchorIndex + 1).coerceAtLeast(0)
+        "child_end" -> {
+            val maybeContainer = jsonAtPath(root, selectedPath ?: "")
+            val items = (maybeContainer as? JSONObject)?.optJSONArray("items")
+            if (items != null) {
+                items.insertAt(items.length(), newBlock)
+                return "$selectedPath/items/${items.length() - 1}"
+            } else {
+                (anchorIndex + 1).coerceAtLeast(0)
+            }
+        }
+        else -> (anchorIndex + 1).coerceAtLeast(0)
+    }
+
+    // 4) Inserisco e restituisco il path del nuovo nodo
+    parentArr.insertAt(insertIndex, newBlock)
+    return "$parentPath/$insertIndex"
+}
+
+// --- usato dai bottoni “Icona + Menu”
+private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
+    val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
+    val iconPath = insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
+    insertBlockAndReturnPath(root, iconPath, newMenu(id), "after")
+    return iconPath
 }
 
 
@@ -147,7 +232,7 @@ private fun RenderRootScaffold(
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
         topBar = {
             if (title.isNotBlank()) {
-                SmallTopAppBar(title = { Text(title) })
+                TopAppBar(title = { Text(title) })
             }
         }
     ) { innerPadding ->
@@ -4800,103 +4885,12 @@ internal fun RenderBlock(
         return map
     }
 
-    private fun jsonAtPath(root: JSONObject, path: String): Any? {
-        if (!path.startsWith("/")) return null
-        val segs = path.trim('/').split('/')
-        var node: Any = root
-        var i = 0
-        while (i < segs.size) {
-            when (node) {
-                is JSONObject -> { node = (node as JSONObject).opt(segs[i]) ?: return null; i++ }
-                is JSONArray  -> {
-                    val idx = segs[i].toIntOrNull() ?: return null
-                    node = (node as JSONArray).opt(idx) ?: return null; i++
-                }
-                else -> return null
-            }
-        }
-        return node
-    }
-
-    private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, Int>? {
-        if (!path.startsWith("/")) return null
-        val segs = path.trim('/').split('/')
-        var node: Any = root
-        var parentArr: JSONArray? = null
-        var index = -1
-        var i = 0
-        while (i < segs.size) {
-            val s = segs[i]
-            when (node) {
-                is JSONObject -> { node = (node as JSONObject).opt(s) ?: return null; i++ }
-                is JSONArray  -> {
-                    val idx = s.toIntOrNull() ?: return null
-                    parentArr = node as JSONArray
-                    index = idx
-                    node = parentArr.opt(idx) ?: return null
-                    i++
-                }
-            }
-        }
-        return if (parentArr != null && index >= 0) parentArr!! to index else null
-    }
-
     private fun replaceAtPath(root: JSONObject, path: String, newNode: JSONObject) {
         val p = getParentAndIndex(root, path) ?: return
         p.first.put(p.second, JSONObject(newNode.toString()))
     }
 
-    // === PATCH 2: inserimento coerente con la risoluzione dei blocchi ============
-    private fun insertBlockAndReturnPath(
-        root: JSONObject,
-        selectedPath: String?,
-        newBlock: JSONObject,
-        position: String = "after" // "before" | "after" | "child_end"
-    ): String {
-        // 1) calcolo parent e indice ancorandomi al selectedPath, se valido
-        val parentAndIndex = selectedPath?.let { getParentAndIndex(root, it) }
-        val (defaultArr, defaultParentPath) = resolveBlocksArray(root)
-    
-        val (parentArr, parentPath, anchorIndex) = if (parentAndIndex != null) {
-            val (arr, idx) = parentAndIndex
-            Triple(arr, selectedPath.substringBeforeLast("/"), idx)
-        } else {
-            // Nessuna selezione: append in fondo all'array dei blocchi "canonico"
-            Triple(defaultArr, defaultParentPath, defaultArr.length() - 1)
-        }
-    
-        // 2) calcolo indice di inserimento in base alla posizione richiesta
-        val insertIndex = when (position) {
-            "before"   -> anchorIndex.coerceAtLeast(0)
-            "after"    -> (anchorIndex + 1).coerceAtLeast(0)
-            "child_end" -> {
-                // Se il selectedPath punta ad un contenitore con "items", inserisco in coda lì.
-                // Altrimenti, uso il parent/anchor come "after".
-                val maybeContainer = jsonAtPath(root, selectedPath ?: "")
-                val items = (maybeContainer as? JSONObject)?.optJSONArray("items")
-                if (items != null) {
-                    // inserisco in coda agli items
-                    insertAt(items, items.length(), newBlock)
-                    return "$selectedPath/items/${items.length() - 1}"
-                } else {
-                    (anchorIndex + 1).coerceAtLeast(0)
-                }
-            }
-            else       -> (anchorIndex + 1).coerceAtLeast(0)
-        }
-    
-        // 3) inserisco e ritorno il path del nuovo blocco
-        insertAt(parentArr, insertIndex, newBlock)
-        return "$parentPath/$insertIndex"
-    }
 
-
-    private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
-        val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
-        val iconPath = insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
-        insertBlockAndReturnPath(root, iconPath, newMenu(id), "after")
-        return iconPath
-    }
 
     private fun moveAndReturnNewPath(root: JSONObject, path: String, delta: Int): String {
         val p = getParentAndIndex(root, path) ?: return path
