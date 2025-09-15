@@ -98,6 +98,22 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.IntSize
 
+// Inserisce 'value' nella JSONArray a posizione 'index' spostando a destra gli elementi successivi.
+// Evita l'uso di remove() così non dipendiamo da eventuali estensioni omonime.
+private fun JSONArray.insertAt(index: Int, value: Any) {
+    val old = (0 until length()).map { opt(it) }
+    val i = index.coerceIn(0, old.size)
+    // Sovrascrivo sequenzialmente con put(pos, ...)
+    for (p in 0 until i) {
+        this.put(p, old[p])
+    }
+    this.put(i, value)
+    for (p in i until old.size) {
+        this.put(p + 1, old[p])
+    }
+}
+
+
 // === PATCH 1: risoluzione unica dell'array blocchi ===========================
 private fun resolveBlocksArray(root: JSONObject): Pair<JSONArray, String> {
     val page = root.optJSONObject("page")
@@ -112,182 +128,58 @@ private fun resolveBlocksArray(root: JSONObject): Pair<JSONArray, String> {
 
 
 @Composable
-internal fun RenderRootScaffold(
+private fun RenderRootScaffold(
     layout: JSONObject,
     dispatch: (String) -> Unit,
     uiState: MutableMap<String, Any>,
+    designerMode: Boolean,
     menus: Map<String, JSONArray>,
-    mode: AppMode,
-    onSelect: (String) -> Unit,
-    onOpenInspector: (String) -> Unit,
-    onLayoutChange: () -> Unit
+    selectedPathSetter: (String) -> Unit,
+    extraPaddingBottom: Dp,
+    scaffoldPadding: PaddingValues
 ) {
+    val page = layout.optJSONObject("page")
     val title = layout.optString("topTitle", "")
-    val topActions = layout.optJSONArray("topActions") ?: JSONArray()       // fallback legacy
-    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // fallback legacy
 
-    val bottomBarNode  = layout.optJSONObject("bottomBar")
-    val bottomBarCfg   = bottomBarNode?.optJSONObject("container")
-    val bottomBarItems = bottomBarNode?.optJSONArray("items")
-
-    val fab   = layout.optJSONObject("fab")
-    val scroll = layout.optBoolean("scroll", true)
-    val topBarConf = layout.optJSONObject("topBar")
-
-    // Scroll behavior per la top bar (pinned/enterAlways/exitUntilCollapsed)
-    val topScrollBehavior =
-        when (topBarConf?.optString("scroll", "none")) {
-            "pinned"             -> TopAppBarDefaults.pinnedScrollBehavior()
-            "enterAlways"        -> TopAppBarDefaults.enterAlwaysScrollBehavior()
-            "exitUntilCollapsed" -> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-            else                 -> null
-        }
-
-    val (blocks, blocksBasePath) = remember(layout) { resolveBlocksArray(layout) }
-
-    val contentHost: @Composable () -> Unit = {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            val count = blocks.length()
-            for (i in 0 until count) {
-                val block = blocks.optJSONObject(i) ?: continue
-                val path = "$blocksBasePath/$i"
-                // Disegna ogni blocco
-                RenderBlock(
-                    block = block,
-                    dispatch = dispatch,
-                    uiState = uiState,
-                    designerMode = (mode != AppMode.Real),
-                    path = path,
-                    menus = menus,
-                    onSelect = onSelect,
-                    onOpenInspector = onOpenInspector
-                )
-            }
-        }
-    }
-       
-    androidx.compose.material3.Scaffold(
-        modifier = if (topScrollBehavior != null)
-            Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
-        else Modifier,
-
-        // Lasciamo la responsibility degli inset alla top bar/padding manuale
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
         topBar = {
-            if (topBarConf != null) {
-                // Usa la tua RenderTopBar già presente
-                RenderTopBar(topBarConf, dispatch, topScrollBehavior)
-            } else {
-                // Fallback legacy: topTitle/topActions
-                if (title.isNotBlank() || topActions.length() > 0) {
-                    TopAppBar(
-                        title = { Text(title) },
-                        actions = {
-                            for (i in 0 until topActions.length()) {
-                                val a = topActions.optJSONObject(i) ?: continue
-                                IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-                                    NamedIconEx(a.optString("icon", "more_vert"), null)
-                                }
-                            }
-                        }
-                    )
-                }
-            }
-        },
-
-        bottomBar = {
-            // Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
-            val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
-                JSONArray().apply {
-                    for (i in 0 until bottomButtons.length()) {
-                        val it = bottomButtons.optJSONObject(i) ?: continue
-                        put(JSONObject().apply {
-                            put("type", "button")
-                            put("label", it.optString("label", "Button"))
-                            put("actionId", it.optString("actionId", ""))
-                            put("style", "text")
-                        })
-                    }
-                }
-            } else null
-
-            if (items != null && items.length() > 0) {
-                StyledContainer(
-                    cfg = bottomBarCfg ?: JSONObject(),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RenderBarItemsRow(items, dispatch)
-                    }
-                }
-            }
-        },
-
-        floatingActionButton = {
-            fab?.let {
-                FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
-                    NamedIconEx(it.optString("icon", "play_arrow"), null)
-                }
-            }
-        },
-
-        containerColor = Color.Transparent
-    ) { innerPadding ->
-        // Corpo
-        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
-
-        val host: @Composable () -> Unit = {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    // padding: Scaffold -> padding esterno screen -> safe insets orizzontali -> margini contenuti
-                    .padding(innerPadding)
-                    .padding(scaffoldPadding)
-                    .imePadding()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                    .padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top  = 16.dp,
-                        bottom = extraPaddingBottom
-                    ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                for (i in 0 until blocks.length()) {
-                    val block = blocks.optJSONObject(i) ?: continue
-                    val path = "/blocks/$i"
-                    RenderBlock(
-                        block = block,
-                        dispatch = dispatch,
-                        uiState = uiState,
-                        designerMode = designerMode,
-                        path = path,
-                        menus = menus,
-                        onSelect = { p -> selectedPathSetter(p) },
-                        onOpenInspector = { p -> selectedPathSetter(p) }
-                    )
-                }
+            if (title.isNotBlank()) {
+                SmallTopAppBar(title = { Text(title) })
             }
         }
-
-        if (scroll) {
-            Column(Modifier.verticalScroll(rememberScrollState())) { host() }
-        } else {
-            host()
+    ) { innerPadding ->
+        // Somma semplice dei padding: prima quelli dello Scaffold, poi quelli esterni, poi spazio extra in basso
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(scaffoldPadding)
+                .padding(bottom = extraPaddingBottom)
+        ) {
+            if (page != null) {
+                // Render del "page" root
+                RenderBlock(
+                    page,
+                    dispatch,
+                    uiState,
+                    designerMode = designerMode,
+                    path = "page",
+                    menus = menus,
+                    onSelect = { selectedPathSetter(it) },
+                    onOpenInspector = { selectedPathSetter(it) }
+                )
+            } else {
+                // Fallback se non c'è page
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Nessun 'page' nel layout", style = MaterialTheme.typography.bodyLarge)
+                }
+            }
         }
     }
 }
-
 
 
 @Composable
