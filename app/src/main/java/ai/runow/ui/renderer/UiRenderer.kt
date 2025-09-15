@@ -2,7 +2,8 @@
 
 package ai.runow.ui.renderer
 
-import androidx.compose.foundation.layout.alignByBaseline
+import androidx.compose.foundation.layout.alignBy
+import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -1340,255 +1341,132 @@ fun UiScreen(
         return
     }
 
-    // Menù + selezione corrente
+    // Menù raccolti dal layout + selezione corrente
     val menus = remember(layout, tick) { collectMenus(layout!!) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
 
-    // Spazio per overlay designer in basso
+    // Stato barra designer in basso (per lasciare spazio ai contenuti)
     var overlayHeightPx by remember { mutableStateOf(0) }
     val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
 
-    // Modalità Designer persistente
+    // Modalità designer persistente
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
 
-    // Modalità Resize runtime (ridimensiona/sposta blocchi reali)
-    var resizeMode by rememberSaveable(screenName) { mutableStateOf(false) }
-
-    // Pubblica lo stato nel uiState (per eventuali figli che lo leggono)
-    LaunchedEffect(resizeMode) {
-        uiState["_runtimeResize"] = resizeMode
+    // Modalità "app" (Real / Designer / Resize)
+    var appMode by rememberSaveable(screenName) {
+        mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
+    }
+    // Se entro/esco dal designer, mantieni appMode coerente
+    LaunchedEffect(designMode) {
+        appMode = if (designMode) AppMode.Designer else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
+    }
+    // Espone a runtime ai blocchi che il resize è attivo
+    LaunchedEffect(appMode) {
+        uiState["_runtimeResize"] = (appMode == AppMode.Resize)
     }
 
-    // Live preview del root (page + topBar) mentre si edita
+    // ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
     var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
     fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
         val out = JSONObject(base.toString())
-        listOf("page", "topBar").forEach { k ->
-            if (preview.has(k)) out.put(k, preview.opt(k))
-        }
+        listOf("page", "topBar").forEach { k -> if (preview.has(k)) out.put(k, preview.opt(k)) }
         return out
     }
     val effectiveLayout = remember(layout, previewRoot) {
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
 
-    // AppMode globale (CompositionLocal) – Real / Designer / Resize
-    enum class AppMode { Real, Designer, Resize }
-    val LocalAppMode = compositionLocalOf { AppMode.Real }
+    Box(Modifier.fillMaxSize()) {
+        // ====== SFONDO PAGINA ======
+        RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
-    // Scegli lo stato corrente (Designer ha precedenza)
-    val appMode = when {
-        designMode -> AppMode.Designer
-        resizeMode -> AppMode.Resize
-        else       -> AppMode.Real
-    }
+        // ====== SCAFFOLD ROOT (TopBar pinned, BottomBar, FAB) ======
+        ScreenScaffoldWithPinnedTopBar(
+            layout = effectiveLayout,
+            dispatch = dispatch,
+            uiState = uiState,
+            designerMode = designMode,
+            menus = menus,
+            selectedPathSetter = { selectedPath = it },
+            extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+            scaffoldPadding = scaffoldPadding
+        )
 
-    CompositionLocalProvider(LocalAppMode provides appMode) {
-        Box(Modifier.fillMaxSize()) {
-            // Sfondo pagina
-            RenderPageBackground(effectiveLayout.optJSONObject("page"))
-
-            // Root scaffold (con top‑bar “pinned/styled”)
-            ScreenScaffoldWithPinnedTopBar(
-                layout = effectiveLayout,
-                dispatch = dispatch,
-                uiState = uiState,
-                designerMode = designMode,
-                menus = menus,
-                selectedPathSetter = { selectedPath = it },
-                extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-                scaffoldPadding = scaffoldPadding
-            )
-
-            // Overlay Designer (comportamento invariato)
-            if (designMode) {
-                DesignerOverlay(
-                    screenName = screenName,
-                    layout = layout!!,
-                    selectedPath = selectedPath,
-                    setSelectedPath = { selectedPath = it },
-                    onLiveChange = { tick++ },
-                    onLayoutChange = {
-                        UiLoader.saveDraft(ctx, screenName, layout!!)
-                        layout = JSONObject(layout.toString())
-                        tick++
-                    },
-                    onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                    onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
-                    onReset = {
-                        UiLoader.resetPublished(ctx, screenName)
-                        layout = UiLoader.loadLayout(ctx, screenName)
-                        selectedPath = null
-                        tick++
-                    },
-                    topPadding = scaffoldPadding.calculateTopPadding(),
-                    onOverlayHeight = { overlayHeightPx = it },
-                    onOpenRootInspector = { /* gestito altrove */ },
-                    onRootLivePreview = { previewRoot = it }
-                )
-            }
-
-            // HUD Modalità Resize (leggero)
-            if (resizeMode) {
-                ResizeHud(onExit = { resizeMode = false })
-            }
-
-            // Speed‑Dial radiale a destra (Preview / Resize / Designer)
-            ModeSpeedDial(
-                isDesigner = designMode,
-                isResize = resizeMode,
-                onPick = { mode ->
-                    when (mode) {
-                        Mode.Preview  -> { designMode = false; resizeMode = false }
-                        Mode.Resize   -> { designMode = false; resizeMode = true  }
-                        Mode.Designer -> { resizeMode = false; designMode = true  }
-                    }
-                }
+        // ====== OVERLAY DESIGNER ======
+        if (designMode) {
+            DesignerOverlay(
+                screenName = screenName,
+                layout = layout!!,
+                selectedPath = selectedPath,
+                setSelectedPath = { selectedPath = it },
+                onLiveChange = { tick++ },
+                onLayoutChange = {
+                    UiLoader.saveDraft(ctx, screenName, layout!!)
+                    layout = JSONObject(layout.toString())
+                    tick++
+                },
+                onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+                onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
+                onReset = {
+                    UiLoader.resetPublished(ctx, screenName)
+                    layout = UiLoader.loadLayout(ctx, screenName)
+                    selectedPath = null
+                    tick++
+                },
+                topPadding = scaffoldPadding.calculateTopPadding(),
+                onOverlayHeight = { overlayHeightPx = it },
+                onOpenRootInspector = { /* gestito altrove */ },
+                onRootLivePreview = { previewRoot = it }
             )
         }
-    }
 
-    // -------- Composable locali di supporto (HUD + Speed‑Dial) --------
-
-
-    @Composable
-    fun BoxScope.ResizeHud(onExit: () -> Unit) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            tonalElevation = 8.dp,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 12.dp, start = 12.dp, end = 12.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(Icons.Filled.Tune, contentDescription = null)
-                Text(
-                    "Modalità resize attiva: tieni premuto un blocco reale per mostrare i bordi drag. Doppio tap per spostarlo; tocca fuori per uscire.",
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Spacer(Modifier.width(4.dp))
-                TextButton(onClick = onExit) { Text("Esci") }
-            }
-        }
-    }
-
-    @Composable
-    fun BoxScope.ModeSpeedDial(
-        isDesigner: Boolean,
-        isResize: Boolean,
-        onPick: (Mode) -> Unit
-    ) {
-        var expanded by remember { mutableStateOf(false) }
-        val current = when {
-            isDesigner -> Mode.Designer
-            isResize   -> Mode.Resize
-            else       -> Mode.Preview
+        // ====== HUD RESIZE (leggero) ======
+        if (appMode == AppMode.Resize) {
+            ResizeHud(onExit = { appMode = AppMode.Real })
         }
 
-        val anchorMod = Modifier
-            .align(Alignment.CenterEnd)
-            .padding(end = 12.dp)
-
-        Box(anchorMod) {
-            // FAB principale: tap = cicla modalità, long‑press = apre il radiale
-            FloatingActionButton(
-                onClick = {
-                    val next = when (current) {
-                        Mode.Preview  -> Mode.Designer
-                        Mode.Designer -> Mode.Resize
-                        Mode.Resize   -> Mode.Preview
-                    }
-                    onPick(next)
-                },
-                modifier = Modifier.pointerInput(Unit) {
-                    detectTapGestures(
-                        onLongPress = { expanded = !expanded }
-                    )
-                },
-                containerColor = when (current) {
-                    Mode.Designer -> MaterialTheme.colorScheme.primary
-                    Mode.Resize   -> MaterialTheme.colorScheme.secondaryContainer
-                    Mode.Preview  -> MaterialTheme.colorScheme.surfaceVariant
-                },
-                contentColor = when (current) {
-                    Mode.Designer -> MaterialTheme.colorScheme.onPrimary
-                    Mode.Resize   -> MaterialTheme.colorScheme.onSecondaryContainer
-                    Mode.Preview  -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                shape = CircleShape
-            ) {
-                val icon = when (current) {
-                    Mode.Designer -> Icons.Filled.Build
-                    Mode.Resize   -> Icons.Filled.Tune
-                    Mode.Preview  -> Icons.Filled.Visibility
-                }
-                Icon(icon, contentDescription = "Cambia modalità")
+        // ====== FAB radiale per modalità ======
+        ModeFabRadial(
+            current = appMode,
+            onPick = { mode: AppMode ->
+                appMode = mode
+                designMode = (mode == AppMode.Designer)
+                uiState["_runtimeResize"] = (mode == AppMode.Resize)
             }
+        )
 
-            // Radiale “semplice”: tre azioni disposte a sinistra (alto/centro/basso)
-            if (expanded) {
-                // Scrim per chiudere
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .clickable { expanded = false }
-                )
-
-                val dist = with(LocalDensity.current) { 88.dp.toPx().toInt() }
-                val gap  = with(LocalDensity.current) { 72.dp.toPx().toInt() }
-
-                @Composable
-                fun ActionFab(
-                    offset: IntOffset,
-                    icon: ImageVector,
-                    label: String,
-                    selected: Boolean,
-                    onClick: () -> Unit
-                ) {
-                    SmallFloatingActionButton(
-                        onClick = {
-                            expanded = false
-                            onClick()
-                        },
-                        modifier = Modifier.offset { offset },
-                        containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                        shape = CircleShape
-                    ) {
-                        Icon(icon, contentDescription = label)
-                    }
-                }
-
-                // Posizioni: sinistra‑alto, sinistra‑centro, sinistra‑basso
-                ActionFab(
-                    offset = IntOffset(-dist, -gap),
-                    icon = Icons.Filled.Visibility,
-                    label = "Anteprima",
-                    selected = current == Mode.Preview
-                ) { onPick(Mode.Preview) }
-
-                ActionFab(
-                    offset = IntOffset(-dist, 0),
-                    icon = Icons.Filled.Tune,
-                    label = "Resize",
-                    selected = current == Mode.Resize
-                ) { onPick(Mode.Resize) }
-
-                ActionFab(
-                    offset = IntOffset(-dist, +gap),
-                    icon = Icons.Filled.Build,
-                    label = "Designer",
-                    selected = current == Mode.Designer
-                ) { onPick(Mode.Designer) }
-            }
-        }
+        // (Opzionale) levetta laterale storica per Designer/Anteprima
+        DesignSwitchKnob(
+            isDesigner = designMode,
+            onToggle = { designMode = !designMode }
+        )
     }
 }
 
+@Composable
+private fun BoxScope.ResizeHud(onExit: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 8.dp,
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = 12.dp, start = 12.dp, end = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(Icons.Filled.Tune, contentDescription = null)
+            Text(
+                "Resize attivo: long‑press su un blocco reale per drag dei bordi. Doppio tap per spostarlo; tap fuori per uscire.",
+                style = MaterialTheme.typography.labelMedium
+            )
+            Spacer(Modifier.width(4.dp))
+            TextButton(onClick = onExit) { Text("Esci") }
+        }
+    }
+}
 
 
 
@@ -1919,7 +1797,7 @@ fun StyledContainer(
                 modifier = Modifier
                     .then(
                         when (hAlign) {
-                            Alignment.Start -> Modifier.alignByBaseline()
+                            Alignment.Start -> Modifier.alignBy(FirstBaseline)
                             else -> Modifier
                         }
                     ),
