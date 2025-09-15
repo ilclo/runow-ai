@@ -170,47 +170,123 @@ private fun BoxScope.ResizeHandleY(
     )
 }
 
-// ======== GRUPPO DI HANDLE (4 lati) + calcolo larghezza Box ========
 @Composable
 private fun BoxScope.ResizeHandles(
     onResizeHorizontal: (deltaPx: Float, isRightEdge: Boolean, rowWidthPx: Float) -> Unit,
-    onResizeVertical: (deltaPx: Float, isBottomEdge: Boolean) -> Unit,
+    onResizeVertical:   (deltaPx: Float, isBottomEdge: Boolean) -> Unit,
+    guideColor: Color
 ) {
-    var boxSize by remember { mutableStateOf(IntSize.Zero) }
-    // serve per normalizzare i delta orizzontali in % se vuoi
-    val rowWidthPx = boxSize.width.toFloat().coerceAtLeast(1f)
+    val density = LocalDensity.current
+    val handleW = 14.dp
+    val handleH = 14.dp
+    var rowWidthPx by remember { mutableStateOf(1f) }
 
-    // cattura dimensioni del Box che contiene il blocco
+    // Misura la larghezza del contenitore per normalizzare il delta orizzontale
     Box(
         Modifier
             .matchParentSize()
-            .onGloballyPositioned { boxSize = it.size }
+            .onGloballyPositioned { coords ->
+                rowWidthPx = coords.size.width.toFloat().coerceAtLeast(1f)
+            }
     )
 
-    // SX
-    ResizeHandleX(
-        align = Alignment.CenterStart,
-        onDrag = { dx -> onResizeHorizontal(dx, /*isRightEdge=*/false, rowWidthPx) }
+    // --- SINISTRA ---
+    Box(
+        Modifier
+            .fillMaxHeight()
+            .width(handleW)
+            .align(Alignment.CenterStart)
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    color = guideColor,
+                    start = Offset(x = size.width, y = 0f),
+                    end   = Offset(x = size.width, y = size.height),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    // lato sinistro => il bordo destro resta fermo
+                    onResizeHorizontal(drag.x, false, rowWidthPx)
+                }
+            }
     )
 
-    // DX
-    ResizeHandleX(
-        align = Alignment.CenterEnd,
-        onDrag = { dx -> onResizeHorizontal(dx, /*isRightEdge=*/true, rowWidthPx) }
+    // --- DESTRA ---
+    Box(
+        Modifier
+            .fillMaxHeight()
+            .width(handleW)
+            .align(Alignment.CenterEnd)
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    color = guideColor,
+                    start = Offset(x = 0f, y = 0f),
+                    end   = Offset(x = 0f, y = size.height),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    // lato destro => il bordo sinistro resta fermo
+                    onResizeHorizontal(drag.x, true, rowWidthPx)
+                }
+            }
     )
 
-    // TOP
-    ResizeHandleY(
-        align = Alignment.TopCenter,
-        onDrag = { dy -> onResizeVertical(dy, /*isBottomEdge=*/false) }
+    // --- SOPRA ---
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(handleH)
+            .align(Alignment.TopCenter)
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    color = guideColor,
+                    start = Offset(x = 0f, y = size.height),
+                    end   = Offset(x = size.width, y = size.height),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    // si muove solo il bordo superiore
+                    onResizeVertical(drag.y, false)
+                }
+            }
     )
 
-    // BOTTOM
-    ResizeHandleY(
-        align = Alignment.BottomCenter,
-        onDrag = { dy -> onResizeVertical(dy, /*isBottomEdge=*/true) }
+    // --- SOTTO ---
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(handleH)
+            .align(Alignment.BottomCenter)
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    color = guideColor,
+                    start = Offset(x = 0f, y = 0f),
+                    end   = Offset(x = size.width, y = 0f),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    // si muove solo il bordo inferiore
+                    onResizeVertical(drag.y, true)
+                }
+            }
     )
 }
+
 
 @Composable
 private fun ResizableRow(
