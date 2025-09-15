@@ -1568,39 +1568,10 @@ fun UiScreen(
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
 
-// Modalità App (Real / Designer / Resize)
-// Se è attivo designMode forziamo Designer; altrimenti ricordiamo l’ultima scelta (Real/Resize)
-var appMode by rememberSaveable(screenName) {
-    mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
-}
-// Se esci dal designer, torni dove eri (Real/Resize); se entri, forzi Designer
-LaunchedEffect(designMode) {
-    appMode = if (designMode) AppMode.Designer
-              else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
-}
-
-// FORNISCI L'APP MODE A TUTTA LA GERARCHIA (QUI È LA CHIAVE)
-CompositionLocalProvider(LocalAppMode provides appMode) {
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            // opzionale: long-press sullo sfondo per entrare in Resize; tap per uscire
-            .pointerInput(appMode) {
-                detectTapGestures(
-                    onLongPress = {
-                        if (!designMode && appMode == AppMode.Real) appMode = AppMode.Resize
-                    },
-                    onTap = {
-                        if (!designMode && appMode == AppMode.Resize) appMode = AppMode.Real
-                    }
-                )
-            }
-    ) {
-        // ====== SFONDO PAGINA ======
+    Box(Modifier.fillMaxSize()) {
+        // ====== SFONDO PAGINA (colore/gradient/immagine) ======
         RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
-        // ====== CONTENUTO + TOPBAR ======
         ScreenScaffoldWithPinnedTopBar(
             layout = effectiveLayout,
             dispatch = dispatch,
@@ -1612,7 +1583,6 @@ CompositionLocalProvider(LocalAppMode provides appMode) {
             scaffoldPadding = scaffoldPadding
         )
 
-        // ====== OVERLAY DESIGNER (invariato) ======
         if (designMode) {
             DesignerOverlay(
                 screenName = screenName,
@@ -1635,29 +1605,19 @@ CompositionLocalProvider(LocalAppMode provides appMode) {
                 },
                 topPadding = scaffoldPadding.calculateTopPadding(),
                 onOverlayHeight = { overlayHeightPx = it },
-                onOpenRootInspector = { /* */ },
+                onOpenRootInspector = { /* gestito altrove */ },
                 onRootLivePreview = { previewRoot = it }
             )
         }
 
-        // ====== LEVETTA DESIGNER (invariata) ======
+        // ====== LEVETTA LATERALE: DESIGNER ↔ ANTEPRIMA ======
         DesignSwitchKnob(
             isDesigner = designMode,
             onToggle = { designMode = !designMode }
         )
-
-        // ====== MINI SPEED‑DIAL per scegliere rapidamente la modalità ======
-        ModeFabRadial(
-            current = appMode
-        ) { picked ->
-            when (picked) {
-                AppMode.Designer -> { designMode = true;  appMode = AppMode.Designer }
-                AppMode.Resize   -> { designMode = false; appMode = AppMode.Resize   }
-                AppMode.Real     -> { designMode = false; appMode = AppMode.Real     }
-            }
-        }
     }
-} // fine CompositionLocalProvider
+}
+
 
 
 @Composable
@@ -1908,208 +1868,94 @@ drawLine(color, start = Offset(0f, size.height - w/2f), end = Offset(size.width,
 
 @Composable
 fun StyledContainer(
-cfg: JSONObject,
-modifier: Modifier = Modifier,
-contentPadding: PaddingValues? = null,
-content: @Composable BoxScope.() -> Unit
+    cfg: JSONObject,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues? = null,
+    content: @Composable BoxScope.() -> Unit
 ) {
-// === Stile e shape ===
-val style = cfg.optString("style", "full").lowercase()
-val shapeName = cfg.optString("shape", "rounded")
-val corner = cfg.optDouble("corner", 12.0).toFloat()
-val cs = MaterialTheme.colorScheme
+    // Stile
+    val style = cfg.optString("style", "full").lowercase()
+    val shapeName = cfg.optString("shape", "rounded")
+    val corner = cfg.optDouble("corner", 12.0).toFloat()
 
-val shape = when (shapeName) {
-"cut"       -> CutCornerShape(corner.dp)
-"pill"      -> RoundedCornerShape(percent = 50)
-"topBottom" -> RoundedCornerShape(0.dp)
-else        -> RoundedCornerShape(corner.dp)
-}
+    val cs = MaterialTheme.colorScheme
+    val shape = when (shapeName) {
+        "cut"       -> CutCornerShape(corner.dp)
+        "pill"      -> RoundedCornerShape(percent = 50)
+        "topBottom" -> RoundedCornerShape(0.dp) // linee disegnate, non fill
+        else        -> RoundedCornerShape(corner.dp)
+    }
 
-// === Dimensioni ===
-val widthMode = cfg.optString("widthMode", "wrap")             // wrap | fill | fixed_dp | fraction
-val heightMode = cfg.optString("heightMode", "wrap")           // wrap | fixed_dp
-val widthDp = cfg.optDouble("widthDp", 160.0).toFloat().dp
-val heightDp = cfg.optDouble("heightDp", 0.0).toFloat().dp
-val widthFraction = cfg.optDouble("widthFraction", Double.NaN)
-.let { if (it.isNaN()) null else it.toFloat().coerceIn(0f, 1f) }
+    // Dimensioni
+    val widthMode = cfg.optString("widthMode", "wrap")             // wrap | fill | fixed_dp | fraction
+    val heightMode = cfg.optString("heightMode", "wrap")           // wrap | fixed_dp
+    val widthDp = cfg.optDouble("widthDp", 160.0).toFloat().dp
+    val heightDp = cfg.optDouble("heightDp", 0.0).toFloat().dp
+    val widthFraction = cfg.optDouble("widthFraction", Double.NaN)
+        .let { if (it.isNaN()) null else it.toFloat().coerceIn(0f, 1f) }
 
-// Outer wrapper per ancoraggio di crescita (sx/centro/dx) rispetto al parent
-val outerAlignment = when (cfg.optString("hAlign", "start")) {
-"center" -> Alignment.Center
-"end"    -> Alignment.CenterEnd
-else     -> Alignment.CenterStart
-}
-// Se la larghezza è controllata (fill/fraction/fixed) ancoriamo sul parent full width,
-// se è wrap lasciamo intatto il modifier passato.
-val outerMod = if (widthMode == "wrap") modifier else modifier.fillMaxWidth()
+    var m = modifier
+    m = when (widthMode) {
+        "fill"      -> m.fillMaxWidth()
+        "fixed_dp"  -> m.width(widthDp)
+        "fraction"  -> m.fillMaxWidth(widthFraction ?: 1f)
+        else        -> m // wrap
+    }
+    m = when (heightMode) {
+        "fixed_dp", "fixed" -> m.height(heightDp)
+        else                -> m // wrap
+    }
 
-// Modificatore dimensionale applicato al contenitore vero e proprio
-val sizeMod =
-when (widthMode) {
-"fill"      -> Modifier.fillMaxWidth()
-"fixed_dp"  -> Modifier.width(widthDp)
-"fraction"  -> Modifier.fillMaxWidth(widthFraction ?: 1f)
-else        -> Modifier
-}.then(
-when (heightMode) {
-"fixed_dp", "fixed" -> Modifier.height(heightDp)
-else                -> Modifier
-}
-)
+    val hAlign = when (cfg.optString("hAlign", "start")) {
+        "center" -> Alignment.CenterHorizontally
+        "end"    -> Alignment.End
+        else     -> Alignment.Start
+    }
+    val vAlign = when (cfg.optString("vAlign", "center")) {
+        "top"    -> Alignment.Top
+        "bottom" -> Alignment.Bottom
+        else     -> Alignment.CenterVertically
+    }
 
-// === Colori / Gradiente ===
-val customColor = parseColorOrRole(cfg.optString("customColor", ""))
-val bgAlpha = cfg.optDouble("bgAlpha", 1.0).toFloat().coerceIn(0f, 1f)
+    // Colori (qui usa la tua `parseColorOrRole` se presente)
+    val backgroundColor = /* scegli in base a 'style' o cfg */ cs.surface
+    val contentColor = /* onSurface ecc. */ cs.onSurface
+    val borderMode = cfg.optString("borderMode", "none")
+    val borderWidth = cfg.optDouble("borderThickness", 0.0).toFloat().dp
+    val borderColor = /* dal cfg o default */ cs.outline
 
-// Gradiente (nuovo oggetto) + legacy color1/color2 con fix di color2
-val gradObj = cfg.optJSONObject("gradient")
-val gradBrush: Brush? = gradObj?.let { g ->
-val arr = g.optJSONArray("colors")
-val cols = (0 until (arr?.length() ?: 0))
-.mapNotNull { i -> parseColorOrRole(arr!!.optString(i)) }
-if (cols.size >= 2) {
-if (g.optString("direction", "vertical") == "horizontal")
-Brush.horizontalGradient(cols)
-else
-Brush.verticalGradient(cols)
-} else null
-} ?: run {
-// Legacy: color1 / color2 – ora supportano sia ruoli che HEX (fix)
-val c1s = cfg.optString("color1", "")
-val c2s = cfg.optString("color2", "")
-val a = c1s.takeIf { it.isNotBlank() }?.let { parseColorOrRole(it) }
-?: c1s.takeIf { it.isNotBlank() }?.let {
-runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull()
-}
-val b = c2s.takeIf { it.isNotBlank() }?.let { parseColorOrRole(it) }
-?: c2s.takeIf { it.isNotBlank() }?.let {
-runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull()
-}
-if (a != null && b != null) {
-if (cfg.optString("gradientDirection", "horizontal") == "vertical")
-Brush.verticalGradient(listOf(a, b))
-else
-Brush.horizontalGradient(listOf(a, b))
-} else null
-}
+    val pad = contentPadding ?: PaddingValues(0.dp)
 
-val baseBgColor = customColor ?: when (style) {
-"primary" -> cs.primary
-"tonal"   -> cs.surfaceVariant
-else      -> cs.surface
-}
-val transparentBg = cfg.optBoolean("transparentBg", false)
+    val base = when (style) {
+        "text"      -> m
+        "outlined"  -> m.border(BorderStroke(borderWidth, borderColor), shape)
+        "topbottom" -> m
+            .clip(shape)
+            .background(backgroundColor)
+            .topBottomBorder(borderWidth, borderColor)
+        else        -> m
+            .clip(shape)
+            .background(backgroundColor)
+    }
 
-// === Immagine di sfondo ===
-val imageCfg = cfg.optJSONObject("image")
-val imageSrc = imageCfg?.optString("source", "").orEmpty()
-val imageScale = when (imageCfg?.optString("contentScale","fill")) {
-"fit"  -> ContentScale.Fit
-"crop" -> ContentScale.Crop
-else   -> ContentScale.FillBounds
+    Box(
+        modifier = base.padding(pad),
+        contentAlignment = Alignment.Center
+    ) {
+        CompositionLocalProvider(LocalContentColor provides contentColor) {
+            Box(
+                modifier = Modifier
+                    .then(
+                        when (hAlign) {
+                            Alignment.Start -> Modifier.alignByBaseline()
+                            else -> Modifier
+                        }
+                    ),
+                content = content
+            )
+        }
+    }
 }
-val imageAlpha = imageCfg?.optDouble("alpha", 1.0)?.toFloat()?.coerceIn(0f,1f) ?: 1f
-val ctx = LocalContext.current
-val resId = if (imageSrc.startsWith("res:"))
-ctx.resources.getIdentifier(imageSrc.removePrefix("res:"), "drawable", ctx.packageName)
-else 0
-val uriStr = when {
-imageSrc.startsWith("uri:")     -> imageSrc.removePrefix("uri:")
-imageSrc.startsWith("content:") -> imageSrc
-imageSrc.startsWith("file:")    -> imageSrc
-else -> null
-}
-val bmp = if (uriStr != null) rememberImageBitmapFromUri(uriStr) else null
-
-// === Bordi & separatori ===
-val thick = when {
-cfg.has("thick")               -> cfg.optDouble("thick", 0.0).toFloat()
-cfg.has("borderThicknessDp")   -> cfg.optDouble("borderThicknessDp", 0.0).toFloat()
-style == "outlined" || style == "topbottom" -> 1f
-else -> 0f
-}.coerceAtLeast(0f)
-val borderColor = parseColorOrRole(cfg.optString("borderColor","")) ?: cs.outline
-val drawSeparators = style == "topbottom" && thick > 0f
-val showFill = (style in listOf("full","surface","primary","tonal")) && !transparentBg
-val showBorder = (style == "outlined" && thick > 0f) ||
-((style in listOf("full","surface","primary","tonal")) && thick > 0f)
-
-// === Elevazione ===
-val elevationDp = cfg.optDouble("elevationDp", if (showFill) 1.0 else 0.0).toFloat().coerceAtLeast(0f)
-
-// === Modificatori finali del contenitore ===
-val base = if (elevationDp > 0f) sizeMod.shadow(elevationDp.dp, shape, clip = false) else sizeMod
-val withSeparators = if (drawSeparators) base.topBottomBorder(thick.dp, borderColor) else base
-val withBorder = if (showBorder && !drawSeparators) withSeparators.border(BorderStroke(thick.dp, borderColor), shape) else withSeparators
-val clipped = withBorder.clip(shape)
-
-// === Allineamenti interni del contenuto ===
-val hAlign = cfg.optString("hAlign", "start")
-val vAlign = cfg.optString("vAlign", "center")
-val innerAlignment = when (hAlign) {
-"center" -> when (vAlign) {
-"top"    -> Alignment.TopCenter
-"bottom" -> Alignment.BottomCenter
-else     -> Alignment.Center
-}
-"end" -> when (vAlign) {
-"top"    -> Alignment.TopEnd
-"bottom" -> Alignment.BottomEnd
-else     -> Alignment.CenterEnd
-}
-else -> when (vAlign) {
-"top"    -> Alignment.TopStart
-"bottom" -> Alignment.BottomStart
-else     -> Alignment.CenterStart
-}
-}
-
-// Se widthMode è wrap NON forziamo l'inner a riempire la larghezza: si adatta al contenuto.
-val innerPad = contentPadding?.let { Modifier.padding(it) } ?: Modifier
-val contentContainerMod = if (widthMode == "wrap") innerPad else innerPad.fillMaxWidth()
-
-// === Render ===
-Box(modifier = outerMod, contentAlignment = outerAlignment) {
-Box(modifier = clipped) {
-// Layer di background (solo se non "text")
-if (style != "text") {
-if (showFill && gradBrush == null) {
-Box(Modifier.matchParentSize().background(baseBgColor.copy(alpha = bgAlpha)))
-}
-if (imageSrc.isNotBlank()) {
-when {
-resId != 0 -> Image(
-painter = painterResource(resId),
-contentDescription = null,
-contentScale = imageScale,
-modifier = Modifier.matchParentSize(),
-alpha = imageAlpha
-)
-bmp != null -> Image(
-bitmap = bmp,
-contentDescription = null,
-contentScale = imageScale,
-modifier = Modifier.matchParentSize(),
-alpha = imageAlpha
-)
-}
-}
-if (showFill && gradBrush != null) {
-Box(Modifier.matchParentSize().background(gradBrush).alpha(bgAlpha))
-}
-}
-
-// Contenuto (allineabile)
-Box(modifier = contentContainerMod, contentAlignment = Alignment.Center) {
-Box(modifier = Modifier.align(innerAlignment)) {
-content()
-}
-}
-}
-}
-}
-
 
 
 
