@@ -1512,9 +1512,29 @@ fun UiScreen(
             )
         }
 
-        // HUD RESIZE
+        // stato per mostrare/nascondere l’hint
+        var showResizeHint by remember(appMode) { mutableStateOf(true) }
+        
+        // auto-hide dopo 10s quando si entra in modalità Resize
+        LaunchedEffect(appMode) {
+            if (appMode == AppMode.Resize) {
+                showResizeHint = true
+                kotlinx.coroutines.delay(10_000)
+                showResizeHint = false
+            }
+        }
+        
         if (appMode == AppMode.Resize) {
-            ResizeHud(onExit = { appMode = AppMode.Real })
+            AnimatedVisibility(
+                visible = showResizeHint,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                ResizeHud(
+                    onDismiss = { showResizeHint = false },
+                    onExit    = { appMode = AppMode.Real }
+                )
+            }
         }
 
         // OVERLAY: Side panel e Center menu (aperti da dispatchWithOverlays)
