@@ -37,7 +37,7 @@ import android.content.Intent
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.input.pointer.pointerInput // used with detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput 
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.max
 import kotlin.math.min
