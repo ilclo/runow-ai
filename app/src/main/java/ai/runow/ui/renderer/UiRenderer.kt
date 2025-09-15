@@ -1,13 +1,11 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package ai.runow.ui.renderer
+
 
 import androidx.compose.foundation.layout.alignBy
 import androidx.compose.foundation.layout.alignByBaseline
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.LastBaseline
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -91,7 +89,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.IntSize
 
