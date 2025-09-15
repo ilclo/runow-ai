@@ -6,8 +6,6 @@ package ai.runow.ui.renderer
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlin.math.roundToInt
@@ -88,10 +86,131 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.unit.IntSize
 
 enum class AppMode { Real, Designer, Resize }
 val LocalAppMode = compositionLocalOf { AppMode.Real }
 
+@Composable
+private fun BoxScope.ResizeHandleX(
+    align: Alignment,                  // Alignment.CenterStart (sx) o CenterEnd (dx)
+    onDragStart: () -> Unit = {},
+    onDrag: (dxPx: Float) -> Unit,
+    onDragEnd: () -> Unit = {}
+) {
+    val handleW = 14.dp
+    val density = LocalDensity.current
+    Box(
+        Modifier
+            .align(align)
+            .fillMaxHeight()
+            .width(handleW)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { onDragStart() },
+                    onDragEnd = { onDragEnd() },
+                    onDragCancel = { onDragEnd() },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount.x)
+                    }
+                )
+            }
+            .drawBehind {
+                // traccia guida verticale sul bordo dell'handle
+                val x = if (align == Alignment.CenterStart) size.width else 0f
+                drawLine(
+                    color = Color.White.copy(alpha = 0.35f),
+                    start = Offset(x, 0f),
+                    end = Offset(x, size.height),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+    )
+}
+
+// ======== HANDLE ORIZZONTALE (ridimensiona in altezza) ========
+@Composable
+private fun BoxScope.ResizeHandleY(
+    align: Alignment,                  // Alignment.TopCenter (top) o BottomCenter (bottom)
+    onDragStart: () -> Unit = {},
+    onDrag: (dyPx: Float) -> Unit,
+    onDragEnd: () -> Unit = {}
+) {
+    val handleH = 14.dp
+    val density = LocalDensity.current
+    Box(
+        Modifier
+            .align(align)
+            .fillMaxWidth()
+            .height(handleH)
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { onDragStart() },
+                    onDragEnd = { onDragEnd() },
+                    onDragCancel = { onDragEnd() },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount.y)
+                    }
+                )
+            }
+            .drawBehind {
+                // traccia guida orizzontale sul bordo dell'handle
+                val y = if (align == Alignment.TopCenter) size.height else 0f
+                drawLine(
+                    color = Color.White.copy(alpha = 0.35f),
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = with(density) { 1.dp.toPx() }
+                )
+            }
+    )
+}
+
+// ======== GRUPPO DI HANDLE (4 lati) + calcolo larghezza Box ========
+@Composable
+private fun BoxScope.ResizeHandles(
+    onResizeHorizontal: (deltaPx: Float, isRightEdge: Boolean, rowWidthPx: Float) -> Unit,
+    onResizeVertical: (deltaPx: Float, isBottomEdge: Boolean) -> Unit,
+) {
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
+    // serve per normalizzare i delta orizzontali in % se vuoi
+    val rowWidthPx = boxSize.width.toFloat().coerceAtLeast(1f)
+
+    // cattura dimensioni del Box che contiene il blocco
+    Box(
+        Modifier
+            .matchParentSize()
+            .onGloballyPositioned { boxSize = it.size }
+    )
+
+    // SX
+    ResizeHandleX(
+        align = Alignment.CenterStart,
+        onDrag = { dx -> onResizeHorizontal(dx, /*isRightEdge=*/false, rowWidthPx) }
+    )
+
+    // DX
+    ResizeHandleX(
+        align = Alignment.CenterEnd,
+        onDrag = { dx -> onResizeHorizontal(dx, /*isRightEdge=*/true, rowWidthPx) }
+    )
+
+    // TOP
+    ResizeHandleY(
+        align = Alignment.TopCenter,
+        onDrag = { dy -> onResizeVertical(dy, /*isBottomEdge=*/false) }
+    )
+
+    // BOTTOM
+    ResizeHandleY(
+        align = Alignment.BottomCenter,
+        onDrag = { dy -> onResizeVertical(dy, /*isBottomEdge=*/true) }
+    )
+}
 
 @Composable
 private fun ResizableRow(
@@ -217,207 +336,6 @@ private fun ResizableRow(
     }
 }
 
-// ---- Maniglie/righelli ------------------------------------------------------
-
-@Composable
-private fun BoxScope.ResizeHandles(
-    onResizeHorizontal: (deltaPx: Float, isRightEdge: Boolean, rowWidthPx: Float) -> Unit,
-    onResizeVertical:   (deltaPx: Float, isBottomEdge: Boolean) -> Unit,
-    guideColor: Color
-) {
-    val density = LocalDensity.current
-    val handleW = 14.dp
-    val handleH = 14.dp
-    var rowWidthPx by remember { mutableStateOf(1f) }
-
-    // Misura larghezza del box per calcolare il delta in peso
-    Box(Modifier.matchParentSize().onGloballyPositioned { coords ->
-        rowWidthPx = coords.size.width.toFloat().coerceAtLeast(1f)
-    })
-
-    // Vertical guides (destra/sinistra)
-    // SINISTRA
-    Box(
-        Modifier
-            .fillMaxHeight()
-            .width(handleW)
-            .align(Alignment.CenterStart)
-            .drawWithContent {
-                drawContent()
-                // linea guida
-                drawLine(
-                    color = guideColor,
-                    start = Offset(x = size.width, y = 0f),
-                    end   = Offset(x = size.width, y = size.height),
-                    strokeWidth = with(density) { 1.dp.toPx() }
-                )
-            }
-            .pointerInput(Unit) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    onResizeHorizontal(drag.x, false, rowWidthPx)
-                }
-            }
-    )
-
-    // DESTRA
-    Box(
-        Modifier
-            .fillMaxHeight()
-            .width(handleW)
-            .align(Alignment.CenterEnd)
-            .drawWithContent {
-                drawContent()
-                drawLine(
-                    color = guideColor,
-                    start = Offset(x = 0f, y = 0f),
-                    end   = Offset(x = 0f, y = size.height),
-                    strokeWidth = with(density) { 1.dp.toPx() }
-                )
-            }
-            .pointerInput(Unit) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    onResizeHorizontal(drag.x, true,  rowWidthPx)
-                }
-            }
-    )
-
-    // Horizontal guides (sopra/sotto)
-    // SOPRA
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(handleH)
-            .align(Alignment.TopCenter)
-            .drawWithContent {
-                drawContent()
-                drawLine(
-                    color = guideColor,
-                    start = Offset(x = 0f, y = size.height),
-                    end   = Offset(x = size.width, y = size.height),
-                    strokeWidth = with(density) { 1.dp.toPx() }
-                )
-            }
-            .pointerInput(Unit) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    onResizeVertical(drag.y,  false)
-                }
-            }
-    )
-
-    // SOTTO
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(handleH)
-            .align(Alignment.BottomCenter)
-            .drawWithContent {
-                drawContent()
-                drawLine(
-                    color = guideColor,
-                    start = Offset(x = 0f, y = 0f),
-                    end   = Offset(x = size.width, y = 0f),
-                    strokeWidth = with(density) { 1.dp.toPx() }
-                )
-            }
-            .pointerInput(Unit) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    onResizeVertical(drag.y,  true)
-                }
-            }
-    )
-}
-
-@Composable
-private fun BoxScope.ResizeHandleX(
-    isRight: Boolean,
-    rowWidthPx: Float,
-    handleW: Dp = 16.dp,
-    onResizeHorizontal: (deltaPx: Float, isRightEdge: Boolean, rowWidthPx: Float) -> Unit
-) {
-    val density = LocalDensity.current
-    val sideMod = if (isRight) Modifier.align(Alignment.CenterEnd) else Modifier.align(Alignment.CenterStart)
-
-    Box(
-        sideMod
-            .width(handleW)
-            .fillMaxHeight()
-            .drawWithContent {
-                drawContent()
-                val guideX = if (isRight) 0f else size.width
-                drawLine(
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                    start = Offset(x = guideX, y = 0f),
-                    end   = Offset(x = guideX, y = size.height),
-                    strokeWidth = with(density) { 1.dp.toPx() }
-                )
-            }
-            .pointerInput(isRight, rowWidthPx) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    onResizeHorizontal(drag.x, isRight, rowWidthPx)
-                }
-            }
-    )
-}
-
-
-@Composable
-private fun BoxScope.ResizeHandleY(
-    handleH: Dp = 14.dp,
-    onResizeVertical: (deltaPx: Float, isBottomEdge: Boolean) -> Unit
-) {
-    val density = LocalDensity.current
-
-    // TOP
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(handleH)
-            .align(Alignment.TopCenter)
-            .drawWithContent {
-                drawContent()
-                drawLine(
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                    start = Offset(x = 0f, y = size.height),
-                    end   = Offset(x = size.width, y = size.height),
-                    strokeWidth = with(density) { 1.dp.toPx() }
-                )
-            }
-            .pointerInput(Unit) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    onResizeVertical(drag.y, false) // bordo superiore fisso
-                }
-            }
-    )
-
-    // BOTTOM
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(handleH)
-            .align(Alignment.BottomCenter)
-            .drawWithContent {
-                drawContent()
-                drawLine(
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                    start = Offset(x = 0f, y = 0f),
-                    end   = Offset(x = size.width, y = 0f),
-                    strokeWidth = with(density) { 1.dp.toPx() }
-                )
-            }
-            .pointerInput(Unit) {
-                detectDragGestures { change, drag ->
-                    change.consume()
-                    onResizeVertical(drag.y, true)  // bordo inferiore fisso
-                }
-            }
-    )
-}
 
 
 @Composable
