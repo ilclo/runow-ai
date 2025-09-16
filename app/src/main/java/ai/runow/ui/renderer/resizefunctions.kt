@@ -250,6 +250,7 @@ fun rememberResizeMoveState(): ResizeMoveState = remember { ResizeMoveState() }
  * NOTA: i veri “handle” per ridimensionare i bordi sono già in ResizableRow.kt.
  * Questo wrapper abilita/indica “attivo” e si occupa del MOVE e della parte estetica (pulse).
  */
+
 @Composable
 fun ResizeMoveInteractor(
     enabled: Boolean,                  // true solo in AppMode.Resize
@@ -261,7 +262,8 @@ fun ResizeMoveInteractor(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+
     val dragOffset = remember { Animatable(0f) }  // spostamento visuale orizzontale (righe)
     var dragging by remember { mutableStateOf(false) }
 
@@ -277,67 +279,64 @@ fun ResizeMoveInteractor(
 
     // Gesture layer (solo in Resize Mode)
     val gestureMod = if (enabled) {
-        Modifier.pointerInput(index, state.isActiveForResize, state.isMoveEnabled) {
-            detectTapGestures(
-                onLongPress = {
-                    // Primo long-press: abilita resize + pulse
-                    if (!state.isActiveForResize) {
-                        state.activateWithPulse()
-                    } else {
-                        // Secondo long-press: abilita lo spostamento del blocco
-                        state.isMoveEnabled = true
-                    }
-                }
-            )
-        }.pointerInput(index, state.isMoveEnabled) {
-            // Drag del blocco solo se move abilitato
-            detectDragGestures(
-                onDragStart = { if (state.isMoveEnabled) dragging = true },
-                onDragEnd = {
-                    if (dragging) {
-                        dragging = false
-                        // rilasciato: azzera offset visuale
-                        // (lo swap se avviene è già stato richiesto in corso di drag)
-                        launch { dragOffset.animateTo(0f, tween(120)) }
-                    }
-                },
-                onDragCancel = {
-                    dragging = false
-                    launch { dragOffset.animateTo(0f, tween(120)) }
-                },
-                onDrag = { change, drag ->
-                    change.consume()
-                    if (!state.isMoveEnabled) return@detectDragGestures
-
-                    // Offset orizzontale (riga). Se per te è colonna, cambia in drag.y
-                    val newX = dragOffset.value + drag.x
-                    launch { dragOffset.snapTo(newX) }
-
-                    // Calcolo swap su overlap con vicini
-                    val bounds = neighborsBoundsProvider()
-                    val me = bounds.getOrNull(index) ?: return@detectDragGestures
-
-                    // rettangolo "spostato" del blocco attuale
-                    val moved = me.translate(Offset(newX, 0f))
-
-                    // controlla overlap con il vicino di destra e sinistra
-                    val leftIdx = index - 1
-                    val rightIdx = index + 1
-
-                    // Funzione locale di swap condizionato
-                    fun maybeSwapWith(targetIndex: Int) {
-                        val other = bounds.getOrNull(targetIndex) ?: return
-                        val ratio = horizontalOverlapRatio(moved, other)
-                        if (ratio >= overlapToleranceFraction) {
-                            onSwapRequest(index, targetIndex)
+        Modifier
+            .pointerInput(index, state.isActiveForResize, state.isMoveEnabled) {
+                detectTapGestures(
+                    onLongPress = {
+                        // Primo long-press: abilita resize + pulse
+                        if (!state.isActiveForResize) {
+                            state.activateWithPulse()
+                        } else {
+                            // Secondo long-press: abilita lo spostamento del blocco
+                            state.isMoveEnabled = true
                         }
                     }
+                )
+            }
+            .pointerInput(index, state.isMoveEnabled) {
+                // Drag del blocco solo se move abilitato
+                detectDragGestures(
+                    onDragStart = { if (state.isMoveEnabled) dragging = true },
+                    onDragEnd = {
+                        if (dragging) {
+                            dragging = false
+                            // rilasciato: torna a 0 con animazione
+                            scope.launch { dragOffset.animateTo(0f, tween(120)) }
+                        }
+                    },
+                    onDragCancel = {
+                        dragging = false
+                        scope.launch { dragOffset.animateTo(0f, tween(120)) }
+                    },
+                    onDrag = { change, drag ->
+                        change.consume()
+                        if (!state.isMoveEnabled) return@detectDragGestures
 
-                    maybeSwapWith(leftIdx)
-                    maybeSwapWith(rightIdx)
-                }
-            )
-        }
+                        // Offset orizzontale (riga). Se per te è colonna, cambia in drag.y
+                        val newX = dragOffset.value + drag.x
+                        scope.launch { dragOffset.snapTo(newX) }
+
+                        // Calcolo swap su overlap con vicini
+                        val bounds = neighborsBoundsProvider()
+                        val me = bounds.getOrNull(index) ?: return@detectDragGestures
+
+                        // rettangolo "spostato" del blocco attuale
+                        val moved = me.translate(Offset(newX, 0f))
+
+                        // controlla overlap con il vicino di destra e sinistra
+                        fun maybeSwapWith(targetIndex: Int) {
+                            val other = bounds.getOrNull(targetIndex) ?: return
+                            val ratio = horizontalOverlapRatio(moved, other)
+                            if (ratio >= overlapToleranceFraction) {
+                                onSwapRequest(index, targetIndex)
+                            }
+                        }
+
+                        maybeSwapWith(index - 1)
+                        maybeSwapWith(index + 1)
+                    }
+                )
+            }
     } else Modifier
 
     Box(
