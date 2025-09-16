@@ -1,4 +1,8 @@
 package ai.runow.ui.renderer
+…
+
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -257,17 +261,17 @@ fun ResizeMoveInteractor(
     state: ResizeMoveState,            // rememberResizeMoveState()
     index: Int,                        // posizione del blocco nella riga/colonna
     neighborsBoundsProvider: () -> List<Rect>, // bounds globali dei fratelli (in ordine)
-    overlapToleranceFraction: Float = 0.35f,   // soglia di sovrapposizione per lo swap [0..1]
-    onSwapRequest: (from: Int, to: Int) -> Unit, // chiamato quando va scambiato
+    overlapToleranceFraction: Float = 0.35f,   // soglia di overlap per swap [0..1]
+    onSwapRequest: (from: Int, to: Int) -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
     val scope = rememberCoroutineScope()
 
-    val dragOffset = remember { Animatable(0f) }  // spostamento visuale orizzontale (righe)
+    val dragOffset = remember { Animatable(0f) }  // offset orizzontale; usa drag.y per colonne
     var dragging by remember { mutableStateOf(false) }
 
-    // Effetto PULSE quando attivo per resize
+    // Effetto "pulse" quando il blocco viene abilitato al resize
     val pulseScale = remember { Animatable(1f) }
     LaunchedEffect(state.lastPulseKey) {
         if (state.isActiveForResize) {
@@ -277,30 +281,31 @@ fun ResizeMoveInteractor(
         }
     }
 
-    // Gesture layer (solo in Resize Mode)
+    // Layer gesture (solo in Resize mode)
     val gestureMod = if (enabled) {
         Modifier
             .pointerInput(index, state.isActiveForResize, state.isMoveEnabled) {
                 detectTapGestures(
                     onLongPress = {
-                        // Primo long-press: abilita resize + pulse
+                        // 1° long‑press: abilita resize + pulse
                         if (!state.isActiveForResize) {
                             state.activateWithPulse()
                         } else {
-                            // Secondo long-press: abilita lo spostamento del blocco
+                            // 2° long‑press: abilita lo spostamento del blocco
                             state.isMoveEnabled = true
                         }
                     }
                 )
             }
             .pointerInput(index, state.isMoveEnabled) {
-                // Drag del blocco solo se move abilitato
                 detectDragGestures(
-                    onDragStart = { if (state.isMoveEnabled) dragging = true },
+                    onDragStart = {
+                        if (state.isMoveEnabled) dragging = true
+                    },
                     onDragEnd = {
                         if (dragging) {
                             dragging = false
-                            // rilasciato: torna a 0 con animazione
+                            // ritorno a zero animato
                             scope.launch { dragOffset.animateTo(0f, tween(120)) }
                         }
                     },
@@ -312,18 +317,15 @@ fun ResizeMoveInteractor(
                         change.consume()
                         if (!state.isMoveEnabled) return@detectDragGestures
 
-                        // Offset orizzontale (riga). Se per te è colonna, cambia in drag.y
                         val newX = dragOffset.value + drag.x
+                        // aggiornamento immediato (sospeso -> va lanciato)
                         scope.launch { dragOffset.snapTo(newX) }
 
-                        // Calcolo swap su overlap con vicini
+                        // calcolo swap con i vicini al superamento della tolleranza
                         val bounds = neighborsBoundsProvider()
                         val me = bounds.getOrNull(index) ?: return@detectDragGestures
-
-                        // rettangolo "spostato" del blocco attuale
                         val moved = me.translate(Offset(newX, 0f))
 
-                        // controlla overlap con il vicino di destra e sinistra
                         fun maybeSwapWith(targetIndex: Int) {
                             val other = bounds.getOrNull(targetIndex) ?: return
                             val ratio = horizontalOverlapRatio(moved, other)
@@ -331,7 +333,6 @@ fun ResizeMoveInteractor(
                                 onSwapRequest(index, targetIndex)
                             }
                         }
-
                         maybeSwapWith(index - 1)
                         maybeSwapWith(index + 1)
                     }
@@ -345,7 +346,7 @@ fun ResizeMoveInteractor(
                 val s = if (state.isActiveForResize) pulseScale.value else 1f
                 scaleX = s
                 scaleY = s
-                translationX = dragOffset.value
+                translationX = dragOffset.value     // usa translationY per colonne
             }
             .then(gestureMod)
     ) {
@@ -353,17 +354,22 @@ fun ResizeMoveInteractor(
     }
 }
 
+
+
+
 /**
  * Ritorna il rapporto di sovrapposizione orizzontale tra due rettangoli: 0..1
  * 0 = nessuna sovrapposizione, 1 = sovrapposizione completa sul lato minore.
  */
-fun horizontalOverlapRatio(a: Rect, b: Rect): Float {
-    val left = max(a.left, b.left)
-    val right = min(a.right, b.right)
+
+private fun horizontalOverlapRatio(a: Rect, b: Rect): Float {
+    val left = maxOf(a.left, b.left)
+    val right = minOf(a.right, b.right)
     val overlap = (right - left).coerceAtLeast(0f)
-    val base = min(a.width, b.width).coerceAtLeast(1f)
-    return (overlap / base).coerceIn(0f, 1f)
+    val width = minOf(a.width, b.width)
+    return if (width <= 0f) 0f else overlap / width
 }
+
 
 /**
  * Utility per tradurre un Rect
