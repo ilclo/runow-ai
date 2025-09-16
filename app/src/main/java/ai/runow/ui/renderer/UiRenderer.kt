@@ -422,8 +422,9 @@ private fun ScreenScaffoldWithPinnedTopBar(
                     val bottomBarBlock = JSONObject().apply {
                         put("container", bottomBarNode?.optJSONObject("container") ?: JSONObject())
                     }
+
                     StyledContainer(
-                        block = bottomBarBlock,
+                        cfg = bottomBarCfg ?: JSONObject(),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         Row(
@@ -1807,96 +1808,36 @@ fun StyledContainer(
     contentPadding: PaddingValues? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
-    // Stile
-    val style = cfg.optString("style", "full").lowercase()
-    val shapeName = cfg.optString("shape", "rounded")
-    val corner = cfg.optDouble("corner", 12.0).toFloat()
-
-    val cs = MaterialTheme.colorScheme
+    // Letture "safe" dal JSON (tutti opzionali)
+    val cornerDp = cfg.optDouble("corner", 0.0).toFloat().dp
+    val shapeName = cfg.optString("shape", "rounded").lowercase()
     val shape = when (shapeName) {
-        "cut"       -> CutCornerShape(corner.dp)
-        "pill"      -> RoundedCornerShape(percent = 50)
-        "topBottom" -> RoundedCornerShape(0.dp) // linee disegnate, non fill
-        else        -> RoundedCornerShape(corner.dp)
+        "cut"  -> CutCornerShape(cornerDp)
+        "pill" -> RoundedCornerShape(percent = 50)
+        else   -> RoundedCornerShape(cornerDp)
     }
 
-    // Dimensioni
-    val widthMode = cfg.optString("widthMode", "wrap")             // wrap | fill | fixed_dp | fraction
-    val heightMode = cfg.optString("heightMode", "wrap")           // wrap | fixed_dp
-    val widthDp = cfg.optDouble("widthDp", 160.0).toFloat().dp
-    val heightDp = cfg.optDouble("heightDp", 0.0).toFloat().dp
-    val widthFraction = cfg.optDouble("widthFraction", Double.NaN)
-        .let { if (it.isNaN()) null else it.toFloat().coerceIn(0f, 1f) }
+    // Colori base: se non arrivano dal JSON, usiamo il tema
+    val bg = MaterialTheme.colorScheme.surface
+    val on = MaterialTheme.colorScheme.onSurface
+    val borderWidth = cfg.optDouble("border", 0.0).toFloat().dp
 
-    var m = modifier
-    m = when (widthMode) {
-        "fill"      -> m.fillMaxWidth()
-        "fixed_dp"  -> m.width(widthDp)
-        "fraction"  -> m.fillMaxWidth(widthFraction ?: 1f)
-        else        -> m // wrap
-    }
-    m = when (heightMode) {
-        "fixed_dp", "fixed" -> m.height(heightDp)
-        else                -> m // wrap
-    }
-
-    val hAlign = when (cfg.optString("hAlign", "start")) {
-        "center" -> Alignment.CenterHorizontally
-        "end"    -> Alignment.End
-        else     -> Alignment.Start
-    }
-    val vAlign = when (cfg.optString("vAlign", "center")) {
-        "top"    -> Alignment.Top
-        "bottom" -> Alignment.Bottom
-        else     -> Alignment.CenterVertically
-    }
-
-    // Colori (qui usa la tua `parseColorOrRole` se presente)
-    val backgroundColor = /* scegli in base a 'style' o cfg */ cs.surface
-    val contentColor = /* onSurface ecc. */ cs.onSurface
-    val borderMode = cfg.optString("borderMode", "none")
-    val borderWidth = cfg.optDouble("borderThickness", 0.0).toFloat().dp
-    val borderColor = /* dal cfg o default */ cs.outline
-
-    val pad = contentPadding ?: PaddingValues(0.dp)
-
-    val base = when (style) {
-        "text"      -> m
-        "outlined"  -> m.border(BorderStroke(borderWidth, borderColor), shape)
-        "topbottom" -> m
-            .clip(shape)
-            .background(backgroundColor)
-            .topBottomBorder(borderWidth, borderColor)
-        else        -> m
-            .clip(shape)
-            .background(backgroundColor)
-    }
-
-        // Mappa hAlign/vAlign sull'allineamento della Box
-    val contentAlignment =
-        when {
-            vAlign == Alignment.Top && hAlign == Alignment.Start -> Alignment.TopStart
-            vAlign == Alignment.Top && hAlign == Alignment.CenterHorizontally -> Alignment.TopCenter
-            vAlign == Alignment.Top && hAlign == Alignment.End -> Alignment.TopEnd
-            vAlign == Alignment.CenterVertically && hAlign == Alignment.Start -> Alignment.CenterStart
-            vAlign == Alignment.CenterVertically && hAlign == Alignment.CenterHorizontally -> Alignment.Center
-            vAlign == Alignment.CenterVertically && hAlign == Alignment.End -> Alignment.CenterEnd
-            vAlign == Alignment.Bottom && hAlign == Alignment.Start -> Alignment.BottomStart
-            vAlign == Alignment.Bottom && hAlign == Alignment.CenterHorizontally -> Alignment.BottomCenter
-            vAlign == Alignment.Bottom && hAlign == Alignment.End -> Alignment.BottomEnd
-            else -> Alignment.Center
-        }
-
-    Box(
-        modifier = base.padding(pad),
-        contentAlignment = contentAlignment
+    Surface(
+        modifier = modifier,
+        color = bg,
+        contentColor = on,
+        shape = shape,
+        border = if (borderWidth > 0.dp) BorderStroke(borderWidth, MaterialTheme.colorScheme.outline) else null,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
-        CompositionLocalProvider(LocalContentColor provides contentColor) {
-            Box(modifier = Modifier, content = content)
+        Box(
+            if (contentPadding != null) Modifier.padding(contentPadding) else Modifier
+        ) {
+            content()
         }
     }
 }
-
 
 
 /* =========================================================
