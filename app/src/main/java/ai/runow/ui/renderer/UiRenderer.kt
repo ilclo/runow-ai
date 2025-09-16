@@ -100,6 +100,24 @@ import androidx.compose.ui.unit.IntSize
 
 
 
+// =========================================================
+// JSON helper – INSERT
+// =========================================================
+fun insertAt(arr: JSONArray, index: Int, value: Any): JSONArray {
+    val target = index.coerceIn(0, arr.length())
+    val out = JSONArray()
+    for (i in 0 until target) out.put(arr.opt(i))
+    out.put(value)
+    for (i in target until arr.length()) out.put(arr.opt(i))
+
+    // Sostituisco il contenuto originale in-place (JSONArray ha remove(int) su API 19+)
+    for (i in arr.length() - 1 downTo 0) arr.remove(i)
+    for (i in 0 until out.length()) arr.put(out.opt(i))
+    return arr
+}
+
+// Comoda extension, se hai call-site del tipo items.insertAt(...)
+fun JSONArray.insertAt(index: Int, value: Any): JSONArray = insertAt(this, index, value)
 
 
 // --- PATH & INSERT HELPERS ---------------------------------------------------
@@ -154,24 +172,7 @@ private fun getParentArrayAndIndex(root: JSONObject, itemPath: String): Triple<J
     return null
 }
 
-private fun JSONArray.insertAt(index: Int, value: Any?) {
-    val idx = index.coerceIn(0, length())
-    // spostamento a destra
-    val tail = (idx until length()).map { opt(it) }
-    if (length() > idx) {
-        // rimpiazzo idx, poi riaggiungo la coda
-        put(idx, value)
-        for (i in tail.indices) put(idx + 1 + i, tail[i])
-    } else {
-        // append diretto
-        put(value)
-    }
-}
 
-/**
- * Inserisce un blocco vicino al selezionato (before/after) o in coda se selectedPath è null.
- * Ritorna il path del nuovo blocco.
- */
 internal fun insertBlockAndReturnPath(
     root: JSONObject,
     selectedPath: String?,
@@ -341,6 +342,40 @@ internal fun RenderRootScaffold(
     }
 }
 
+// =========================================================
+// SHIMS LEGACY – per compatibilità con vecchi call-site
+// =========================================================
+@Composable
+private fun StyledBottomBar(
+    cfg: JSONObject?,
+    items: JSONArray?,
+    dispatch: (String) -> Unit
+) {
+    val arr = items ?: return
+    if (arr.length() == 0) return
+    StyledContainer(cfg = cfg ?: JSONObject(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RenderBarItemsRow(arr, dispatch)
+        }
+    }
+}
+
+@Composable
+private fun RenderFab(
+    fab: JSONObject?,
+    dispatch: (String) -> Unit
+) {
+    fab ?: return
+    val act  = fab.optString("actionId", "")
+    val icon = fab.optString("icon", "play_arrow")
+    FloatingActionButton(onClick = { if (act.isNotBlank()) dispatch(act) }) {
+        NamedIconEx(icon, null)
+    }
+}
 
 
 @Composable
@@ -1887,6 +1922,9 @@ private fun Modifier.topBottomBorder(width: Dp, color: Color) = this.then(
     }
 )
 
+// =========================================================
+// STYLED CONTAINER – con overload 'cfg' e 'block'
+// =========================================================
 @Composable
 fun StyledContainer(
     cfg: JSONObject,
@@ -1894,97 +1932,67 @@ fun StyledContainer(
     contentPadding: PaddingValues? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
-    // Stile
-    val style = cfg.optString("style", "full").lowercase()
-    val shapeName = cfg.optString("shape", "rounded")
-    val corner = cfg.optDouble("corner", 12.0).toFloat()
+    val shape = RoundedCornerShape(cfg.optDouble("corner", 12.0).toFloat().dp)
 
-    val cs = MaterialTheme.colorScheme
-    val shape = when (shapeName) {
-        "cut"       -> CutCornerShape(corner.dp)
-        "pill"      -> RoundedCornerShape(percent = 50)
-        "topBottom" -> RoundedCornerShape(0.dp) // linee disegnate, non fill
-        else        -> RoundedCornerShape(corner.dp)
-    }
-
-    // Dimensioni
-    val widthMode = cfg.optString("widthMode", "wrap")             // wrap | fill | fixed_dp | fraction
-    val heightMode = cfg.optString("heightMode", "wrap")           // wrap | fixed_dp
-    val widthDp = cfg.optDouble("widthDp", 160.0).toFloat().dp
-    val heightDp = cfg.optDouble("heightDp", 0.0).toFloat().dp
-    val widthFraction = cfg.optDouble("widthFraction", Double.NaN)
-        .let { if (it.isNaN()) null else it.toFloat().coerceIn(0f, 1f) }
-
-    var m = modifier
-    m = when (widthMode) {
-        "fill"      -> m.fillMaxWidth()
-        "fixed_dp"  -> m.width(widthDp)
-        "fraction"  -> m.fillMaxWidth(widthFraction ?: 1f)
-        else        -> m // wrap
-    }
-    m = when (heightMode) {
-        "fixed_dp", "fixed" -> m.height(heightDp)
-        else                -> m // wrap
-    }
-
-    val hAlign = when (cfg.optString("hAlign", "start")) {
-        "center" -> Alignment.CenterHorizontally
-        "end"    -> Alignment.End
-        else     -> Alignment.Start
-    }
-    val vAlign = when (cfg.optString("vAlign", "center")) {
-        "top"    -> Alignment.Top
-        "bottom" -> Alignment.Bottom
-        else     -> Alignment.CenterVertically
-    }
-
-    // Colori (qui usa la tua `parseColorOrRole` se presente)
-    val backgroundColor = /* scegli in base a 'style' o cfg */ cs.surface
-    val contentColor = /* onSurface ecc. */ cs.onSurface
-    val borderMode = cfg.optString("borderMode", "none")
-    val borderWidth = cfg.optDouble("borderThickness", 0.0).toFloat().dp
-    val borderColor = /* dal cfg o default */ cs.outline
-
-    val pad = contentPadding ?: PaddingValues(0.dp)
-
-    val base = when (style) {
-        "text"      -> m
-        "outlined"  -> m.border(BorderStroke(borderWidth, borderColor), shape)
-        "topbottom" -> m
-            .clip(shape)
-            .background(backgroundColor)
-            .topBottomBorder(borderWidth, borderColor)
-        else        -> m
-            .clip(shape)
-            .background(backgroundColor)
-    }
-
-    // Mappa hAlign/vAlign sull'allineamento della Box
-    val contentAlignment =
-        when {
-            vAlign == Alignment.Top && hAlign == Alignment.Start -> Alignment.TopStart
-            vAlign == Alignment.Top && hAlign == Alignment.CenterHorizontally -> Alignment.TopCenter
-            vAlign == Alignment.Top && hAlign == Alignment.End -> Alignment.TopEnd
-            vAlign == Alignment.CenterVertically && hAlign == Alignment.Start -> Alignment.CenterStart
-            vAlign == Alignment.CenterVertically && hAlign == Alignment.CenterHorizontally -> Alignment.Center
-            vAlign == Alignment.CenterVertically && hAlign == Alignment.End -> Alignment.CenterEnd
-            vAlign == Alignment.Bottom && hAlign == Alignment.Start -> Alignment.BottomStart
-            vAlign == Alignment.Bottom && hAlign == Alignment.CenterHorizontally -> Alignment.BottomCenter
-            vAlign == Alignment.Bottom && hAlign == Alignment.End -> Alignment.BottomEnd
-            else -> Alignment.Center
+    val style = cfg.optString("style", "none")
+    val baseBg: Color? = parseColorOrRole(cfg.optString("customColor", ""))
+        ?: when (style) {
+            "surface"  -> MaterialTheme.colorScheme.surface
+            "primary"  -> MaterialTheme.colorScheme.primaryContainer
+            "secondary"-> MaterialTheme.colorScheme.secondaryContainer
+            "tertiary" -> MaterialTheme.colorScheme.tertiaryContainer
+            else       -> null
         }
 
-    Box(
-        modifier = base.padding(pad),
-        contentAlignment = contentAlignment
+    // Border opzionale
+    val borderWidthDp = cfg.optDouble("borderDp", 0.0).toFloat()
+    val borderStroke = if (borderWidthDp > 0f) {
+        val bc = parseColorOrRole(cfg.optString("borderColor", "")) ?: MaterialTheme.colorScheme.outlineVariant
+        BorderStroke(borderWidthDp.dp, bc)
+    } else null
+
+    val tonal = cfg.optDouble("tonalElevation", 0.0).toFloat().dp
+    val shadow = cfg.optDouble("shadowElevation", 0.0).toFloat().dp
+
+    // Eventuale gradient (semplice; se non presente si usa solo baseBg)
+    val gradientBrush: Brush? = cfg.optJSONObject("gradient")?.let { g ->
+        val arr = g.optJSONArray("colors")
+        val cols = (0 until (arr?.length() ?: 0)).mapNotNull { i ->
+            parseColorOrRole(arr!!.optString(i))
+        }
+        if (cols.size >= 2) {
+            if (g.optString("direction", "vertical") == "horizontal")
+                Brush.horizontalGradient(cols) else Brush.verticalGradient(cols)
+        } else null
+    }
+
+    Surface(
+        modifier = modifier,
+        shape = shape,
+        tonalElevation = tonal,
+        shadowElevation = shadow,
+        border = borderStroke,
+        color = Color.Transparent // lo sfondo lo disegniamo nel Box per combinare colore e gradient
     ) {
-        CompositionLocalProvider(LocalContentColor provides contentColor) {
-            Box(modifier = Modifier, content = content)
+        Box(
+            Modifier
+                .then(if (baseBg != null) Modifier.background(baseBg) else Modifier)
+                .then(if (gradientBrush != null) Modifier.background(gradientBrush) else Modifier)
+                .then(if (contentPadding != null) Modifier.padding(contentPadding) else Modifier)
+        ) {
+            content()
         }
     }
 }
 
-
+// Overload compatibile con chiamate legacy: StyledContainer(block = ...)
+@Composable
+fun StyledContainer(
+    block: JSONObject,
+    modifier: Modifier = Modifier,
+    contentPadding: PaddingValues? = null,
+    content: @Composable BoxScope.() -> Unit
+) = StyledContainer(cfg = block, modifier = modifier, contentPadding = contentPadding, content = content)
 
 /* =========================================================
 * PAGE BACKGROUND (colore/gradient/immagine a tutta pagina)
@@ -2052,53 +2060,72 @@ private fun BoxScope.RenderPageBackground(cfg: JSONObject?) {
 /* =========================================================
 * RENDER ITEMS DI BARRA (Top/Bottom) – icone, bottoni, spacer
 * ========================================================= */
+// =========================================================
+// BAR ITEMS (Top/Bottom) – icone, bottoni, spacer
+// =========================================================
 @Composable
-private fun RowScope.RenderBarItemsRow(items: JSONArray, dispatch: (String) -> Unit) {
-    for (i in 0 until items.length()) {
+private fun RowScope.RenderBarItemsRow(
+    items: JSONArray,
+    dispatch: (String) -> Unit
+) {
+    // Iterazione "safe": nessun smart-cast, nessuna mutazione di 'items' nel composable
+    val count = items.length()
+    for (i in 0 until count) {
         val it = items.optJSONObject(i) ?: continue
-        val type = it.optString("type").ifBlank {
-// heurstica retrocompatibile
-            if (it.has("label")) "button" else "icon"
-        }
+
+        // Heuristica retrocompatibile: se c'è "label" ma non "type", considero "button"
+        val type = it.optString("type").ifBlank { if (it.has("label")) "button" else "icon" }
+
         when (type) {
             "spacer" -> {
-                when (it.optString("mode","fixed")) {
+                when (it.optString("mode", "fixed")) {
                     "expand" -> Spacer(Modifier.weight(1f))
-                    else -> Spacer(Modifier.width((it.optDouble("widthDp", 16.0).toFloat().dp)))
+                    else -> {
+                        val w = it.optDouble("widthDp", 16.0).toFloat().dp
+                        Spacer(Modifier.width(w))
+                    }
                 }
             }
+
             "button" -> {
-                val label = it.optString("label","")
-                val style = it.optString("style","text")
-                val actionId = it.optString("actionId","")
+                val label    = it.optString("label", "")
+                val style    = it.optString("style", "text")
+                val actionId = it.optString("actionId", "")
                 when (style) {
-                    "outlined" -> OutlinedButton(onClick = { dispatch(actionId) }) { Text(label) }
-                    "tonal"    -> FilledTonalButton(onClick = { dispatch(actionId) }) { Text(label) }
-                    "primary"  -> Button(onClick = { dispatch(actionId) }) { Text(label) }
-                    else       -> TextButton(onClick = { dispatch(actionId) }) { Text(label) }
+                    "outlined" -> OutlinedButton(onClick = { if (actionId.isNotBlank()) dispatch(actionId) }) { Text(label) }
+                    "tonal"    -> FilledTonalButton(onClick = { if (actionId.isNotBlank()) dispatch(actionId) }) { Text(label) }
+                    "primary"  -> Button(onClick = { if (actionId.isNotBlank()) dispatch(actionId) }) { Text(label) }
+                    else       -> TextButton(onClick = { if (actionId.isNotBlank()) dispatch(actionId) }) { Text(label) }
                 }
             }
-            else -> {
-                val icon = it.optString("icon","more_vert")
-                val actionId = it.optString("actionId","")
-                val openMenuId = it.optString("openMenuId","")
+
+            else -> { // "icon"
+                val icon      = it.optString("icon", "more_vert")
+                val actionId  = it.optString("actionId", "")
+                val openMenu  = it.optString("openMenuId", "")
                 var expanded by remember { mutableStateOf(false) }
+
                 Box {
                     IconButton(onClick = {
-                        if (openMenuId.isNotBlank() || actionId.startsWith("open_menu:")) {
-                            expanded = true
-                        } else if (actionId.isNotBlank()) {
-                            dispatch(actionId)
+                        when {
+                            openMenu.isNotBlank() || actionId.startsWith("open_menu:") -> expanded = true
+                            actionId.isNotBlank() -> dispatch(actionId)
                         }
-                    }) { NamedIconEx(icon, null) }
+                    }) {
+                        // Usa il tuo renderer icone nominali (già presente nel file)
+                        NamedIconEx(icon, null)
+                    }
 
-                    val menuId = if (openMenuId.isNotBlank()) openMenuId else actionId.removePrefix("open_menu:")
-// il vero contenuto del menu è gestito come blocco "Menu" nel layout
-// qui ci limitiamo a segnalare l'azione di apertura
+                    // NB: il contenuto reale del menu è renderizzato altrove come blocco "Menu".
+                    val menuId = if (openMenu.isNotBlank()) openMenu else actionId.removePrefix("open_menu:")
                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         DropdownMenuItem(
-                            text = { Text("Esegui ${if (menuId.isBlank()) "azione" else "menu:$menuId"}") },
-                            onClick = { expanded = false; dispatch(actionId.ifBlank { "open_menu:$menuId" }) }
+                            text = { Text("Esegui " + if (menuId.isBlank()) "azione" else "menu:$menuId") },
+                            onClick = {
+                                expanded = false
+                                val act = if (actionId.isNotBlank()) actionId else "open_menu:$menuId"
+                                dispatch(act)
+                            }
                         )
                     }
                 }
@@ -2106,6 +2133,7 @@ private fun RowScope.RenderBarItemsRow(items: JSONArray, dispatch: (String) -> U
         }
     }
 }
+
 
 /* =========================================================
 * TOP BAR – usa StyledContainer e items azioni con SpacerH
