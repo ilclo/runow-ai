@@ -322,7 +322,6 @@ private fun BoxScope.DraggableReorderOverlay(
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScreenScaffoldWithPinnedTopBar(
     layout: JSONObject,
@@ -334,31 +333,12 @@ private fun ScreenScaffoldWithPinnedTopBar(
     extraPaddingBottom: Dp,
     scaffoldPadding: PaddingValues
 ) {
-    // Stato modalità globale (usiamo AppMode.kt)
-    var mode by rememberSaveable { mutableStateOf(AppMode.Real) }
-
-    // Tip banner: compare quando entri in Resize, si chiude al tap o dopo 10s
-    var showResizeTip by remember { mutableStateOf(false) }
-    LaunchedEffect(mode) {
-        if (mode == AppMode.Resize) {
-            showResizeTip = true
-            // Auto-hide dopo 10s
-            kotlinx.coroutines.delay(10_000)
-            showResizeTip = false
-        } else {
-            showResizeTip = false
-        }
-    }
-
-    val topBarConf = layout.optJSONObject("topBar")
     val title = layout.optString("topTitle", "")
-    val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // fallback legacy
-    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // fallback legacy
-
-    val bottomBarNode  = layout.optJSONObject("bottomBar")
-    val bottomBarItems = bottomBarNode?.optJSONArray("items")
-
+    val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // legacy fallback
+    val legacyBottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy fallback
+    val fab   = layout.optJSONObject("fab")
     val scroll = layout.optBoolean("scroll", true)
+    val topBarConf = layout.optJSONObject("topBar")
 
     val topScrollBehavior =
         when (topBarConf?.optString("scroll", "none")) {
@@ -368,137 +348,118 @@ private fun ScreenScaffoldWithPinnedTopBar(
             else                 -> null
         }
 
-    CompositionLocalProvider(LocalAppMode provides mode) {
-        Scaffold(
-            modifier = if (topScrollBehavior != null)
-                Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
-            else Modifier,
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    Scaffold(
+        modifier = if (topScrollBehavior != null)
+            Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
+        else Modifier,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
 
-            // -- TOP BAR --
-            topBar = {
-                if (topBarConf != null) {
-                    // Usa il renderer del green
-                    RenderTopBar(topBarConf, dispatch, topScrollBehavior)
-                } else {
-                    // Fallback legacy (green)
-                    if (title.isNotBlank() || topActions.length() > 0) {
-                        TopAppBar(
-                            title = { Text(title) },
-                            actions = {
-                                for (i in 0 until topActions.length()) {
-                                    val a = topActions.optJSONObject(i) ?: continue
-                                    IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-                                        // NamedIconEx esiste nel green
-                                        NamedIconEx(a.optString("icon", "more_vert"), null)
-                                    }
+        topBar = {
+            if (topBarConf != null) {
+                RenderTopBar(topBarConf, dispatch, topScrollBehavior)
+            } else {
+                // Fallback legacy
+                if (title.isNotBlank() || topActions.length() > 0) {
+                    TopAppBar(
+                        title = { Text(title) },
+                        actions = {
+                            for (i in 0 until topActions.length()) {
+                                val a = topActions.optJSONObject(i) ?: continue
+                                IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                                    NamedIconEx(a.optString("icon", "more_vert"), null)
                                 }
                             }
-                        )
+                        }
+                    )
+                }
+            }
+        },
+
+        bottomBar = {
+            // Legge la bottomBar direttamente dal layout
+            val bbNode  = layout.optJSONObject("bottomBar")
+            val items   = bbNode?.optJSONArray("items")
+            val cfg     = bbNode?.optJSONObject("container") ?: JSONObject()
+
+            // Se non ci sono i nuovi items, prova il fallback legacy "bottomButtons"
+            val resolvedItems = items ?: if (legacyBottomButtons.length() > 0) {
+                JSONArray().apply {
+                    for (i in 0 until legacyBottomButtons.length()) {
+                        val it = legacyBottomButtons.optJSONObject(i) ?: continue
+                        put(JSONObject().apply {
+                            put("type", "button")
+                            put("label", it.optString("label","Button"))
+                            put("actionId", it.optString("actionId",""))
+                            put("style", "text")
+                        })
                     }
                 }
-            },
+            } else null
 
-            // -- BOTTOM BAR --
-            bottomBar = {
-                // Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
-                val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
-                    JSONArray().apply {
-                        for (i in 0 until bottomButtons.length()) {
-                            val it = bottomButtons.optJSONObject(i) ?: continue
-                            put(JSONObject().apply {
-                                put("type", "button")
-                                put("label", it.optString("label","Button"))
-                                put("actionId", it.optString("actionId",""))
-                                put("style", "text")
-                            })
-                        }
-                    }
-                } else null
-
-                if (items != null && items.length() > 0) {
-                    // Nel green era StyledContainer(block = ...). Qui creiamo un "block" sintetico
-                    // con solo la parte "container" per non cambiare la tua StyledContainer esistente.
-                    val bottomBarBlock = JSONObject().apply {
-                        put("container", bottomBarNode?.optJSONObject("container") ?: JSONObject())
-                    }
-
-                    StyledContainer(
-                        cfg = bottomBarCfg ?: JSONObject(),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RenderBarItemsRow(items, dispatch)
-                        }
-                    }
-                }
-            },
-
-            // -- FAB: SOLO il nuovo bottone modalità (niente vecchio FAB) --
-            floatingActionButton = {
-                ModeSwitchFAB(
-                    mode = mode,
-                    onChange = { mode = it } // ciclo: Real -> Designer -> Resize -> Real
-                )
-            },
-
-            containerColor = Color.Transparent
-        ) { innerPadding ->
-            // Body + overlay
-            val blocks = layout.optJSONArray("blocks") ?: JSONArray()
-
-            val host: @Composable () -> Unit = {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(scaffoldPadding)
-                        .imePadding()
-                        .windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-                        )
-                        .padding(
-                            start = 16.dp,
-                            end   = 16.dp,
-                            top   = 16.dp,
-                            bottom = extraPaddingBottom
-                        ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+            if (resolvedItems != null && resolvedItems.length() > 0) {
+                // Se nella tua base c’è StyledContainer usa questa firma (cfg = ...)
+                StyledContainer(
+                    cfg = cfg,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
-                    for (i in 0 until blocks.length()) {
-                        val block = blocks.optJSONObject(i) ?: continue
-                        val path = "/blocks/$i"
-                        RenderBlock(
-                            block = block,
-                            dispatch = dispatch,
-                            uiState = uiState,
-                            designerMode = (mode == AppMode.Designer || mode == AppMode.Resize),
-                            path = path,
-                            menus = menus,
-                            onSelect = { p -> selectedPathSetter(p) },
-                            onOpenInspector = { p -> selectedPathSetter(p) }
-                        )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RenderBarItemsRow(resolvedItems, dispatch)
                     }
                 }
+                // In alternativa, se non vuoi dipendere da StyledContainer, puoi usare:
+                // Surface(color = MaterialTheme.colorScheme.surface) { ... }
             }
+        },
 
-            Box(Modifier.fillMaxSize()) {
-                if (scroll) {
-                    Column(Modifier.verticalScroll(rememberScrollState())) { host() }
-                } else {
-                    host()
+        floatingActionButton = {
+            fab?.let {
+                FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
+                    NamedIconEx(it.optString("icon", "play_arrow"), null)
                 }
-
-                // Banner istruzioni modalità Resize (trasparente, si chiude al tap, auto-hide 10s)
-                ResizeTipBanner(
-                    visible = (mode == AppMode.Resize) && showResizeTip,
-                    onDismiss = { showResizeTip = false }
-                )
             }
+        },
+
+        containerColor = Color.Transparent
+    ) { innerPadding ->
+        // Body
+        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
+
+        val host: @Composable () -> Unit = {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)         // padding da Scaffold (top/bottom)
+                    .padding(scaffoldPadding)      // padding esterno della pagina
+                    .imePadding()                  // evita che l’IME copra i contenuti
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = extraPaddingBottom),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                for (i in 0 until blocks.length()) {
+                    val block = blocks.optJSONObject(i) ?: continue
+                    val path = "/blocks/$i"
+                    RenderBlock(
+                        block = block,
+                        dispatch = dispatch,
+                        uiState = uiState,
+                        designerMode = designerMode,
+                        path = path,
+                        menus = menus,
+                        onSelect = { p -> selectedPathSetter(p) },
+                        onOpenInspector = { p -> selectedPathSetter(p) }
+                    )
+                }
+            }
+        }
+
+        if (scroll) {
+            Column(Modifier.verticalScroll(rememberScrollState())) { host() }
+        } else {
+            host()
         }
     }
 }
