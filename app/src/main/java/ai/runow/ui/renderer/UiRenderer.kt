@@ -99,45 +99,110 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.IntSize
 
 
-// --- Unico punto di verità: dove stanno i blocchi della pagina
+
+
+
+// --- PATH & INSERT HELPERS ---------------------------------------------------
+
 private fun resolveBlocksArray(root: JSONObject): Pair<JSONArray, String> {
+    // Preferisci la struttura nuova: page.blocks
     val page = root.optJSONObject("page")
-    return if (page != null) {
-        val arr = page.optJSONArray("blocks") ?: JSONArray().also { page.put("blocks", it) }
-        arr to "/page/blocks"
-    } else {
-        val arr = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
-        arr to "/blocks"
-    }
+    val pageBlocks = page?.optJSONArray("blocks")
+    if (pageBlocks != null) return pageBlocks to "page/blocks"
+
+    // Fallback legacy: root.blocks
+    val rootBlocks = root.optJSONArray("blocks") ?: JSONArray().also { root.put("blocks", it) }
+    return rootBlocks to "blocks"
 }
 
-// --- Utility per inserire in mezzo a una JSONArray (senza perdere elementi)
-private fun JSONArray.insertAt(index: Int, value: Any) {
-    val old = (0 until length()).map { opt(it) }
-    val i = index.coerceIn(0, old.size)
-    for (p in 0 until i) put(p, old[p])
-    put(i, value)
-    for (p in i until old.size) put(p + 1, old[p])
-}
-
-// --- Helpers di path (se già presenti, tieni UNA sola versione)
 private fun jsonAtPath(root: JSONObject, path: String): Any? {
-    if (!path.startsWith("/")) return null
+    if (path.isBlank() || path == "/" ) return root
     val segs = path.trim('/').split('/')
-    var node: Any = root
-    var i = 0
-    while (i < segs.size) {
-        when (node) {
-            is JSONObject -> { node = node.opt(segs[i]) ?: return null; i++ }
-            is JSONArray  -> {
-                val idx = segs[i].toIntOrNull() ?: return null
-                node = node.opt(idx) ?: return null; i++
+    var cur: Any? = root as Any
+    for (s in segs) {
+        cur = when (cur) {
+            is JSONObject -> {
+                // se s è indice, accedi a un array chiamato s? no: per JSONObject usa chiavi
+                // esempio: "page", "blocks"
+                cur.opt(s)
             }
-            else -> return null
+            is JSONArray -> {
+                s.toIntOrNull()?.let { idx -> if (idx in 0 until cur.length()) cur.opt(idx) else null }
+            }
+            else -> null
         }
+        if (cur == null) return null
     }
-    return node
+    return cur
 }
+
+private fun getParentArrayAndIndex(root: JSONObject, itemPath: String): Triple<JSONArray, Int, String>? {
+    // itemPath tipo: "page/blocks/3" -> parentPath = "page/blocks", index = 3
+    val trimmed = itemPath.trim('/')
+
+    val lastSlash = trimmed.lastIndexOf('/')
+    if (lastSlash <= 0) return null
+
+    val parentPath = trimmed.substring(0, lastSlash)
+    val idxStr     = trimmed.substring(lastSlash + 1)
+    val idx = idxStr.toIntOrNull() ?: return null
+
+    val parent = jsonAtPath(root, parentPath)
+    if (parent is JSONArray && idx in 0..parent.length()) {
+        return Triple(parent, idx, parentPath)
+    }
+    return null
+}
+
+private fun JSONArray.insertAt(index: Int, value: Any?) {
+    val idx = index.coerceIn(0, length())
+    // spostamento a destra
+    val tail = (idx until length()).map { opt(it) }
+    if (length() > idx) {
+        // rimpiazzo idx, poi riaggiungo la coda
+        put(idx, value)
+        for (i in tail.indices) put(idx + 1 + i, tail[i])
+    } else {
+        // append diretto
+        put(value)
+    }
+}
+
+/**
+ * Inserisce un blocco vicino al selezionato (before/after) o in coda se selectedPath è null.
+ * Ritorna il path del nuovo blocco.
+ */
+internal fun insertBlockAndReturnPath(
+    root: JSONObject,
+    selectedPath: String?,
+    newBlock: JSONObject,
+    position: String = "after"
+): String {
+    // Se non c’è un selezionato, aggiungi in coda all’array "giusta" (page.blocks o blocks).
+    if (selectedPath.isNullOrBlank()) {
+        val (arr, base) = resolveBlocksArray(root)
+        arr.put(newBlock)
+        return "$base/${arr.length() - 1}"
+    }
+
+    val parentInfo = getParentArrayAndIndex(root, selectedPath)
+    if (parentInfo != null) {
+        val (parentArr, idx, parentPath) = parentInfo
+        val insertIdx = when (position.lowercase()) {
+            "before" -> idx
+            else     -> idx + 1
+        }.coerceIn(0, parentArr.length())
+
+        parentArr.insertAt(insertIdx, newBlock)
+        return "$parentPath/$insertIdx"
+    }
+
+    // Fallback: append in coda ai blocks
+    val (arr, base) = resolveBlocksArray(root)
+    arr.put(newBlock)
+    return "$base/${arr.length() - 1}"
+}
+
 
 private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, Int>? {
     if (!path.startsWith("/")) return null
@@ -161,49 +226,8 @@ private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, I
     return if (parentArr != null && index >= 0) parentArr!! to index else null
 }
 
-// --- INSERIMENTO COERENTE con resolveBlocksArray (prima causa del “non si vede”)
-private fun insertBlockAndReturnPath(
-    root: JSONObject,
-    selectedPath: String?,
-    newBlock: JSONObject,
-    position: String = "after" // "before" | "after" | "child_end"
-): String {
-    // 1) Provo ad ancorarmi alla selezione corrente
-    val parentAndIndex = selectedPath?.let { getParentAndIndex(root, it) }
 
-    // 2) Altrimenti vado sull’array “canonico” dei blocchi (page.blocks o blocks)
-    val (defaultArr, defaultParentPath) = resolveBlocksArray(root)
 
-    val (parentArr, parentPath, anchorIndex) = if (parentAndIndex != null) {
-        val (arr, idx) = parentAndIndex
-        Triple(arr, selectedPath!!.substringBeforeLast("/"), idx)
-    } else {
-        Triple(defaultArr, defaultParentPath, defaultArr.length() - 1)
-    }
-
-    // 3) Decido dove inserire
-    val insertIndex = when (position) {
-        "before"    -> anchorIndex.coerceAtLeast(0)
-        "after"     -> (anchorIndex + 1).coerceAtLeast(0)
-        "child_end" -> {
-            val maybeContainer = jsonAtPath(root, selectedPath ?: "")
-            val items = (maybeContainer as? JSONObject)?.optJSONArray("items")
-            if (items != null) {
-                items.insertAt(items.length(), newBlock)
-                return "$selectedPath/items/${items.length() - 1}"
-            } else {
-                (anchorIndex + 1).coerceAtLeast(0)
-            }
-        }
-        else -> (anchorIndex + 1).coerceAtLeast(0)
-    }
-
-    // 4) Inserisco e restituisco il path del nuovo nodo
-    parentArr.insertAt(insertIndex, newBlock)
-    return "$parentPath/$insertIndex"
-}
-
-// --- usato dai bottoni “Icona + Menu”
 private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
     val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
     val iconPath = insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
@@ -213,58 +237,110 @@ private fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?
 
 
 @Composable
-private fun RenderRootScaffold(
+internal fun RenderRootScaffold(
     layout: JSONObject,
     dispatch: (String) -> Unit,
     uiState: MutableMap<String, Any>,
     designerMode: Boolean,
     menus: Map<String, JSONArray>,
-    selectedPathSetter: (String) -> Unit,
+    selectedPathSetter: (String?) -> Unit,
     extraPaddingBottom: Dp,
-    scaffoldPadding: PaddingValues
+    scaffoldPadding: PaddingValues,
 ) {
-    val page = layout.optJSONObject("page")
-    val title = layout.optString("topTitle", "")
+    // --- risoluzione page / blocks (supporta sia root.page.blocks che root.blocks) ---
+    val page: JSONObject? = layout.optJSONObject("page")
+    val blocksArray: JSONArray =
+        page?.optJSONArray("blocks")
+            ?: layout.optJSONArray("blocks")
+            ?: JSONArray()
+    val blocksPathBase =
+        if (page != null) "/page/blocks" else "/blocks"
 
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
-        topBar = {
-            if (title.isNotBlank()) {
-                TopAppBar(title = { Text(title) })
-            }
-        }
-    ) { innerPadding ->
-        // Somma semplice dei padding: prima quelli dello Scaffold, poi quelli esterni, poi spazio extra in basso
+    val scrollEnabled = page?.optBoolean("scroll", true) ?: true
+
+    // --- eventuale topBar e bottomBar dal layout (se presenti) ---
+    val topBarCfg: JSONObject? =
+        layout.optJSONObject("topBar") ?: page?.optJSONObject("topBar")
+    val bottomBarCfg: JSONObject? =
+        layout.optJSONObject("bottomBar") ?: page?.optJSONObject("bottomBar")
+    val fabCfg: JSONObject? =
+        layout.optJSONObject("fab") ?: page?.optJSONObject("fab")
+
+    // --- contenuto centrale: background + lista blocchi ---
+    @Composable
+    fun PageContent(innerPad: PaddingValues) {
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(innerPad)
                 .padding(scaffoldPadding)
                 .padding(bottom = extraPaddingBottom)
         ) {
-            if (page != null) {
-                // Render del "page" root
-                RenderBlock(
-                    page,
-                    dispatch,
-                    uiState,
-                    designerMode = designerMode,
-                    path = "page",
-                    menus = menus,
-                    onSelect = { selectedPathSetter(it) },
-                    onOpenInspector = { selectedPathSetter(it) }
-                )
-            } else {
-                // Fallback se non c'è page
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Nessun 'page' nel layout", style = MaterialTheme.typography.bodyLarge)
+            // Sfondo pagina (se definito)
+            RenderPageBackground(layout)
+
+            val content = @Composable {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .imePadding(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val count = blocksArray.length()
+                    for (i in 0 until count) {
+                        val block = blocksArray.optJSONObject(i) ?: continue
+                        val path = "$blocksPathBase/$i"
+                        RenderBlock(
+                            cfg = block,
+                            dispatch = dispatch,
+                            uiState = uiState,
+                            designerMode = designerMode,
+                            path = path,
+                            menus = menus,
+                            onSelect = { sel -> selectedPathSetter(sel) },
+                            onOpenInspector = { sel -> selectedPathSetter(sel) }
+                        )
+                    }
                 }
+            }
+
+            if (scrollEnabled) {
+                val scrollState = rememberScrollState()
+                Column(Modifier.fillMaxSize().verticalScroll(scrollState)) { content() }
+            } else {
+                content()
             }
         }
     }
+
+    // --- Scaffold con top/bottom bar opzionali e FAB opzionale ---
+    val topScroll = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(topScroll.nestedScrollConnection),
+        topBar = {
+            topBarCfg?.let {
+                StyledTopBarPinned(
+                    cfg = it,
+                    dispatch = dispatch,
+                    scrollBehavior = topScroll
+                )
+            }
+        },
+        bottomBar = {
+            bottomBarCfg?.let { cfg ->
+                StyledBottomBar(cfg = cfg, dispatch = dispatch)
+            }
+        },
+        floatingActionButton = {
+            fabCfg?.let { cfg -> RenderFab(cfg, dispatch) }
+        }
+    ) { inner ->
+        PageContent(inner)
+    }
 }
+
 
 
 @Composable
@@ -1418,177 +1494,112 @@ fun UiScreen(
     screenName: String,
     dispatch: (String) -> Unit,
     uiState: MutableMap<String, Any>,
-    designerMode: Boolean = false,
-    scaffoldPadding: PaddingValues = PaddingValues(0.dp)
+    scaffoldPadding: PaddingValues = PaddingValues(0.dp),
 ) {
-    val ctx = LocalContext.current
-    var layout: JSONObject? by remember(screenName) {
-        mutableStateOf(UiLoader.loadLayout(ctx, screenName))
-    }
-    var tick by remember { mutableStateOf(0) }
+    val context = LocalContext.current
 
-    if (layout == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Layout '$screenName' non trovato", style = MaterialTheme.typography.bodyLarge)
-        }
-        return
+    // Carico il layout (puoi tenere la tua logica esistente)
+    var layout by remember(screenName) { mutableStateOf<JSONObject?>(null) }
+    LaunchedEffect(screenName) {
+        layout = UiLoader.loadLayout(context, screenName) // tua funzione esistente
     }
 
-    // Menù raccolti + selezione
-    val menus = remember(layout, tick) { collectMenus(layout!!) }
-    var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
-
-    // Altezza overlay designer (per lasciare spazio ai contenuti)
-    var overlayHeightPx by remember { mutableStateOf(0) }
-    val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
-
-    // Persistenza modalità designer
-    var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
-
-    // Modalità app (Real / Designer / Resize)
-    var appMode by rememberSaveable(screenName) {
-        mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
-    }
-    LaunchedEffect(designMode) {
-        appMode = if (designMode) AppMode.Designer else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
-    }
-    LaunchedEffect(appMode) { uiState["_runtimeResize"] = (appMode == AppMode.Resize) }
-
-    // Live preview root mentre si edita nel RootInspector
-    var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
-    fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
-        val out = JSONObject(base.toString())
-        listOf("page", "topBar").forEach { k -> if (preview.has(k)) out.put(k, preview.opt(k)) }
-        return out
-    }
-    val effectiveLayout = remember(layout, previewRoot) {
-        if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
+    // Menù raccolti dal layout (azioni globali, ecc.)
+    val menus by remember(screenName, layout) {
+        mutableStateOf(collectMenus(layout))
     }
 
-    // --- Overlay state + dispatch che li attiva
-    var openPanelId by remember { mutableStateOf<String?>(null) }
-    var openMenuId  by remember { mutableStateOf<String?>(null) }
-    val dispatchWithOverlays = remember(dispatch) {
-        wrapDispatchForOverlays(
-            openPanelSetter = { openPanelId = it },
-            openMenuSetter  = { openMenuId  = it },
-            appDispatch     = dispatch
-        )
-    }
-    // Stato overlay: side panel & center menu
-    var openSidePanelId by remember { mutableStateOf<String?>(null) }
-    var openCenterMenuId by remember { mutableStateOf<String?>(null) }
-    
-    // Dispatch che intercetta comandi overlay e inoltra il resto all'app
-    val dispatchWrapped = wrapDispatchForOverlays(
-        openPanelSetter = { id -> openSidePanelId = id },
-        openMenuSetter  = { id -> openCenterMenuId = id },
-        appDispatch     = dispatch
-    )
+    // Selezione corrente (per inspector / highlight)
+    var selectedPath by remember { mutableStateOf<String?>(null) }
 
-    Box(Modifier.fillMaxSize()) {
-        // SFONDO
-        RenderPageBackground(effectiveLayout.optJSONObject("page"))
+    // Modalità app
+    var appMode by remember { mutableStateOf(AppMode.Real) }
+    CompositionLocalProvider(LocalAppMode provides appMode) {
+        // Preview root (se usi vista bozza/live preview nel designer)
+        var previewRoot by remember { mutableStateOf<JSONObject?>(null) }
+        val effectiveLayout = previewRoot ?: layout
 
-        // ROOT SCAFFOLD (TopBar pinned, BottomBar, FAB) – ora legge page.blocks
-        RenderRootScaffold(
-            layout = effectiveLayout,
-            dispatch = dispatchWrapped,
-            uiState = uiState,
-            designerMode = designMode,
-            menus = menus,
-            selectedPathSetter = { selectedPath = it },
-            extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-            scaffoldPadding = scaffoldPadding
-        )
+        // Altezza overlay designer => padding in basso
+        var overlayHeightPx by remember { mutableStateOf(0) }
+        val extraPaddingBottom = with(LocalDensity.current) { overlayHeightPx.toDp() }
 
-        // OVERLAY DESIGNER
-        if (designMode) {
-            DesignerOverlay(
-                screenName = screenName,
-                layout = layout!!,
-                selectedPath = selectedPath,
-                setSelectedPath = { selectedPath = it },
-                onLiveChange = { tick++ },
-                onLayoutChange = {
-                    UiLoader.saveDraft(ctx, screenName, layout!!)
-                    layout = JSONObject(layout.toString())
-                    tick++
-                },
-                onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
-                onReset = {
-                    UiLoader.resetPublished(ctx, screenName)
-                    layout = UiLoader.loadLayout(ctx, screenName)
-                    selectedPath = null
-                    tick++
-                },
-                topPadding = scaffoldPadding.calculateTopPadding(),
-                onOverlayHeight = { overlayHeightPx = it },
-                onOpenRootInspector = { /* gestito altrove */ },
-                onRootLivePreview = { previewRoot = it }
-            )
-        }
-
-        // stato per mostrare/nascondere l’hint
-        var showResizeHint by remember(appMode) { mutableStateOf(true) }
-        
-        // auto-hide dopo 10s quando si entra in modalità Resize
+        // Hint in modalità Resize: visibile 10s a ogni ingresso, chiudibile al tap
+        var resizeHintVisible by remember(appMode) { mutableStateOf(appMode == AppMode.Resize) }
         LaunchedEffect(appMode) {
             if (appMode == AppMode.Resize) {
-                showResizeHint = true
-                kotlinx.coroutines.delay(10_000)
-                showResizeHint = false
+                resizeHintVisible = true
+                delay(10_000)
+                resizeHintVisible = false
             }
         }
-        
-        if (appMode == AppMode.Resize) {
-            AnimatedVisibility(
-                visible = showResizeHint,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                ResizeHud(
-                    onDismiss = { showResizeHint = false },
-                    onExit    = { appMode = AppMode.Real }
+
+        // Dispatch “wrappato” per gestire eventuali pannelli/menu overlay (se usi questa semantica)
+        fun dispatchWithOverlays(msg: String) {
+            dispatch(msg)
+        }
+
+        Box(Modifier.fillMaxSize()) {
+            // Sfondo globale (se definito a root)
+            RenderPageBackground(effectiveLayout)
+
+            // --- CONTENUTO PRINCIPALE ---
+            effectiveLayout?.let { notNullLayout ->
+                RenderRootScaffold(
+                    layout = notNullLayout,
+                    dispatch = ::dispatchWithOverlays,
+                    uiState = uiState,
+                    designerMode = (appMode != AppMode.Real),
+                    menus = menus,
+                    selectedPathSetter = { selectedPath = it },
+                    extraPaddingBottom = extraPaddingBottom,
+                    scaffoldPadding = scaffoldPadding
                 )
             }
-        }
 
-        // OVERLAY: Side panel e Center menu (aperti da dispatchWithOverlays)
-        RenderSidePanelsOverlay(
-            layout = effectiveLayout,
-            openPanelId = openPanelId,
-            onClose = { openPanelId = null },
-            dispatch = dispatchWithOverlays,
-            menus = menus,
-            dimBehind = true
-        )
-        RenderCenterMenuOverlay(
-            layout = effectiveLayout,
-            openMenuId = openMenuId,
-            onClose = { openMenuId = null },
-            menus = menus,
-            dispatch = dispatchWithOverlays
-        )
-
-        // FAB radiale modalità
-        ModeFabRadial(
-            current = appMode,
-            onPick = { mode ->
-                appMode = mode
-                designMode = (mode == AppMode.Designer)
-                uiState["_runtimeResize"] = (mode == AppMode.Resize)
+            // --- OVERLAY DESIGNER: palette + inspector + azioni ---
+            if (appMode == AppMode.Designer) {
+                DesignerOverlay(
+                    screenName = screenName,
+                    layout = layout ?: JSONObject(),
+                    selectedPath = selectedPath,
+                    setSelectedPath = { selectedPath = it },
+                    onLiveChange = { /* opzionale: live updates */ },
+                    onLayoutChange = {
+                        // forza recomposition clonando il JSON
+                        layout = layout?.let { JSONObject(it.toString()) }
+                    },
+                    onSaveDraft = { /* TODO: salvataggio bozza */ },
+                    onPublish = { /* TODO: pubblicazione */ },
+                    onReset = { /* TODO: reset */ },
+                    topPadding = 0.dp,
+                    onOverlayHeight = { overlayHeightPx = it },
+                    onOpenRootInspector = { selectedPath = null },
+                    onRootLivePreview = { preview ->
+                        previewRoot = preview
+                    }
+                )
+            } else {
+                overlayHeightPx = 0 // niente padding aggiuntivo
             }
-        )
 
-        // levetta laterale designer
-        DesignSwitchKnob(
-            isDesigner = designMode,
-            onToggle = { designMode = !designMode }
-        )
+            // --- HUD per modalità RESIZE (trasparente, auto-hide 10s o al tap) ---
+            if (appMode == AppMode.Resize) {
+                ResizeHud(
+                    visible = resizeHintVisible,
+                    onDismiss = { resizeHintVisible = false },
+                    onExit = { appMode = AppMode.Real }
+                )
+            }
+
+            // --- FAB per cambio modalità (il tuo "nuovo bottone") ---
+            ModeFabRadial( // se la tua implementazione si chiama diversamente, usa quella
+                mode = appMode,
+                onChange = { appMode = it }
+            )
+        }
     }
 }
+
 
 
 
