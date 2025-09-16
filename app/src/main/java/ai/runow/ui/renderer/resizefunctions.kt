@@ -1,241 +1,181 @@
 package ai.runow.ui.renderer
-…
-
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToInt
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-/**
- * =========================
- *        SPEED-DIAL
- * =========================
- */
+/* ---------- SPEED DIAL (3 modalità) ---------- */
 
-/**
- * Bottone flottante unico per selezionare la modalità dell’app (Real / Designer / Resize).
- * Sostituisce il “vecchio” bottone: usa SOLO questo.
- */
 @Composable
-fun AppModeSpeedDial(
-    current: AppMode,
-    onPick: (AppMode) -> Unit,
+fun ModeSpeedDial(
+    mode: AppMode,
+    onChange: (AppMode) -> Unit,
     modifier: Modifier = Modifier,
-    expandedInitially: Boolean = false
+    visible: Boolean = true,
 ) {
-    var expanded by remember { mutableStateOf(expandedInitially) }
+    if (!visible) return
+    var expanded by remember { mutableStateOf(false) }
 
-    Box(modifier.fillMaxSize()) {
-        // Backdrop per click fuori se aperto
+    Box(modifier, contentAlignment = Alignment.BottomEnd) {
         if (expanded) {
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .alpha(0.01f) // trasparente ma cliccabile
-                    .pointerInput(Unit) { detectTapGestures(onTap = { expanded = false }) }
+            // Menu verticale semplice (pulito e stabile)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier.padding(bottom = 72.dp, end = 8.dp)
+            ) {
+                SmallFab(
+                    selected = mode == AppMode.Real,
+                    label = "Reale",
+                    icon = Icons.Filled.Visibility,
+                    onClick = { onChange(AppMode.Real); expanded = false }
+                )
+                SmallFab(
+                    selected = mode == AppMode.Designer,
+                    label = "Designer",
+                    icon = Icons.Filled.Build,
+                    onClick = { onChange(AppMode.Designer); expanded = false }
+                )
+                SmallFab(
+                    selected = mode == AppMode.Resize,
+                    label = "Resize",
+                    icon = Icons.Filled.Tune,
+                    onClick = { onChange(AppMode.Resize); expanded = false }
+                )
+            }
+        }
+
+        FloatingActionButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Tune,
+                contentDescription = "Modalità"
             )
         }
-
-        Column(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 24.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            if (expanded) {
-                SmallModeFab(
-                    label = "Real",
-                    selected = current == AppMode.Real,
-                    onClick = { onPick(AppMode.Real); expanded = false }
-                )
-                Spacer(Modifier.height(10.dp))
-                SmallModeFab(
-                    label = "Designer",
-                    selected = current == AppMode.Designer,
-                    onClick = { onPick(AppMode.Designer); expanded = false }
-                )
-                Spacer(Modifier.height(10.dp))
-                SmallModeFab(
-                    label = "Resize",
-                    selected = current == AppMode.Resize,
-                    onClick = { onPick(AppMode.Resize); expanded = false }
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-
-            FloatingActionButton(
-                onClick = { expanded = !expanded },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = CircleShape
-            ) {
-                Text(
-                    text = when (current) {
-                        AppMode.Real -> "R"
-                        AppMode.Designer -> "D"
-                        AppMode.Resize -> "Z"
-                    },
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-        }
     }
 }
 
+/* Overload per eventuali chiamate legacy: ModeSpeedDial(visible=..., current=..., onPick=...) */
 @Composable
-private fun SmallModeFab(
-    label: String,
+fun ModeSpeedDial(
+    visible: Boolean,
+    current: AppMode,
+    onPick: (AppMode) -> Unit,
+    modifier: Modifier = Modifier
+) = ModeSpeedDial(mode = current, onChange = onPick, modifier = modifier, visible = visible)
+
+@Composable
+private fun SmallFab(
     selected: Boolean,
+    label: String,
+    icon: ImageVector,
     onClick: () -> Unit
 ) {
-    val bg = if (selected) MaterialTheme.colorScheme.tertiary
-    else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (selected) MaterialTheme.colorScheme.onTertiary
-    else MaterialTheme.colorScheme.onSurfaceVariant
-
-    Surface(
-        color = bg,
-        contentColor = fg,
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 6.dp,
-        onClick = onClick
-    ) {
-        Text(
-            label,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            style = MaterialTheme.typography.labelLarge
-        )
-    }
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        icon = { Icon(icon, contentDescription = null) },
+        text  = { Text(label) },
+        containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        contentColor   = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.height(40.dp)
+    )
 }
 
-/**
- * =========================
- *     RESIZE HINT OVERLAY
- * =========================
- */
+/* ---------- HUD avviso modalità Resize (trasparente, 10s o tap) ---------- */
 
-/**
- * Controller “plug&play” per mostrare il banner trasparente di istruzioni in Resize Mode:
- * - compare ogni volta che si entra in modalità Resize
- * - resta per 10s o scompare subito al tap
- */
 @Composable
-fun ResizeHintOverlayController(
-    mode: AppMode,
-    modifier: Modifier = Modifier,
-    timeoutMillis: Long = 10_000L
+fun ResizeHud(
+    visible: Boolean,
+    onDismiss: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
-    var visible by remember(mode) { mutableStateOf(mode == AppMode.Resize) }
+    if (!visible) return
 
-    // Se entro in Resize ⇒ (ri)mostra
-    LaunchedEffect(mode) {
-        if (mode == AppMode.Resize) visible = true
-    }
+    var show by remember { mutableStateOf(true) }
 
-    if (mode == AppMode.Resize && visible) {
-        ResizeHintOverlay(
-            onDismiss = { visible = false },
-            modifier = modifier,
-            timeoutMillis = timeoutMillis
-        )
-    }
-}
-
-/**
- * Overlay testuale leggero e trasparente.
- * Niente “fondino pieno” per far vedere chiaramente ciò che c’è dietro.
- */
-@Composable
-fun ResizeHintOverlay(
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-    timeoutMillis: Long = 10_000L
-) {
-    // auto-hide
+    // Sparisce dopo 10s
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(timeoutMillis)
+        delay(10_000)
+        show = false
         onDismiss()
     }
 
-    Box(
-        modifier
-            .fillMaxSize()
-            .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }) }
-    ) {
-        // pill trasparente con testo, nessun background opaco
+    if (show) {
         Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 8.dp)
-                .padding(horizontal = 12.dp)
+            modifier
+                .fillMaxWidth()
+                .wrapContentHeight()
+                .padding(16.dp)
+                .clickable {
+                    show = false
+                    onDismiss()
+                },
+            contentAlignment = Alignment.TopCenter
         ) {
-            Text(
-                "Modalità RESIZE: • Tap prolungato su un blocco per abilitarne il ridimensionamento (effetto pulse). " +
-                        "• Trascina i bordi per allungare/accorciare. " +
-                        "• Trascina il blocco per spostarlo; al superamento della tolleranza i blocchi si scambiano.",
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier
-                    .background(Color.Transparent)
-                    .padding(6.dp)
-            )
+            Surface(
+                color = Color.Black.copy(alpha = 0.35f), // “trasparente” ma leggibile
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text(
+                    text = "Modalità resize: • Tieni premuto un blocco per abilitarne il ridimensionamento (pulse) • Trascina i bordi per ridimensionare • Tieni premuto di nuovo per abilitare lo spostamento: trascinando si scambia con i vicini quando si sovrappone a sufficienza.",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(14.dp)
+                )
+            }
         }
     }
 }
 
-/**
- * =========================
- *   RESIZE / MOVE WRAPPER
- * =========================
- */
+/* ---------- Stato e interactor per resize/spostamento in runtime ---------- */
 
-/**
- * Stato d’interazione per un singolo blocco in Resize Mode
- */
 @Stable
-class ResizeMoveState(
-    initialActive: Boolean = false,
-    initialMoveEnabled: Boolean = false
-) {
-    var isActiveForResize by mutableStateOf(initialActive)
-    var isMoveEnabled by mutableStateOf(initialMoveEnabled)
-    var lastPulseKey by mutableStateOf(0)
+class ResizeMoveState {
+    var isActiveForResize by mutableStateOf(false) // true dopo primo long press (pulse)
+    var isMoveEnabled     by mutableStateOf(false) // true dopo secondo long press
+    var lastPulseKey      by mutableStateOf(0)     // per triggerare l’animazione pulse
 
     fun activateWithPulse() {
         isActiveForResize = true
-        // trigger pulse
         lastPulseKey++
     }
-
-    fun deactivate() {
+    fun reset() {
         isActiveForResize = false
         isMoveEnabled = false
     }
@@ -244,97 +184,99 @@ class ResizeMoveState(
 @Composable
 fun rememberResizeMoveState(): ResizeMoveState = remember { ResizeMoveState() }
 
-/**
- * Wrapper da applicare al contenuto del BLOCCO quando si è in Resize Mode.
- * Gestisce:
- *  - tap prolungato ⇒ attiva resize + PULSE
- *  - drag del blocco se move abilitato (long press successivo abilita anche lo spostamento)
- *  - swap con blocchi vicini quando l’overlap supera una soglia (tolleranza)
- *
- * NOTA: i veri “handle” per ridimensionare i bordi sono già in ResizableRow.kt.
- * Questo wrapper abilita/indica “attivo” e si occupa del MOVE e della parte estetica (pulse).
- */
+private fun Rect.translate(delta: Offset): Rect =
+    Rect(left + delta.x, top + delta.y, right + delta.x, bottom + delta.y)
 
+private fun horizontalOverlapRatio(a: Rect, b: Rect): Float {
+    val left = maxOf(a.left, b.left)
+    val right = minOf(a.right, b.right)
+    val overlap = (right - left).coerceAtLeast(0f)
+    val width = minOf(a.width, b.width)
+    return if (width <= 0f) 0f else overlap / width
+}
+
+/**
+ * Wrapper di gesture e feedback (pulse + drag) da applicare al contenuto del blocco.
+ *
+ * @param enabled true solo in AppMode.Resize
+ * @param state   rememberResizeMoveState()
+ * @param index   indice del blocco tra i fratelli
+ * @param neighborsBoundsProvider bounds globali dei fratelli (in ordine)
+ * @param overlapToleranceFraction soglia [0..1] per richiedere lo swap
+ * @param onSwapRequest callback per invertire from<->to (gestita a livello di riga)
+ */
 @Composable
 fun ResizeMoveInteractor(
-    enabled: Boolean,                  // true solo in AppMode.Resize
-    state: ResizeMoveState,            // rememberResizeMoveState()
-    index: Int,                        // posizione del blocco nella riga/colonna
-    neighborsBoundsProvider: () -> List<Rect>, // bounds globali dei fratelli (in ordine)
-    overlapToleranceFraction: Float = 0.35f,   // soglia di overlap per swap [0..1]
+    enabled: Boolean,
+    state: ResizeMoveState,
+    index: Int,
+    neighborsBoundsProvider: () -> List<Rect>,
+    overlapToleranceFraction: Float = 0.35f,
     onSwapRequest: (from: Int, to: Int) -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
     val scope = rememberCoroutineScope()
-
-    val dragOffset = remember { Animatable(0f) }  // offset orizzontale; usa drag.y per colonne
+    val dragOffset = remember { Animatable(0f) } // offset X; per colonne usa Y analogamente
     var dragging by remember { mutableStateOf(false) }
 
-    // Effetto "pulse" quando il blocco viene abilitato al resize
+    // Effetto PULSE quando il blocco viene abilitato al resize
     val pulseScale = remember { Animatable(1f) }
     LaunchedEffect(state.lastPulseKey) {
         if (state.isActiveForResize) {
             pulseScale.snapTo(1f)
-            pulseScale.animateTo(1.06f, animationSpec = tween(120))
-            pulseScale.animateTo(1f, animationSpec = tween(150))
+            pulseScale.animateTo(1.08f, tween(120))
+            pulseScale.animateTo(1f, tween(150))
         }
     }
 
-    // Layer gesture (solo in Resize mode)
-    val gestureMod = if (enabled) {
+    val gestures = if (enabled) {
         Modifier
+            // Long‑press: 1° attiva resize (pulse); 2° abilita spostamento
             .pointerInput(index, state.isActiveForResize, state.isMoveEnabled) {
                 detectTapGestures(
                     onLongPress = {
-                        // 1° long‑press: abilita resize + pulse
                         if (!state.isActiveForResize) {
                             state.activateWithPulse()
                         } else {
-                            // 2° long‑press: abilita lo spostamento del blocco
                             state.isMoveEnabled = true
                         }
                     }
                 )
             }
+            // Drag orizzontale per spostare/scambiare (solo se move abilitato)
             .pointerInput(index, state.isMoveEnabled) {
                 detectDragGestures(
                     onDragStart = {
                         if (state.isMoveEnabled) dragging = true
-                    },
-                    onDragEnd = {
-                        if (dragging) {
-                            dragging = false
-                            // ritorno a zero animato
-                            scope.launch { dragOffset.animateTo(0f, tween(120)) }
-                        }
-                    },
-                    onDragCancel = {
-                        dragging = false
-                        scope.launch { dragOffset.animateTo(0f, tween(120)) }
                     },
                     onDrag = { change, drag ->
                         change.consume()
                         if (!state.isMoveEnabled) return@detectDragGestures
 
                         val newX = dragOffset.value + drag.x
-                        // aggiornamento immediato (sospeso -> va lanciato)
-                        scope.launch { dragOffset.snapTo(newX) }
+                        scope.launch { dragOffset.snapTo(newX) } // <- sospesa: dentro launch
 
-                        // calcolo swap con i vicini al superamento della tolleranza
                         val bounds = neighborsBoundsProvider()
                         val me = bounds.getOrNull(index) ?: return@detectDragGestures
                         val moved = me.translate(Offset(newX, 0f))
 
-                        fun maybeSwapWith(targetIndex: Int) {
-                            val other = bounds.getOrNull(targetIndex) ?: return
-                            val ratio = horizontalOverlapRatio(moved, other)
-                            if (ratio >= overlapToleranceFraction) {
-                                onSwapRequest(index, targetIndex)
+                        fun maybeSwapWith(target: Int) {
+                            val other = bounds.getOrNull(target) ?: return
+                            if (horizontalOverlapRatio(moved, other) >= overlapToleranceFraction) {
+                                onSwapRequest(index, target)
                             }
                         }
                         maybeSwapWith(index - 1)
                         maybeSwapWith(index + 1)
+                    },
+                    onDragCancel = {
+                        dragging = false
+                        scope.launch { dragOffset.animateTo(0f, tween(120)) }
+                    },
+                    onDragEnd = {
+                        dragging = false
+                        scope.launch { dragOffset.animateTo(0f, tween(120)) }
                     }
                 )
             }
@@ -346,33 +288,8 @@ fun ResizeMoveInteractor(
                 val s = if (state.isActiveForResize) pulseScale.value else 1f
                 scaleX = s
                 scaleY = s
-                translationX = dragOffset.value     // usa translationY per colonne
+                translationX = dragOffset.value
             }
-            .then(gestureMod)
-    ) {
-        content()
-    }
+            .then(gestures)
+    ) { content() }
 }
-
-
-
-
-/**
- * Ritorna il rapporto di sovrapposizione orizzontale tra due rettangoli: 0..1
- * 0 = nessuna sovrapposizione, 1 = sovrapposizione completa sul lato minore.
- */
-
-private fun horizontalOverlapRatio(a: Rect, b: Rect): Float {
-    val left = maxOf(a.left, b.left)
-    val right = minOf(a.right, b.right)
-    val overlap = (right - left).coerceAtLeast(0f)
-    val width = minOf(a.width, b.width)
-    return if (width <= 0f) 0f else overlap / width
-}
-
-
-/**
- * Utility per tradurre un Rect
- */
-private fun Rect.translate(delta: Offset): Rect =
-    Rect(Offset(left + delta.x, top + delta.y), Offset(right + delta.x, bottom + delta.y))
