@@ -96,6 +96,59 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.IntSize
 
 @Composable
+private fun BoxScope.ResizeHudTransparentTimed(
+    onDismiss: () -> Unit,
+    onExit: () -> Unit
+) {
+    var visible by remember { mutableStateOf(true) }
+
+    // Auto-hide dopo 10 secondi quando entra in Resize
+    LaunchedEffect(Unit) {
+        visible = true
+        kotlinx.coroutines.delay(10_000)
+        visible = false
+        onDismiss()
+    }
+
+    if (!visible) return
+
+    // HUD con sfondo trasparente, dismiss immediato al tap (non blocca i tocchi dietro dopo il tap)
+    Box(
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = 12.dp, start = 12.dp, end = 12.dp)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) {
+                visible = false
+                onDismiss()
+            }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Ombra sul testo per leggibilità, ma nessun contenitore opaco
+            Icon(Icons.Filled.Tune, contentDescription = null)
+            Text(
+                "Resize attivo: long‑press su un blocco reale per ridimensionarlo. Doppio tap per spostarlo. Tap su questo messaggio per chiuderlo, oppure 'Esci'.",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    shadow = Shadow(
+                        color = Color.Black.copy(alpha = 0.6f),
+                        offset = Offset(0f, 2f),
+                        blurRadius = 6f
+                    )
+                )
+            )
+            Spacer(Modifier.width(4.dp))
+            TextButton(onClick = { visible = false; onExit() }) { Text("Esci") }
+        }
+    }
+}
+
+
+@Composable
 private fun RenderRootScaffold(
     layout: JSONObject,
     dispatch: (String) -> Unit,
@@ -432,39 +485,38 @@ private fun ScreenScaffoldWithPinnedTopBar(
     scaffoldPadding: PaddingValues
 ) {
     val title = layout.optString("topTitle", "")
-    val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // legacy fallback
-    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy fallback
+    val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // legacy
+    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray()// legacy
 
     val bottomBarNode  = layout.optJSONObject("bottomBar")
     val bottomBarCfg   = bottomBarNode?.optJSONObject("container")
     val bottomBarItems = bottomBarNode?.optJSONArray("items")
-    val fab   = layout.optJSONObject("fab")
-    val scroll = layout.optBoolean("scroll", true)
-    val topBarConf = layout.optJSONObject("topBar")
+    val fab = layout.optJSONObject("fab")
 
-// Pinned per difetto se 'scroll' nella top bar è "pinned"
-    val topScrollBehavior =
-        when (topBarConf?.optString("scroll", "none")) {
-            "pinned"             -> TopAppBarDefaults.pinnedScrollBehavior()
-            "enterAlways"        -> TopAppBarDefaults.enterAlwaysScrollBehavior()
-            "exitUntilCollapsed" -> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-            else                 -> null
-        }
+    // Preferisci page.blocks; fallback a layout.blocks (legacy)
+    val page   = layout.optJSONObject("page")
+    val blocks = page?.optJSONArray("blocks")
+        ?: layout.optJSONArray("blocks")
+        ?: JSONArray()
+
+    val topBarConf = layout.optJSONObject("topBar")
+    val topScrollBehavior = when (topBarConf?.optString("scroll", "none")) {
+        "pinned" -> TopAppBarDefaults.pinnedScrollBehavior()
+        "enterAlways" -> TopAppBarDefaults.enterAlwaysScrollBehavior()
+        "exitUntilCollapsed" -> TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+        else -> null
+    }
 
     Scaffold(
-// Colleghiamo lo scroll behavior della top bar
         modifier = if (topScrollBehavior != null)
             Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
         else Modifier,
-
-// Evitiamo che l'IME o i system insets “mangino” spazio alla top bar
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
 
         topBar = {
             if (topBarConf != null) {
                 RenderTopBar(topBarConf, dispatch, topScrollBehavior)
             } else {
-// Fallback legacy: topTitle/topActions
                 if (title.isNotBlank() || topActions.length() > 0) {
                     TopAppBar(
                         title = { Text(title) },
@@ -482,16 +534,15 @@ private fun ScreenScaffoldWithPinnedTopBar(
         },
 
         bottomBar = {
-// Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
             val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
                 JSONArray().apply {
                     for (i in 0 until bottomButtons.length()) {
                         val it = bottomButtons.optJSONObject(i) ?: continue
                         put(JSONObject().apply {
-                            put("type", "button")
+                            put("type","button")
                             put("label", it.optString("label","Button"))
                             put("actionId", it.optString("actionId",""))
-                            put("style", "text")
+                            put("style","text")
                         })
                     }
                 }
@@ -523,51 +574,36 @@ private fun ScreenScaffoldWithPinnedTopBar(
 
         containerColor = Color.Transparent
     ) { innerPadding ->
-// Contenuti body
-        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
+        // Contenuto pagina (scrollabile)
+        val contentPad = PaddingValues(
+            top = innerPadding.calculateTopPadding() + scaffoldPadding.calculateTopPadding(),
+            bottom = innerPadding.calculateBottomPadding() + extraPaddingBottom,
+            start = scaffoldPadding.calculateStartPadding(LayoutDirection.Ltr),
+            end = scaffoldPadding.calculateEndPadding(LayoutDirection.Ltr)
+        )
 
-        val host: @Composable () -> Unit = {
-            Column(
-                Modifier
-                    .fillMaxSize()
-// Padding fornito dallo Scaffold (top/bottom), poi padding esterno dello screen
-                    .padding(innerPadding)
-                    .padding(scaffoldPadding)
-// Evita che la tastiera sovrapponga i contenuti: la TopBar resta fissa
-                    .imePadding()
-// Protezione per notch/bordi orizzontali (la TopBar gestisce già il top)
-                    .windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-                    )
-                    .padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 16.dp,
-                        bottom = extraPaddingBottom
-                    ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                for (i in 0 until blocks.length()) {
-                    val block = blocks.optJSONObject(i) ?: continue
-                    val path = "/blocks/$i"
-                    RenderBlock(
-                        block = block,
-                        dispatch = dispatch,
-                        uiState = uiState,
-                        designerMode = designerMode,
-                        path = path,
-                        menus = menus,
-                        onSelect = { p -> selectedPathSetter(p) },
-                        onOpenInspector = { p -> selectedPathSetter(p) }
-                    )
-                }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(contentPad),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            for (i in 0 until blocks.length()) {
+                val b = blocks.optJSONObject(i) ?: continue
+                val p = "/page/blocks/$i"
+                // Render dei blocchi: questa è la chiamata “green”
+                RenderBlock(
+                    block = b,
+                    dispatch = dispatch,
+                    uiState = uiState,
+                    designerMode = designerMode,
+                    path = p,
+                    menus = menus,
+                    onSelect = { selectedPathSetter(p) },
+                    onOpenInspector = { selectedPathSetter(p) }
+                )
             }
-        }
-
-        if (scroll) {
-            Column(Modifier.verticalScroll(rememberScrollState())) { host() }
-        } else {
-            host()
         }
     }
 }
@@ -1424,6 +1460,7 @@ fun UiScreen(
     scaffoldPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val ctx = LocalContext.current
+
     var layout: JSONObject? by remember(screenName) {
         mutableStateOf(UiLoader.loadLayout(ctx, screenName))
     }
@@ -1436,30 +1473,30 @@ fun UiScreen(
         return
     }
 
-    // Menù raccolti + selezione corrente
+    // Menù + selezione corrente (green)
     val menus = remember(layout, tick) { collectMenus(layout!!) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
 
-    // Altezza overlay designer (per lasciare spazio ai contenuti)
+    // Spazio per la barra designer in basso
     var overlayHeightPx by remember { mutableStateOf(0) }
     val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
 
-    // Stato "Designer" legacy del green (serve per mostrare DesignerOverlay)
+    // Modalità Designer persistente (green)
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
 
-    // Modalità app “nuova” (Real/Designer/Resize)
+    // Modalità "app" (Real / Designer / Resize) — **var** come nella green
     var appMode by rememberSaveable(screenName) {
         mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
     }
-    // Mantieni coerenti designMode (per overlay/inspector) e appMode
-    LaunchedEffect(appMode) { designMode = (appMode == AppMode.Designer) }
+    // Allineo appMode quando cambio designMode (come green)
     LaunchedEffect(designMode) {
-        appMode = if (designMode) AppMode.Designer else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
+        appMode = if (designMode) AppMode.Designer
+        else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
     }
-    // Espone ai blocchi che il Resize è attivo
+    // Espongo ai blocchi se il resize è attivo
     LaunchedEffect(appMode) { uiState["_runtimeResize"] = (appMode == AppMode.Resize) }
 
-    // Live preview root mentre si edita nel RootInspector
+    // Live preview (green)
     var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
     fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
         val out = JSONObject(base.toString())
@@ -1470,85 +1507,71 @@ fun UiScreen(
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
 
-    // Overlay istruzioni per modalità Resize
-    var showResizeHint by remember { mutableStateOf(false) }
-    LaunchedEffect(appMode) {
+    Box(Modifier.fillMaxSize()) {
+        // ====== SFONDO PAGINA ======
+        RenderPageBackground(effectiveLayout.optJSONObject("page"))
+
+        // ====== CONTENUTO (scaffold root “pinned”) ======
+        ScreenScaffoldWithPinnedTopBar(
+            layout = effectiveLayout,
+            dispatch = dispatch,
+            uiState = uiState,
+            designerMode = designMode,
+            menus = menus,
+            selectedPathSetter = { selectedPath = it },
+            extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+            scaffoldPadding = scaffoldPadding
+        )
+
+        // ====== OVERLAY DESIGNER ======
+        if (designMode) {
+            DesignerOverlay(
+                screenName = screenName,
+                layout = layout!!,
+                selectedPath = selectedPath,
+                setSelectedPath = { selectedPath = it },
+                onLiveChange = { tick++ },
+                onLayoutChange = {
+                    UiLoader.saveDraft(ctx, screenName, layout!!)
+                    layout = JSONObject(layout.toString())
+                    tick++
+                },
+                onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+                onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
+                onReset = {
+                    UiLoader.resetPublished(ctx, screenName)
+                    layout = UiLoader.loadLayout(ctx, screenName)
+                    selectedPath = null
+                    tick++
+                },
+                topPadding = scaffoldPadding.calculateTopPadding(),
+                onOverlayHeight = { overlayHeightPx = it },
+                onOpenRootInspector = { /* gestito altrove */ },
+                onRootLivePreview = { previewRoot = it }
+            )
+        }
+
+        // ====== HUD RESIZE (trasparente, auto-hide 10s, dismiss onTap) ======
         if (appMode == AppMode.Resize) {
-            showResizeHint = true
-        } else {
-            showResizeHint = false
-        }
-    }
-
-    CompositionLocalProvider(LocalAppMode provides appMode) {
-        Box(Modifier.fillMaxSize()) {
-            // ===== Sfondo pagina =====
-            RenderPageBackground(effectiveLayout.optJSONObject("page"))
-
-            // ===== Contenuto (Scaffold di root) =====
-            RenderRootScaffold(
-                layout = effectiveLayout,
-                dispatch = dispatch,
-                uiState = uiState,
-                designerMode = designMode, // serve al DesignerOverlay
-                menus = menus,
-                selectedPathSetter = { selectedPath = it },
-                extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
-                scaffoldPadding = scaffoldPadding
+            ResizeHudTransparentTimed(
+                onDismiss = { /* solo hide dell’HUD */ },
+                onExit    = { appMode = AppMode.Real }
             )
+        }
 
-            // ===== Overlay Designer del green (inspector, palette, ecc.) =====
-            if (designMode) {
-                DesignerOverlay(
-                    screenName = screenName,
-                    layout = layout!!,
-                    selectedPath = selectedPath,
-                    setSelectedPath = { selectedPath = it },
-                    onLiveChange = { tick++ },
-                    onLayoutChange = {
-                        UiLoader.saveDraft(ctx, screenName, layout!!)
-                        layout = JSONObject(layout.toString())
-                        tick++
-                    },
-                    onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                    onPublish = {
-                        UiLoader.saveDraft(ctx, screenName, layout!!)
-                        UiLoader.publish(ctx, screenName)
-                    },
-                    onReset = {
-                        UiLoader.resetPublished(ctx, screenName)
-                        layout = UiLoader.loadLayout(ctx, screenName)
-                        selectedPath = null
-                        tick++
-                    },
-                    topPadding = scaffoldPadding.calculateTopPadding(),
-                    onOverlayHeight = { overlayHeightPx = it },
-                    onOpenRootInspector = { /* gestito a valle del green */ },
-                    onRootLivePreview = { previewRoot = it }
-                )
+        // ====== FAB radiale per modalità ======
+        ModeFabRadial(current = appMode) { picked ->
+            when (picked) {
+                AppMode.Designer -> { designMode = true;  appMode = AppMode.Designer }
+                AppMode.Resize   -> { designMode = false; appMode = AppMode.Resize   }
+                AppMode.Real     -> { designMode = false; appMode = AppMode.Real     }
             }
-
-            // ===== FAB per commutare le 3 modalità (unico pulsante richiesto) =====
-            ModeCycleFab(
-                mode = appMode,
-                onModeChange = { appMode = it },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
-            )
-
-            // ===== Istruzioni modalità Resize (trasparente, 10s o tap) =====
-            ResizeHintOverlay(
-                visible = showResizeHint && appMode == AppMode.Resize,
-                onDismiss = { showResizeHint = false },
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = scaffoldPadding.calculateTopPadding() + 8.dp)
-            )
         }
+
+        // (opzionale) levetta laterale
+        DesignSwitchKnob(isDesigner = designMode) { designMode = !designMode }
     }
 }
-
 
 @Composable
 private fun BoxScope.ResizeHud(onExit: () -> Unit) {
