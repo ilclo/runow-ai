@@ -89,12 +89,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.runtime.saveable.rememberSaveable
-import kotlinx.coroutines.delay
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
-
 
 
 @Composable
@@ -327,61 +321,8 @@ private fun BoxScope.DraggableReorderOverlay(
     )
 }
 
-@Composable
-private fun ModeCycleFab(
-    mode: AppMode,
-    onModeChange: (AppMode) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val (icon, label, next) = when (mode) {
-        AppMode.Real     -> Triple(Icons.Filled.Visibility, "Anteprima", AppMode.Designer)
-        AppMode.Designer -> Triple(Icons.Filled.Build,      "Designer",  AppMode.Resize)
-        AppMode.Resize   -> Triple(Icons.Filled.OpenWith,   "Resize",    AppMode.Real)
-    }
 
-    ExtendedFloatingActionButton(
-        onClick = { onModeChange(next) },
-        icon = { Icon(icon, contentDescription = label) },
-        text = { Text(label) },
-        modifier = modifier
-    )
-}
-
-@Composable
-private fun ResizeHintOverlay(
-    visible: Boolean,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    if (!visible) return
-
-    // Auto-hide dopo 10s
-    LaunchedEffect(Unit) {
-        delay(10_000)
-        onDismiss()
-    }
-
-    Box(modifier) {
-        Row(
-            Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.Transparent) // sfondo trasparente: si vede dietro
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(Icons.Filled.OpenWith, contentDescription = null)
-            Text(
-                "RESIZE: tieni premuto per selezionare un blocco; " +
-                "usa le maniglie per ridimensionarlo; doppio tap per attivare lo spostamento.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
-    }
-}
-
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScreenScaffoldWithPinnedTopBar(
     layout: JSONObject,
@@ -393,18 +334,32 @@ private fun ScreenScaffoldWithPinnedTopBar(
     extraPaddingBottom: Dp,
     scaffoldPadding: PaddingValues
 ) {
+    // Stato modalità globale (usiamo AppMode.kt)
+    var mode by rememberSaveable { mutableStateOf(AppMode.Real) }
+
+    // Tip banner: compare quando entri in Resize, si chiude al tap o dopo 10s
+    var showResizeTip by remember { mutableStateOf(false) }
+    LaunchedEffect(mode) {
+        if (mode == AppMode.Resize) {
+            showResizeTip = true
+            // Auto-hide dopo 10s
+            kotlinx.coroutines.delay(10_000)
+            showResizeTip = false
+        } else {
+            showResizeTip = false
+        }
+    }
+
+    val topBarConf = layout.optJSONObject("topBar")
     val title = layout.optString("topTitle", "")
-    val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // legacy fallback
-    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // legacy fallback
+    val topActions = layout.optJSONArray("topActions") ?: JSONArray()      // fallback legacy
+    val bottomButtons = layout.optJSONArray("bottomButtons") ?: JSONArray() // fallback legacy
 
     val bottomBarNode  = layout.optJSONObject("bottomBar")
-    val bottomBarCfg   = bottomBarNode?.optJSONObject("container")
     val bottomBarItems = bottomBarNode?.optJSONArray("items")
-    val fab   = layout.optJSONObject("fab")
-    val scroll = layout.optBoolean("scroll", true)
-    val topBarConf = layout.optJSONObject("topBar")
 
-    // Pinned per difetto se 'scroll' nella top bar è "pinned"
+    val scroll = layout.optBoolean("scroll", true)
+
     val topScrollBehavior =
         when (topBarConf?.optString("scroll", "none")) {
             "pinned"             -> TopAppBarDefaults.pinnedScrollBehavior()
@@ -413,128 +368,139 @@ private fun ScreenScaffoldWithPinnedTopBar(
             else                 -> null
         }
 
-    Scaffold(
-        // Colleghiamo lo scroll behavior della top bar
-        modifier = if (topScrollBehavior != null)
-            Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
-        else Modifier,
+    CompositionLocalProvider(LocalAppMode provides mode) {
+        Scaffold(
+            modifier = if (topScrollBehavior != null)
+                Modifier.nestedScroll(topScrollBehavior.nestedScrollConnection)
+            else Modifier,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
 
-        // Evitiamo che l'IME o i system insets “mangino” spazio alla top bar
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-
-        topBar = {
-            if (topBarConf != null) {
-                RenderTopBar(topBarConf, dispatch, topScrollBehavior)
-            } else {
-                // Fallback legacy: topTitle/topActions
-                if (title.isNotBlank() || topActions.length() > 0) {
-                    TopAppBar(
-                        title = { Text(title) },
-                        actions = {
-                            for (i in 0 until topActions.length()) {
-                                val a = topActions.optJSONObject(i) ?: continue
-                                IconButton(onClick = { dispatch(a.optString("actionId")) }) {
-                                    NamedIconEx(a.optString("icon", "more_vert"), null)
+            // -- TOP BAR --
+            topBar = {
+                if (topBarConf != null) {
+                    // Usa il renderer del green
+                    RenderTopBar(topBarConf, dispatch, topScrollBehavior)
+                } else {
+                    // Fallback legacy (green)
+                    if (title.isNotBlank() || topActions.length() > 0) {
+                        TopAppBar(
+                            title = { Text(title) },
+                            actions = {
+                                for (i in 0 until topActions.length()) {
+                                    val a = topActions.optJSONObject(i) ?: continue
+                                    IconButton(onClick = { dispatch(a.optString("actionId")) }) {
+                                        // NamedIconEx esiste nel green
+                                        NamedIconEx(a.optString("icon", "more_vert"), null)
+                                    }
                                 }
                             }
+                        )
+                    }
+                }
+            },
+
+            // -- BOTTOM BAR --
+            bottomBar = {
+                // Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
+                val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
+                    JSONArray().apply {
+                        for (i in 0 until bottomButtons.length()) {
+                            val it = bottomButtons.optJSONObject(i) ?: continue
+                            put(JSONObject().apply {
+                                put("type", "button")
+                                put("label", it.optString("label","Button"))
+                                put("actionId", it.optString("actionId",""))
+                                put("style", "text")
+                            })
                         }
-                    )
-                }
-            }
-        },
-
-        bottomBar = {
-            // Preferisci i nuovi items se presenti; altrimenti legacy bottomButtons
-            val items = bottomBarItems ?: if (bottomButtons.length() > 0) {
-                JSONArray().apply {
-                    for (i in 0 until bottomButtons.length()) {
-                        val it = bottomButtons.optJSONObject(i) ?: continue
-                        put(JSONObject().apply {
-                            put("type", "button")
-                            put("label", it.optString("label","Button"))
-                            put("actionId", it.optString("actionId",""))
-                            put("style", "text")
-                        })
                     }
-                }
-            } else null
+                } else null
 
-            if (items != null && items.length() > 0) {
-                StyledContainer(
-                    cfg = bottomBarCfg ?: JSONObject(),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                if (items != null && items.length() > 0) {
+                    // Nel green era StyledContainer(block = ...). Qui creiamo un "block" sintetico
+                    // con solo la parte "container" per non cambiare la tua StyledContainer esistente.
+                    val bottomBarBlock = JSONObject().apply {
+                        put("container", bottomBarNode?.optJSONObject("container") ?: JSONObject())
+                    }
+                    StyledContainer(
+                        block = bottomBarBlock,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                     ) {
-                        RenderBarItemsRow(items, dispatch)
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RenderBarItemsRow(items, dispatch)
+                        }
+                    }
+                }
+            },
+
+            // -- FAB: SOLO il nuovo bottone modalità (niente vecchio FAB) --
+            floatingActionButton = {
+                ModeSwitchFAB(
+                    mode = mode,
+                    onChange = { mode = it } // ciclo: Real -> Designer -> Resize -> Real
+                )
+            },
+
+            containerColor = Color.Transparent
+        ) { innerPadding ->
+            // Body + overlay
+            val blocks = layout.optJSONArray("blocks") ?: JSONArray()
+
+            val host: @Composable () -> Unit = {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(scaffoldPadding)
+                        .imePadding()
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+                        )
+                        .padding(
+                            start = 16.dp,
+                            end   = 16.dp,
+                            top   = 16.dp,
+                            bottom = extraPaddingBottom
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    for (i in 0 until blocks.length()) {
+                        val block = blocks.optJSONObject(i) ?: continue
+                        val path = "/blocks/$i"
+                        RenderBlock(
+                            block = block,
+                            dispatch = dispatch,
+                            uiState = uiState,
+                            designerMode = (mode == AppMode.Designer || mode == AppMode.Resize),
+                            path = path,
+                            menus = menus,
+                            onSelect = { p -> selectedPathSetter(p) },
+                            onOpenInspector = { p -> selectedPathSetter(p) }
+                        )
                     }
                 }
             }
-        },
 
-        floatingActionButton = {
-            fab?.let {
-                FloatingActionButton(onClick = { dispatch(it.optString("actionId", "")) }) {
-                    NamedIconEx(it.optString("icon", "play_arrow"), null)
+            Box(Modifier.fillMaxSize()) {
+                if (scroll) {
+                    Column(Modifier.verticalScroll(rememberScrollState())) { host() }
+                } else {
+                    host()
                 }
+
+                // Banner istruzioni modalità Resize (trasparente, si chiude al tap, auto-hide 10s)
+                ResizeTipBanner(
+                    visible = (mode == AppMode.Resize) && showResizeTip,
+                    onDismiss = { showResizeTip = false }
+                )
             }
-        },
-
-        containerColor = Color.Transparent
-    ) { innerPadding ->
-        // Contenuti body
-        val blocks = layout.optJSONArray("blocks") ?: JSONArray()
-
-        val host: @Composable () -> Unit = {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    // Padding fornito dallo Scaffold (top/bottom), poi padding esterno dello screen
-                    .padding(innerPadding)
-                    .padding(scaffoldPadding)
-                    // Evita che la tastiera sovrapponga i contenuti: la TopBar resta fissa
-                    .imePadding()
-                    // Protezione per notch/bordi orizzontali (la TopBar gestisce già il top)
-                    .windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
-                    )
-                    .padding(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 16.dp,
-                        bottom = extraPaddingBottom
-                    ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                for (i in 0 until blocks.length()) {
-                    val block = blocks.optJSONObject(i) ?: continue
-                    val path = "/blocks/$i"
-                    RenderBlock(
-                        block = block,
-                        dispatch = dispatch,
-                        uiState = uiState,
-                        designerMode = designerMode,
-                        path = path,
-                        menus = menus,
-                        onSelect = { p -> selectedPathSetter(p) },
-                        onOpenInspector = { p -> selectedPathSetter(p) }
-                    )
-                }
-            }
-        }
-
-        if (scroll) {
-            Column(Modifier.verticalScroll(rememberScrollState())) { host() }
-        } else {
-            host()
         }
     }
 }
-
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -641,6 +607,67 @@ onSelect(opt)
 }
 }
 }
+
+
+@Composable
+private fun ModeSwitchFAB(
+    mode: AppMode,
+    onChange: (AppMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val (icon, next, label) = when (mode) {
+        AppMode.Real     -> Triple(Icons.Default.PlayArrow, AppMode.Designer, "Passa a Designer")
+        AppMode.Designer -> Triple(Icons.Default.DesignServices, AppMode.Resize, "Passa a Resize")
+        AppMode.Resize   -> Triple(Icons.Default.OpenWith, AppMode.Real, "Torna a Real")
+    }
+
+    FloatingActionButton(
+        onClick = { onChange(next) },
+        modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.primary
+    ) {
+        Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.onPrimary)
+    }
+}
+
+@Composable
+private fun ResizeTipBanner(
+    visible: Boolean,
+    onDismiss: () -> Unit
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(animationSpec = tween(150)),
+        exit  = fadeOut(animationSpec = tween(150))
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp)
+        ) {
+            // Nessuno sfondo (trasparente). Intercetta il primo tap per chiudersi.
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { onDismiss() }
+            ) {
+                Text(
+                    "Resize attivo: trascina i bordi per ridimensionare, " +
+                    "doppio tap per muovere tra fratelli, " +
+                    "long-press per attivare le maniglie. Tocca qui per chiudere.",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
 
 
 @Composable
@@ -1377,8 +1404,6 @@ scaffoldPadding = PaddingValues(0.dp)
 }
 
 private enum class Mode { Preview, Resize, Designer }
-
-
 @Composable
 fun UiScreen(
     screenName: String,
@@ -1388,8 +1413,6 @@ fun UiScreen(
     scaffoldPadding: PaddingValues = PaddingValues(0.dp)
 ) {
     val ctx = LocalContext.current
-
-    // Carico layout come nel green
     var layout: JSONObject? by remember(screenName) {
         mutableStateOf(UiLoader.loadLayout(ctx, screenName))
     }
@@ -1402,117 +1425,105 @@ fun UiScreen(
         return
     }
 
-    // Menù + selezione corrente (identico al green)
+    // Menù raccolti dal layout + selezione corrente
     val menus = remember(layout, tick) { collectMenus(layout!!) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
 
-    // Altezza overlay designer (serve per dare spazio in basso come nel green)
+    // Stato barra designer in basso (per lasciare spazio ai contenuti)
     var overlayHeightPx by remember { mutableStateOf(0) }
     val overlayHeightDp = with(LocalDensity.current) { overlayHeightPx.toDp() }
 
-    // Persistenza design mode (come nel green)
+    // Modalità designer persistente
     var designMode by rememberSaveable(screenName) { mutableStateOf(designerMode) }
 
-    // Live preview del root (come nel green)
+    // Modalità "app" (Real / Designer / Resize)
+    var appMode by rememberSaveable(screenName) {
+        mutableStateOf(if (designMode) AppMode.Designer else AppMode.Real)
+    }
+    // Se entro/esco dal designer, mantieni appMode coerente
+    LaunchedEffect(designMode) {
+        appMode = if (designMode) AppMode.Designer else appMode.takeIf { it != AppMode.Designer } ?: AppMode.Real
+    }
+    // Espone a runtime ai blocchi che il resize è attivo
+    LaunchedEffect(appMode) {
+        uiState["_runtimeResize"] = (appMode == AppMode.Resize)
+    }
+
+    // ---- Live preview del root (page + topBar) mentre si edita nel RootInspector ----
     var previewRoot: JSONObject? by remember { mutableStateOf<JSONObject?>(null) }
     fun mergeForPreview(base: JSONObject, preview: JSONObject): JSONObject {
         val out = JSONObject(base.toString())
-        listOf("page", "topBar").forEach { k ->
-            if (preview.has(k)) out.put(k, preview.opt(k))
-        }
+        listOf("page", "topBar").forEach { k -> if (preview.has(k)) out.put(k, preview.opt(k)) }
         return out
     }
     val effectiveLayout = remember(layout, previewRoot) {
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
 
-    // ======================
-    // MODALITÀ DELL’APP
-    // ======================
-    var appMode by rememberSaveable(screenName) { mutableStateOf(AppMode.Real) }
+    Box(Modifier.fillMaxSize()) {
+        // ====== SFONDO PAGINA ======
+        RenderPageBackground(effectiveLayout.optJSONObject("page"))
 
-    // Hint overlay in modalità Resize: 10s e chiusura al tap
-    var showResizeHint by remember { mutableStateOf(false) }
-    var lastMode by remember { mutableStateOf(appMode) }
-    LaunchedEffect(appMode) {
-        if (appMode == AppMode.Resize && lastMode != AppMode.Resize) {
-            showResizeHint = true
-        }
-        lastMode = appMode
-    }
+        // ====== SCAFFOLD ROOT (TopBar pinned, BottomBar, FAB) ======
+        ScreenScaffoldWithPinnedTopBar(
+            layout = effectiveLayout,
+            dispatch = dispatch,
+            uiState = uiState,
+            designerMode = designMode,
+            menus = menus,
+            selectedPathSetter = { selectedPath = it },
+            extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
+            scaffoldPadding = scaffoldPadding
+        )
 
-    // Rimuovo il vecchio FAB dal layout (richiesta: resta solo il nuovo bottone modalità)
-    val layoutNoFab = remember(effectiveLayout) {
-        JSONObject(effectiveLayout.toString()).apply { remove("fab") }
-    }
-
-    CompositionLocalProvider(LocalAppMode provides appMode) {
-        Box(Modifier.fillMaxSize()) {
-
-            // ====== SFONDO PAGINA (green) ======
-            RenderPageBackground(layoutNoFab.optJSONObject("page"))
-
-            // ====== CONTENUTO con Scaffold di ROOT (green) ======
-            RenderRootScaffold(
-                layout = layoutNoFab,
-                dispatch = dispatch,
-                uiState = uiState,
-                designerMode = designMode,
-                menus = menus,
-                selectedPathSetter = { selectedPath = it },
-                extraPaddingBottom = when (appMode) {
-                    AppMode.Designer -> overlayHeightDp + 32.dp
-                    else             -> 16.dp
+        // ====== OVERLAY DESIGNER ======
+        if (designMode) {
+            DesignerOverlay(
+                screenName = screenName,
+                layout = layout!!,
+                selectedPath = selectedPath,
+                setSelectedPath = { selectedPath = it },
+                onLiveChange = { tick++ },
+                onLayoutChange = {
+                    UiLoader.saveDraft(ctx, screenName, layout!!)
+                    layout = JSONObject(layout.toString())
+                    tick++
                 },
-                scaffoldPadding = scaffoldPadding
+                onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
+                onPublish = { UiLoader.saveDraft(ctx, screenName, layout!!); UiLoader.publish(ctx, screenName) },
+                onReset = {
+                    UiLoader.resetPublished(ctx, screenName)
+                    layout = UiLoader.loadLayout(ctx, screenName)
+                    selectedPath = null
+                    tick++
+                },
+                topPadding = scaffoldPadding.calculateTopPadding(),
+                onOverlayHeight = { overlayHeightPx = it },
+                onOpenRootInspector = { /* gestito altrove */ },
+                onRootLivePreview = { previewRoot = it }
             )
-
-            // ====== Nuovo FAB: switch 3 modalità ======
-            ModeCycleFab(
-                mode = appMode,
-                onModeChange = { appMode = it },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp)
-                    .imePadding()
-            )
-
-            // ====== Istruzioni modalità Resize (trasparente, 10s, tap to dismiss) ======
-            ResizeHintOverlay(
-                visible = showResizeHint && appMode == AppMode.Resize,
-                onDismiss = { showResizeHint = false },
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 12.dp)
-                    .pointerInput(Unit) {
-                        detectTapGestures { showResizeHint = false }
-                    }
-            )
-
-            // ====== Designer overlay (green) ======
-            if (designMode) {
-                DesignerOverlay(
-                    screenName = screenName,
-                    layout = layout!!,
-                    selectedPath = selectedPath,
-                    setSelectedPath = { selectedPath = it },
-                    onLiveChange = { tick++ },
-                    onLayoutChange = {
-                        UiLoader.saveDraft(ctx, screenName, layout!!)
-                        layout = JSONObject(layout.toString())
-                        tick++
-                    },
-                    onSaveDraft = { UiLoader.saveDraft(ctx, screenName, layout!!) },
-                    onPublish = {
-                        UiLoader.saveDraft(ctx, screenName, layout!!)
-                        UiLoader.publish(ctx, screenName)
-                    },
-                    onDismissPreview = { previewRoot = null },
-                    onPreview = { previewRoot = it },
-                    onMeasureOverlay = { overlayHeightPx = it }
-                )
-            }
         }
+
+        // ====== HUD RESIZE (leggero) ======
+        if (appMode == AppMode.Resize) {
+            ResizeHud(onExit = { appMode = AppMode.Real })
+        }
+
+        // ====== FAB radiale per modalità ======
+        ModeFabRadial(
+            current = appMode,
+            onPick = { mode: AppMode ->
+                appMode = mode
+                designMode = (mode == AppMode.Designer)
+                uiState["_runtimeResize"] = (mode == AppMode.Resize)
+            }
+        )
+
+        // (Opzionale) levetta laterale storica per Designer/Anteprima
+        DesignSwitchKnob(
+            isDesigner = designMode,
+            onToggle = { designMode = !designMode }
+        )
     }
 }
 
