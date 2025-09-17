@@ -1567,6 +1567,18 @@ fun UiScreen(
     val effectiveLayout = remember(layout, previewRoot) {
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
+	    // --- Overlay state (menu centrale e side panels) ---
+    var openSidePanelId by remember(screenName, tick) { mutableStateOf<String?>(null) }
+    var openMenuId      by remember(screenName, tick) { mutableStateOf<String?>(null) }
+
+    // Wrappa il dispatch per intercettare azioni "open_menu:..." e "sidepanel:open:..."
+    val dispatchOverlays = remember(screenName, tick) {
+        wrapDispatchForOverlays(
+            openPanelSetter = { openSidePanelId = it },
+            openMenuSetter  = { openMenuId      = it },
+            appDispatch     = dispatch
+        )
+    }
 
     Box(Modifier.fillMaxSize()) {
         // ====== SFONDO PAGINA (colore/gradient/immagine) ======
@@ -1574,7 +1586,7 @@ fun UiScreen(
 
         ScreenScaffoldWithPinnedTopBar(
             layout = effectiveLayout,
-            dispatch = dispatch,
+            dispatch = dispatchOverlays,
             uiState = uiState,
             designerMode = designMode,
             menus = menus,
@@ -1582,6 +1594,24 @@ fun UiScreen(
             extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
             scaffoldPadding = scaffoldPadding
         )
+		// ===== Overlay: Menu centrale =====
+		RenderCenterMenuOverlay(
+			layout      = effectiveLayout,
+			openMenuId  = openMenuId,
+			onClose     = { openMenuId = null },
+			menus       = menus,
+			dispatch    = dispatchOverlays
+		)
+
+		// ===== Overlay: Side panels =====
+		RenderSidePanelsOverlay(
+			layout      = effectiveLayout,
+			openPanelId = openSidePanelId,
+			onClose     = { openSidePanelId = null },
+			dispatch    = dispatchOverlays,
+			menus       = menus,
+			dimBehind   = true
+		)
 
         if (designMode) {
             DesignerOverlay(
