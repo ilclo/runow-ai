@@ -90,9 +90,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.IntSize
 
-enum class AppMode { Real, Designer, Resize }
-val LocalAppMode = compositionLocalOf { AppMode.Real }
-
 @Composable
 private fun BoxScope.ResizeHandleX(
     align: Alignment,                  // Alignment.CenterStart (sx) o CenterEnd (dx)
@@ -2722,7 +2719,7 @@ Icon(Icons.Filled.Settings, contentDescription = "Proprietà contenitore")
 * ========================================================= */
 
 @Composable
-private fun RenderBlock(
+internal fun RenderBlock(
 block: JSONObject,
 dispatch: (String) -> Unit,
 uiState: MutableMap<String, Any>,
@@ -5013,7 +5010,7 @@ val parentPath = path.substringBeforeLast("/")
 return "$parentPath/$newIdx"
 }
 
-private fun moveInArray(arr: JSONArray, index: Int, delta: Int) {
+internal fun moveInArray(arr: JSONArray, index: Int, delta: Int) {
 if (index < 0 || index >= arr.length()) return
 val newIdx = (index + delta).coerceIn(0, arr.length() - 1)
 if (newIdx == index) return
