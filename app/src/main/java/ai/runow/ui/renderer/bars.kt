@@ -2,7 +2,7 @@
 
 
 @Composable
-private fun RenderTopBar(
+fun RenderTopBar(
     cfg: JSONObject,
     dispatch: (String) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior? = null

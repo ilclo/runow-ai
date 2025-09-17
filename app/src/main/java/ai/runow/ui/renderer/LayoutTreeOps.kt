@@ -2,7 +2,7 @@
 
 
 
-private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, Int>? {
+fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, Int>? {
     if (!path.startsWith("/")) return null
     val segs = path.trim('/').split('/')
     var node: Any = root
@@ -26,7 +26,7 @@ private fun getParentAndIndex(root: JSONObject, path: String): Pair<JSONArray, I
 }
 
 
-private fun remove(root: JSONObject, path: String) {
+fun remove(root: JSONObject, path: String) {
     val p = getParentAndIndex(root, path) ?: return
     val (arr, idx) = p
     val tmp = mutableListOf<Any?>()

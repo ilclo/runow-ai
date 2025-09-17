@@ -5,29 +5,38 @@ import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.min
 
-/** Profondo clone via stringa */
-fun duplicate(obj: JSONObject): JSONObject = JSONObject(obj.toString())
-
-/** Sposta elemento in JSONArray (in place) */
-fun moveInArray(array: JSONArray, from: Int, to: Int): JSONArray {
-    if (from == to) return array
-    val size = array.length()
-    if (from !in 0 until size || to !in 0 until size) return array
-    val tmp = array.get(from)
-    removeAt(array, from)
-    insertAt(array, to, tmp)
-    return array
+fun duplicate(root: JSONObject, path: String) {
+    val p = getParentAndIndex(root, path) ?: return
+    val (arr, idx) = p
+    val clone = JSONObject(arr.getJSONObject(idx).toString())
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) {
+        tmp.add(arr.get(i))
+        if (i == idx) tmp.add(clone)
+    }
+    while (arr.length() > 0) arr.remove(arr.length() - 1)
+    tmp.forEach { arr.put(it) }
 }
 
-/** Rimuove elemento da JSONArray (in place). Restituisce l'array. */
-fun removeAt(array: JSONArray, index: Int): JSONArray {
-    if (index !in 0 until array.length()) return array
-    val newArr = JSONArray()
-    for (i in 0 until array.length()) if (i != index) newArr.put(array.get(i))
-    // Copia back nel reference
-    while (array.length() > 0) array.remove(array.length() - 1)
-    for (i in 0 until newArr.length()) array.put(newArr.get(i))
-    return array
+
+fun moveInArray(arr: JSONArray, index: Int, delta: Int) {
+    if (index < 0 || index >= arr.length()) return
+    val newIdx = (index + delta).coerceIn(0, arr.length() - 1)
+    if (newIdx == index) return
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) tmp.add(arr.get(i))
+    val it = tmp.removeAt(index)
+    tmp.add(newIdx, it)
+    while (arr.length() > 0) arr.remove(arr.length() - 1)
+    tmp.forEach { arr.put(it) }
+}
+
+fun removeAt(arr: JSONArray, index: Int) {
+    if (index < 0 || index >= arr.length()) return
+    val tmp = mutableListOf<Any?>()
+    for (i in 0 until arr.length()) if (i != index) tmp.add(arr.get(i))
+    while (arr.length() > 0) arr.remove(arr.length() - 1)
+    tmp.forEach { arr.put(it) }
 }
 
 /** Inserisce elemento in JSONArray (in place). Restituisce l'array. */
@@ -43,29 +52,22 @@ fun insertAt(array: JSONArray, index: Int, value: Any): JSONArray {
     return array
 }
 
-/** Utility path: "/a/b/3/c" -> tokens ["a","b","3","c"] */
-private fun splitPath(path: String): List<String> =
-    path.trim().split("/").filter { it.isNotBlank() }
-
-/** Ritorna il nodo (JSONObject/JSONArray/value) alla path, o null se assente. */
 fun jsonAtPath(root: JSONObject, path: String): Any? {
-    var cur: Any = root
-    for (key in splitPath(path)) {
-        cur = when (cur) {
-            is JSONObject -> {
-                if (key.matches(Regex("\\d+"))) return null
-                if (!cur.has(key)) return null
-                cur.get(key)
-            }
-            is JSONArray -> {
-                val idx = key.toIntOrNull() ?: return null
-                if (idx !in 0 until cur.length()) return null
-                cur.get(idx)
+    if (!path.startsWith("/")) return null
+    val segs = path.trim('/').split('/')
+    var node: Any = root
+    var i = 0
+    while (i < segs.size) {
+        when (node) {
+            is JSONObject -> { node = (node as JSONObject).opt(segs[i]) ?: return null; i++ }
+            is JSONArray  -> {
+                val idx = segs[i].toIntOrNull() ?: return null
+                node = (node as JSONArray).opt(idx) ?: return null; i++
             }
             else -> return null
         }
     }
-    return cur
+    return node
 }
 
 /**
@@ -119,23 +121,11 @@ fun insertBlockAndReturnPath(root: JSONObject, newBlock: JSONObject, atIndex: In
     return "/blocks/$idx"
 }
 
-/**
- * Inserisce una action "icon" nella topBar (array "actions").
- * Ritorna il path dell'icona inserita (es. "/topBar/actions/2").
- */
-fun insertIconMenuReturnIconPath(
-    layout: JSONObject,
-    iconName: String,
-    actionId: String = ""
-): String {
-    val topBar = layout.optJSONObject("topBar") ?: JSONObject().also { layout.put("topBar", it) }
-    val actions = topBar.optJSONArray("actions") ?: JSONArray().also { topBar.put("actions", it) }
-    val node = JSONObject().apply {
-        put("type", "icon")
-        put("icon", iconName)
-        put("actionId", actionId)
-    }
-    val idx = actions.length()
-    actions.put(node)
-    return "/topBar/actions/$idx"
+fun insertIconMenuReturnIconPath(root: JSONObject, selectedPath: String?): String {
+    val id = "menu_" + System.currentTimeMillis().toString().takeLast(5)
+    val iconPath = insertBlockAndReturnPath(root, selectedPath, newIconButton(id), "after")
+    insertBlockAndReturnPath(root, iconPath, newMenu(id), "after")
+    return iconPath
 }
+
+

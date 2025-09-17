@@ -19,7 +19,7 @@ private data class ResolvedContainer(
 )
 
 @Composable
-private fun resolveContainer(cfg: JSONObject?): ai.runow.ui.renderer.ResolvedContainer {
+fun resolveContainer(cfg: JSONObject?): ai.runow.ui.renderer.ResolvedContainer {
     val cs = colorsFallback()   // palette m3
     val style = cfg?.optString("style", "surface") ?: "surface"  // text | outlined | tonal | primary | surface
     val shapeName = cfg?.optString("shape", "rounded") ?: "rounded"
@@ -101,7 +101,7 @@ private fun resolveContainer(cfg: JSONObject?): ai.runow.ui.renderer.ResolvedCon
 }
 
 
-private fun Modifier.topBottomBorder(width: Dp, color: Color) = this.then(
+fun Modifier.topBottomBorder(width: Dp, color: Color) = this.then(
     Modifier.drawBehind {
         val w = width.toPx()
 // top

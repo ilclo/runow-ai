@@ -9,12 +9,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import org.json.JSONObject
 
-/** Mapping robusto string -> TextAlign */
-fun mapTextAlign(s: String?): TextAlign = when (s?.lowercase()?.trim()) {
-    "start", "left" -> TextAlign.Start
-    "center", "centre", "middle" -> TextAlign.Center
+fun mapTextAlign(v: String): TextAlign = when (v.lowercase()) {
+    "center" -> TextAlign.Center
     "end", "right" -> TextAlign.End
-    "justify", "justified" -> TextAlign.Justify
     else -> TextAlign.Start
 }
 
@@ -34,68 +31,31 @@ fun writeAlign(obj: JSONObject, align: TextAlign) {
     obj.put("align", v)
 }
 
-/** Font family di base senza dipendere da R.font */
-private fun fontFamilyFor(name: String?): FontFamily? = when (name?.lowercase()?.trim()) {
-    null, "", "(default)", "default" -> null
-    "sans", "sansserif", "inter", "roboto", "urbanist", "poppins",
-    "manrope", "mulish", "rubik", "space_grotesk", "ibm_plex_sans" -> FontFamily.SansSerif
-    "serif", "ibm_plex_serif", "noto_serif", "inknut_antiqua", "playfair" -> FontFamily.Serif
-    "mono", "monospace", "ibm_plex_mono", "jetbrains_mono", "space_mono" -> FontFamily.Monospace
-    "cursive", "sacramento" -> FontFamily.Cursive
-    else -> null
-}
 
-/**
- * Applica override (facoltativi) a uno stile base.
- * Supporta: "sizeSp" (Double), "bold" (Boolean), "italic" (Boolean),
- * "weight" (String/Int), "color" (String hex/ruolo), "font" (String).
- */
 @Composable
-fun applyTextStyleOverrides(base: TextStyle, cfg: JSONObject): TextStyle {
-    var s = base
-
-    // dimensione
-    val sizeSp = cfg.optDouble("sizeSp", Double.NaN)
-    if (!sizeSp.isNaN()) s = s.copy(fontSize = sizeSp.sp)
-
-    // peso o flag "bold"
-    val bold = cfg.optBoolean("bold", false)
-    val weightStr = cfg.optString("weight", "").lowercase()
-    val weight: FontWeight? = when {
-        bold -> FontWeight.Bold
-        weightStr.startsWith("w") -> weightStr.removePrefix("w").toIntOrNull()?.let { FontWeight(it) }
-        weightStr == "light" -> FontWeight.Light
-        weightStr == "medium" -> FontWeight.Medium
-        weightStr == "semibold" || weightStr == "semi_bold" -> FontWeight.SemiBold
-        weightStr == "bold" -> FontWeight.Bold
-        weightStr == "black" -> FontWeight.Black
-        else -> null
+fun applyTextStyleOverrides(owner: JSONObject, base: TextStyle): TextStyle {
+    var st = base
+    val sizeSp = owner.optDouble("textSizeSp", Double.NaN)
+    if (!sizeSp.isNaN()) st = st.copy(fontSize = sizeSp.sp)
+    parseFontWeight(owner.optString("fontWeight","").takeIf { it.isNotBlank() })?.let {
+        st = st.copy(fontWeight = it)
     }
-    if (weight != null) s = s.copy(fontWeight = weight)
-
-    // italic
-    val italic = cfg.optBoolean("italic", false)
-    if (italic) s = s.copy(fontStyle = FontStyle.Italic)
-
-    // font family
-    val fontName = cfg.optString("font", "")
-    fontFamilyFor(fontName)?.let { s = s.copy(fontFamily = it) }
-
-    // colore
-    parseColorOrRole(cfg.optString("color", ""))?.let { s = s.copy(color = it) }
-
-    return s
+    fontFamilyFromName(owner.optString("fontFamily","").takeIf { it.isNotBlank() })?.let {
+        st = st.copy(fontFamily = it)
+    }
+    parseColorOrRole(owner.optString("textColor","").takeIf { it.isNotBlank() })?.let {
+        st = st.copy(color = it)
+    }
+    if (owner.optBoolean("italic", false)) {
+        st = st.copy(fontStyle = FontStyle.Italic)
+    }
+    return st
 }
 
 
 
 
-// ----------------------------------------------------------------------------------------
-
-
-
-
-private fun fontFamilyFor(name: String?): FontFamily? =
+fun fontFamilyFor(name: String?): FontFamily? =
     when (name?.lowercase()?.trim()) {
         null, "", "(default)", "default" -> null
         "sans", "sansserif", "inter", "roboto", "urbanist", "poppins",
@@ -113,7 +73,7 @@ private val FONT_FAMILY_OPTIONS: List<String> = listOf(
     "inknut_antiqua", "playfair", "sacramento", "space_mono"
 )
 
-private fun fontFamilyFromName(name: String?): FontFamily? {
+fun fontFamilyFromName(name: String?): FontFamily? {
     if (name.isNullOrBlank() || name == "(default)") return null
     return when (name) {
         "inter" -> FontFamily(
@@ -215,7 +175,7 @@ private fun fontFamilyFromName(name: String?): FontFamily? {
     }
 }
 
-private fun parseFontWeight(v: String?): FontWeight? = when (v?.lowercase()) {
+fun parseFontWeight(v: String?): FontWeight? = when (v?.lowercase()) {
     "w100" -> FontWeight.W100
     "w200" -> FontWeight.W200
     "w300" -> FontWeight.W300
@@ -228,5 +188,5 @@ private fun parseFontWeight(v: String?): FontWeight? = when (v?.lowercase()) {
     else   -> null
 }
 
-private fun labelOfWeight(w: FontWeight): String =
+fun labelOfWeight(w: FontWeight): String =
     FONT_WEIGHT_OPTIONS.firstOrNull { it.second == w }?.first ?: "Normal"

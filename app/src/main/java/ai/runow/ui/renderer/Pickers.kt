@@ -6,7 +6,7 @@
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ExposedDropdown(
+fun ExposedDropdown(
     value: String,
     label: String,
     options: List<String>,
@@ -44,7 +44,7 @@ private fun ExposedDropdown(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NamedColorPickerPlus(
+fun NamedColorPickerPlus(
     current: String,
     label: String,
     allowRoles: Boolean = false,
@@ -113,7 +113,7 @@ private val ICONS = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun IconPickerField(
+fun IconPickerField(
     value: MutableState<String>,
     label: String,
     onSelected: (String) -> Unit
@@ -143,7 +143,7 @@ private fun IconPickerField(
 
 
 @Composable
-private fun ImagePickerRow(
+fun ImagePickerRow(
     label: String,
     current: String,
     onChange: (String) -> Unit,
@@ -213,7 +213,7 @@ private fun ImagePickerRow(
 }
 
 @Composable
-private fun StepperField(
+fun StepperField(
     label: String,
     state: MutableState<String>,
     step: Double = 1.0,

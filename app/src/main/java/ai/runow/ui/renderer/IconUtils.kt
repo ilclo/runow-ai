@@ -51,13 +51,56 @@ fun namedIconVector(name: String?): ImageVector {
     }
 }
 
-/** Wrapper composable usato in UiRenderer */
 @Composable
-fun NamedIconEx(name: String?, tint: Color? = null, modifier: Modifier = Modifier) {
-    Icon(
-        imageVector = namedIconVector(name),
-        contentDescription = name ?: "",
-        modifier = modifier,
-        tint = tint ?: Color.Unspecified
-    )
+fun NamedIconEx(name: String?, contentDescription: String?) {
+    val __ctx = LocalContext.current
+    if (name.isNullOrBlank()) {
+        Text("."); return
+    }
+
+// icona da risorsa drawable
+    if (name.startsWith("res:")) {
+        val resName = name.removePrefix("res:")
+        val id = __ctx.resources.getIdentifier(resName, "drawable", __ctx.packageName)
+        if (id != 0) { Icon(painterResource(id), contentDescription); return }
+    }
+
+// icona da uri/file/content (raster)
+    if (name.startsWith("uri:") || name.startsWith("content:") || name.startsWith("file:")) {
+        val bmp = rememberImageBitmapFromUri(name.removePrefix("uri:"))
+        if (bmp != null) {
+            Image(
+                bitmap = bmp,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(24.dp)
+            )
+            return
+        }
+    }
+
+// icone Material note
+    val image = when (name) {
+        "settings" -> Icons.Filled.Settings
+        "more_vert" -> Icons.Filled.MoreVert
+        "tune" -> Icons.Filled.Tune
+        "play_arrow" -> Icons.Filled.PlayArrow
+        "pause" -> Icons.Filled.Pause
+        "stop" -> Icons.Filled.Stop
+        "add" -> Icons.Filled.Add
+        "flag" -> Icons.Filled.Flag
+        "queue_music" -> Icons.Filled.QueueMusic
+        "widgets" -> Icons.Filled.Widgets
+        "palette" -> Icons.Filled.Palette
+        "home" -> Icons.Filled.Home
+        "menu" -> Icons.Filled.Menu
+        "close" -> Icons.Filled.Close
+        "more_horiz" -> Icons.Filled.MoreHoriz
+        "list" -> Icons.Filled.List
+        "tab" -> Icons.Filled.Tab
+        "grid_on" -> Icons.Filled.GridOn
+        "toggle_on" -> Icons.Filled.ToggleOn
+        "bolt" -> Icons.Filled.Bolt
+        else -> null
+    }
+    if (image != null) Icon(image, contentDescription) else Text(".")
 }

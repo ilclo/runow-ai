@@ -120,7 +120,7 @@ fun LayoutLabScreen(
     }
 }
 
-private fun swap(arr: JSONArray, i: Int, j: Int) {
+fun swap(arr: JSONArray, i: Int, j: Int) {
     if (i==j) return
     val a = arr.get(i)
     val b = arr.get(j)
@@ -128,7 +128,7 @@ private fun swap(arr: JSONArray, i: Int, j: Int) {
     arr.put(j, a)
 }
 
-private fun remove(arr: JSONArray, i: Int) {
+fun remove(arr: JSONArray, i: Int) {
     val list = mutableListOf<Any?>()
     for (k in 0 until arr.length()) if (k != i) list.add(arr.get(k))
     while (arr.length() > 0) arr.remove(arr.length()-1)
