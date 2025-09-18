@@ -1547,6 +1547,16 @@ fun UiScreen(
     // Menù raccolti dal layout + selezione corrente
     val menus = remember(layout, tick) { collectMenus(layout!!) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
+	    // --- Stato overlay e dispatch "wrappato" ---
+    var openSidePanelId by remember { mutableStateOf<String?>(null) }
+    var openCenterMenuId by remember { mutableStateOf<String?>(null) }
+    val dispatchWrapped = remember(dispatch) {
+        wrapDispatchForOverlays(
+            openPanelSetter = { openSidePanelId = it },
+            openMenuSetter  = { openCenterMenuId = it },
+            appDispatch     = dispatch
+        )
+    }
 
     // Stato barra designer in basso (per lasciare spazio ai contenuti)
     var overlayHeightPx by remember { mutableStateOf(0) }
@@ -1586,32 +1596,31 @@ fun UiScreen(
 
         ScreenScaffoldWithPinnedTopBar(
             layout = effectiveLayout,
-            dispatch = dispatchOverlays,
+            dispatch = dispatchWrapped,   // << usa il dispatch wrappato
             uiState = uiState,
             designerMode = designMode,
             menus = menus,
             selectedPathSetter = { selectedPath = it },
             extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
             scaffoldPadding = scaffoldPadding
+        // ====== OVERLAY LATERALI (side panels) ======
+        RenderSidePanelsOverlay(
+            layout        = effectiveLayout,
+            openPanelId   = openSidePanelId,
+            onClose       = { openSidePanelId = null },
+            dispatch      = dispatchWrapped,
+            menus         = menus,
+            dimBehind     = true
         )
-		// ===== Overlay: Menu centrale =====
-		RenderCenterMenuOverlay(
-			layout      = effectiveLayout,
-			openMenuId  = openMenuId,
-			onClose     = { openMenuId = null },
-			menus       = menus,
-			dispatch    = dispatchOverlays
-		)
 
-		// ===== Overlay: Side panels =====
-		RenderSidePanelsOverlay(
-			layout      = effectiveLayout,
-			openPanelId = openSidePanelId,
-			onClose     = { openSidePanelId = null },
-			dispatch    = dispatchOverlays,
-			menus       = menus,
-			dimBehind   = true
-		)
+        // ====== OVERLAY CENTRALE (menu modale trasparente) ======
+        RenderCenterMenuOverlay(
+            layout      = effectiveLayout,
+            openMenuId  = openCenterMenuId,
+            onClose     = { openCenterMenuId = null },
+            menus       = menus,
+            dispatch    = dispatchWrapped
+        )
 
         if (designMode) {
             DesignerOverlay(
