@@ -3012,109 +3012,111 @@ private fun BoxScope.DesignerOverlay(
             .onGloballyPositioned { onOverlayHeight(it.size.height) },
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
-            if (showQuickEditFor == null) {
-                Row(
-                    Modifier
-                        .padding(10.dp)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Palette:", style = MaterialTheme.typography.labelLarge)
+		// ===== PALETTE =====
+		if (showQuickEditFor == null) {
+		    Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
+		        Row(
+		            Modifier
+		                .padding(10.dp)
+		                .horizontalScroll(rememberScrollState()),
+		            horizontalArrangement = Arrangement.spacedBy(8.dp),
+		            verticalAlignment = Alignment.CenterVertically
+		        ) {
+		            Text("Palette:", style = MaterialTheme.typography.labelLarge)
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newRow(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("Row") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
+		
+		            FilledTonalButton(onClick = {
+		                val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
+		                setSelectedPath(iconPath); onLayoutChange()
+		            }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
+		
+		            FilledTonalButton(onClick = {
+		                val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
+		                setSelectedPath(path); onLayoutChange()
+		            }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
+		        }
+		    }
+		}
 
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newRow(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("Row") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
-
-                    FilledTonalButton(onClick = {
-                        val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
-                        setSelectedPath(iconPath); onLayoutChange()
-                    }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
-
-                    FilledTonalButton(onClick = {
-                        val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
-                        setSelectedPath(path); onLayoutChange()
-                    }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
-                }
-            }
-        }
 
 
 		// ===== PALETTE =====
