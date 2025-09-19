@@ -87,6 +87,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.IntSize
+import android.app.Activity
+import java.io.File
+import com.yalantis.ucrop.UCrop
 
 enum class AppMode { Real, Designer, Resize }
 val LocalAppMode = compositionLocalOf { AppMode.Real }
@@ -4270,12 +4273,16 @@ private fun PageInspectorPanel(page: JSONObject, onChange: () -> Unit) {
         Spacer(Modifier.width(8.dp)); Text("Abilita immagine di sfondo")
     }
     page.optJSONObject("image")?.let { img ->
-        ImagePickerRow(
-            label = "source",
-            current = img.optString("source",""),
-            onChange = { src -> img.put("source", src); onChange() },
-            onClear = { img.put("source",""); onChange() }
-        )
+		ImagePickerRow(
+		    label = "source",
+		    current = img.optString("source",""),
+		    onChange = { src -> img.put("source", src); onChange() },
+		    onClear = { img.put("source",""); onChange() },
+		    enableCrop = true,        // ⬅️ attiva crop
+		    cropAspectX = 16f,        // opzionale, imposta un rapporto (16:9 in questo esempio)
+		    cropAspectY = 9f
+		)
+
         var scale by remember { mutableStateOf(img.optString("contentScale","fill")) }
         ExposedDropdown(
             value = scale, label = "contentScale",
@@ -4663,12 +4670,16 @@ private fun ContainerInspectorPanel(container: JSONObject, onChange: () -> Unit)
         Spacer(Modifier.width(8.dp)); Text("Abilita immagine sfondo")
     }
     container.optJSONObject("image")?.let { img ->
-        ImagePickerRow(
-            label = "source",
-            current = img.optString("source",""),
-            onChange = { src -> img.put("source", src); onChange() },
-            onClear = { img.put("source",""); onChange() }
-        )
+		ImagePickerRow(
+		    label = "source",
+		    current = img.optString("source",""),
+		    onChange = { src -> img.put("source", src); onChange() },
+		    onClear = { img.put("source",""); onChange() },
+		    enableCrop = true,        // ⬅️ attiva crop
+		    cropAspectX = 16f,        // opzionale, imposta un rapporto (16:9 in questo esempio)
+		    cropAspectY = 9f
+		)
+
         var scale by remember { mutableStateOf(img.optString("contentScale","fill")) }
         ExposedDropdown(
             value = scale, label = "contentScale",
@@ -5133,13 +5144,16 @@ private fun AlertInspectorPanel(working: JSONObject, onChange: () -> Unit) {
 private fun ImageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     Text("Image – Proprietà", style = MaterialTheme.typography.titleMedium)
 
-// Sorgente con picker cartelle
-    ImagePickerRow(
-        label = "source",
-        current = working.optString("source",""),
-        onChange = { src -> working.put("source", src); onChange() },
-        onClear = { working.put("source",""); onChange() }
-    )
+	ImagePickerRow(
+	    label = "source",
+	    current = img.optString("source",""),
+	    onChange = { src -> img.put("source", src); onChange() },
+	    onClear = { img.put("source",""); onChange() },
+	    enableCrop = true,        // ⬅️ attiva crop
+	    cropAspectX = 16f,        // opzionale, imposta un rapporto (16:9 in questo esempio)
+	    cropAspectY = 9f
+	)
+
 
     val height = remember { mutableStateOf(working.optDouble("heightDp", 160.0).toString()) }
     StepperField("height (dp)", height, 4.0) { v ->
@@ -5444,24 +5458,47 @@ private fun StepperField(
 
 /* ---- Image Picker row (riusabile) ---- */
 
-@Composable
 private fun ImagePickerRow(
     label: String,
     current: String,
     onChange: (String) -> Unit,
     onClear: () -> Unit,
-    previewHeight: Dp = 80.dp
+    previewHeight: Dp = 80.dp,
+    enableCrop: Boolean = false,
+    cropAspectX: Float = 0f,
+    cropAspectY: Float = 0f
 ) {
     val ctx = LocalContext.current
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+
+    val cropLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val out = result.data?.let { UCrop.getOutput(it) }
+            if (out != null) onChange("uri:$out")
+        }
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
         if (uri != null) {
             try {
                 ctx.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
-            } catch (_: Exception) { /* permesso già preso o non necessario */ }
-            onChange("uri:${uri}")
+            } catch (_: Exception) {}
+
+            if (enableCrop) {
+                val dst = Uri.fromFile(File(ctx.cacheDir, "crop_${System.currentTimeMillis()}.jpg"))
+                val u = UCrop.of(uri, dst)
+                if (cropAspectX > 0f && cropAspectY > 0f) {
+                    u.withAspectRatio(cropAspectX, cropAspectY)
+                }
+                cropLauncher.launch(u.getIntent(ctx))
+            } else {
+                onChange("uri:$uri")
+            }
         }
     }
 
