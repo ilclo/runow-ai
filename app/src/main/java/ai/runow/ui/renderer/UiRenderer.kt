@@ -3119,6 +3119,83 @@ private fun BoxScope.DesignerOverlay(
                 }
             }
         }
+		// ===== SELEZIONE + SALVATAGGIO =====
+		if (showQuickEditFor == null) {
+		    Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
+		        Column(
+		            Modifier
+		                .padding(10.dp)
+		                .fillMaxWidth(),
+		            verticalArrangement = Arrangement.spacedBy(8.dp)
+		        ) {
+		            Row(
+		                modifier = Modifier
+		                    .fillMaxWidth()
+		                    .horizontalScroll(rememberScrollState()),
+		                horizontalArrangement = Arrangement.spacedBy(8.dp),
+		                verticalAlignment = Alignment.CenterVertically
+		            ) {
+		                Text("Selezione:", style = MaterialTheme.typography.labelLarge)
+		
+		                OutlinedButton(onClick = {
+		                    selectedPath?.let {
+		                        val newPath = moveAndReturnNewPath(layout, it, -1)
+		                        setSelectedPath(newPath); onLayoutChange()
+		                    }
+		                }) { Icon(Icons.Filled.KeyboardArrowUp, null); Spacer(Modifier.width(4.dp)); Text("Su") }
+		
+		                OutlinedButton(onClick = {
+		                    selectedPath?.let {
+		                        val newPath = moveAndReturnNewPath(layout, it, +1)
+		                        setSelectedPath(newPath); onLayoutChange()
+		                    }
+		                }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giù") }
+		
+		                OutlinedButton(onClick = {
+		                    selectedPath?.let { duplicate(layout, it); onLayoutChange() }
+		                }) { Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica") }
+		
+		                TextButton(
+		                    onClick = {
+		                        selectedPath?.let { remove(layout, it); setSelectedPath(null); onLayoutChange() }
+		                    },
+		                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+		                ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
+		
+		                Button(
+		                    onClick = {
+		                        if (selectedBlock?.optString("type") == "SectionHeader") {
+		                            // apre la quick‑edit bar e nasconde palette+selezione
+		                            showQuickEditFor = "SectionHeader"
+		                        } else {
+		                            // apre l’inspector “classico”
+		                            showInspector = true
+		                        }
+		                    },
+		                    enabled = selectedBlock != null
+		                ) {
+		                    Icon(Icons.Filled.Settings, null); Spacer(Modifier.width(6.dp)); Text("Proprietà…")
+		                }
+		
+		                OutlinedButton(onClick = { showRootInspector = true }) {
+		                    Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Layout…")
+		                }
+		            }
+		
+		            Row(
+		                modifier = Modifier.fillMaxWidth(),
+		                horizontalArrangement = Arrangement.End,
+		                verticalAlignment = Alignment.CenterVertically
+		            ) {
+		                OutlinedButton(onClick = onSaveDraft) { Text("Salva bozza") }
+		                Spacer(Modifier.width(8.dp))
+		                Button(onClick = onPublish) { Text("Pubblica") }
+		                Spacer(Modifier.width(8.dp))
+		                TextButton(onClick = onReset) { Text("Reset") }
+		            }
+		        }
+		    }
+		}
 
 // ===== INSPECTOR BLOCCHI =====
         if (showInspector && selectedBlock != null && selectedPath != null) {
