@@ -35,7 +35,6 @@ import android.content.Intent
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.input.pointer.pointerInput // used with detectVerticalDragGestures
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.max
 import kotlin.math.min
@@ -62,8 +61,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import android.graphics.BitmapFactory
 import androidx.compose.ui.res.painterResource
@@ -3315,7 +3312,7 @@ private fun BoxScope.DesignerOverlay(
         }
 		
 		if (showQuickEditFor == "SectionHeader" && selectedBlock != null && selectedPath != null) {
-		    SectionHeaderQuickEditBar(
+		    this@DesignerOverlay.SectionHeaderQuickEditBar(
 		        initial = JSONObject(selectedBlock.toString()),
 		        onConfirm = { edited ->
 		            replaceAtPath(layout, selectedPath, edited)
@@ -3329,189 +3326,190 @@ private fun BoxScope.DesignerOverlay(
 		}
 
 
+		if (showRootInspector) {
+		    val working = remember { JSONObject(layout.toString()) }
+		    val onChange: () -> Unit = { onRootLivePreview(JSONObject(working.toString())) }
+		
+		    BackHandler(enabled = true) {
+		        onRootLivePreview(null)
+		        showRootInspector = false
+		    }
+		
+		    // ⬇️ AGGIUNGI QUESTO BOX
+		    Box(
+		        Modifier
+		            .fillMaxSize()
+		            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
+		    ) {
+		        val previewTopPad = topPadding + 8.dp
+		        val hasBottomPreview = /* com’era prima */
+		
+		        if (hasBottomPreview) {
+		            Surface(
+		                modifier = Modifier
+		                    .align(Alignment.TopCenter)
+		                    .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
+		                    .shadow(10.dp, RoundedCornerShape(16.dp))
+		                    .fillMaxWidth(),
 
-// ===== ROOT LAYOUT INSPECTOR =====
-        if (showRootInspector) {
-            val working = remember { JSONObject(layout.toString()) }
-            var dummyTick by remember { mutableStateOf(0) }
-
-            val onChange: () -> Unit = {
-                onRootLivePreview(JSONObject(working.toString())) // nuova istanza => recomposition garantita
-            }
-
-            BackHandler(enabled = true) {
-                onRootLivePreview(null) // chiudi preview
-                showRootInspector = false
-            }
-
-// ANTEPRIMA in alto della BottomBar (proiettata)
-            val previewTopPad = topPadding + 8.dp
-            val hasBottomPreview = working.optJSONObject("bottomBar")?.optJSONArray("items")?.length() ?: 0 > 0 ||
-                    working.optJSONArray("bottomButtons")?.length() ?: 0 > 0
-            if (hasBottomPreview) {
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
-                        .shadow(10.dp, RoundedCornerShape(16.dp))
-                        .fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    tonalElevation = 6.dp
-                ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelLarge)
-                        val bb = working.optJSONObject("bottomBar")
-                        val cont = bb?.optJSONObject("container")
-                        val items = bb?.optJSONArray("items") ?: run {
-// fallback legacy
-                            val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
-                            JSONArray().apply {
-                                for (i in 0 until legacy.length()) {
-                                    val it = legacy.optJSONObject(i) ?: continue
-                                    put(JSONObject().apply {
-                                        put("type","button")
-                                        put("label", it.optString("label","Button"))
-                                        put("actionId", it.optString("actionId",""))
-                                        put("style","text")
-                                    })
-                                }
-                            }
-                        }
-                        StyledContainer(cont ?: JSONObject(), Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                RenderBarItemsRow(items) { /* anteprima: no-op */ }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.75f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-                tonalElevation = 8.dp
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-// PAGE (sfondo) – live sullo schermo
-                    Divider(); Text("Page (sfondo)", style = MaterialTheme.typography.titleMedium)
-                    val page = working.optJSONObject("page") ?: JSONObject().also { working.put("page", it) }
-                    PageInspectorPanel(page, onChange)
-
-// Top bar – live sullo schermo
-                    Divider(); Text("Top Bar (estetica)", style = MaterialTheme.typography.titleMedium)
-                    var topBarEnabled by remember { mutableStateOf(working.optJSONObject("topBar") != null) }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Switch(
-                            checked = topBarEnabled,
-                            onCheckedChange = {
-                                topBarEnabled = it
-                                if (it) {
-                                    if (!working.has("topBar")) {
-                                        working.put("topBar", JSONObject().apply {
-                                            put("variant", "small")
-                                            put("title", "topbar")
-                                            put("scroll", "pinned")
-// Testo chiaro su toni scuri (surface scuro -> onSurface di solito è chiaro nel tema dark)
-                                            put("titleColor", "onSurface")
-                                            put("actionsColor", "onSurface")
-                                            put("divider", false)
-                                            put("container", JSONObject().apply {
-                                                put("style", "surface")
-                                                put("corner", 0)
-                                                put("borderMode", "full")
-                                                put("borderThicknessDp", 2)
-// opzionale: imposta un bordo visibile scuro/chiaro a seconda del tema
-// put("borderColor", "outline")
-                                            })
-                                            put("actions", JSONArray())
-                                        })
-                                    }
-
-                                } else {
-                                    working.remove("topBar")
-                                }
-                                onChange()
-                            }
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Abilita Top Bar estetico")
-                    }
-                    working.optJSONObject("topBar")?.let { tb ->
-                        TopBarInspectorPanel(tb, onChange)
-// Editor contenitore unificato
-                        ContainerEditorSection(tb, key = "container", title = "TopBar – Contenitore", onChange = onChange)
-// Editor azioni (icone, bottoni, spacer)
-                        BarItemsEditor(
-                            owner = tb,
-                            arrayKey = "actions",
-                            title = "TopBar – Azioni",
-                            onChange = onChange
-                        )
-                    }
-
-// Bottom bar estetica (preview in alto)
-                    Divider(); Text("Bottom Bar (estetica)", style = MaterialTheme.typography.titleMedium)
-                    var bottomEnabled by remember { mutableStateOf(working.optJSONObject("bottomBar") != null) }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Switch(
-                            checked = bottomEnabled,
-                            onCheckedChange = {
-                                bottomEnabled = it
-                                if (it) {
-                                    if (!working.has("bottomBar")) {
-                                        working.put("bottomBar", JSONObject().apply {
-                                            put("container", JSONObject().apply {
-                                                put("style","surface")
-                                                put("borderMode","none")
-                                                put("corner", 0)
-                                            })
-                                            put("items", JSONArray())
-                                        })
-                                    }
-                                } else {
-                                    working.remove("bottomBar")
-                                }
-                                onChange()
-                            }
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Abilita stile custom per Bottom Bar")
-                    }
-                    working.optJSONObject("bottomBar")?.let { bb ->
-                        ContainerEditorSection(bb, key = "container", title = "BottomBar – Contenitore", onChange = onChange)
-                        BarItemsEditor(owner = bb, arrayKey = "items", title = "BottomBar – Items", onChange = onChange)
-                    }
-
-// VARI – Scroll on/off, FAB (il resto del root)
-                    Divider(); RootInspectorPanel(working, onChange)
-
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = {
-                            onRootLivePreview(null)
-                            showRootInspector = false
-                        }) { Text("Annulla") }
-                        Spacer(Modifier.weight(1f))
-                        Button(onClick = {
-// Commit nel layout originale
-                            val keys = listOf("page","topBar","topTitle","topActions","bottomBar","bottomButtons","fab","scroll")
-                            keys.forEach { k -> layout.put(k, working.opt(k)) }
-                            onRootLivePreview(null)
-                            showRootInspector = false
-                        }) { Text("OK") }
-                    }
-                }
-            }
-        }
+	                    shape = RoundedCornerShape(16.dp),
+	                    tonalElevation = 6.dp
+	                ) {
+	                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+	                        Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelLarge)
+	                        val bb = working.optJSONObject("bottomBar")
+	                        val cont = bb?.optJSONObject("container")
+	                        val items = bb?.optJSONArray("items") ?: run {
+	// fallback legacy
+	                            val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
+	                            JSONArray().apply {
+	                                for (i in 0 until legacy.length()) {
+	                                    val it = legacy.optJSONObject(i) ?: continue
+	                                    put(JSONObject().apply {
+	                                        put("type","button")
+	                                        put("label", it.optString("label","Button"))
+	                                        put("actionId", it.optString("actionId",""))
+	                                        put("style","text")
+	                                    })
+	                                }
+	                            }
+	                        }
+	                        StyledContainer(cont ?: JSONObject(), Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
+	                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+	                                RenderBarItemsRow(items) { /* anteprima: no-op */ }
+	                            }
+	                        }
+	                    }
+	                }
+	            }
+	
+	            Surface(
+	                modifier = Modifier
+	                    .align(Alignment.BottomCenter)
+	                    .fillMaxWidth()
+	                    .fillMaxHeight(0.75f),
+	                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+	                tonalElevation = 8.dp
+	            ) {
+	                Column(
+	                    Modifier
+	                        .fillMaxSize()
+	                        .verticalScroll(rememberScrollState())
+	                        .padding(16.dp),
+	                    verticalArrangement = Arrangement.spacedBy(12.dp)
+	                ) {
+	// PAGE (sfondo) – live sullo schermo
+	                    Divider(); Text("Page (sfondo)", style = MaterialTheme.typography.titleMedium)
+	                    val page = working.optJSONObject("page") ?: JSONObject().also { working.put("page", it) }
+	                    PageInspectorPanel(page, onChange)
+	
+	// Top bar – live sullo schermo
+	                    Divider(); Text("Top Bar (estetica)", style = MaterialTheme.typography.titleMedium)
+	                    var topBarEnabled by remember { mutableStateOf(working.optJSONObject("topBar") != null) }
+	                    Row(verticalAlignment = Alignment.CenterVertically) {
+	                        Switch(
+	                            checked = topBarEnabled,
+	                            onCheckedChange = {
+	                                topBarEnabled = it
+	                                if (it) {
+	                                    if (!working.has("topBar")) {
+	                                        working.put("topBar", JSONObject().apply {
+	                                            put("variant", "small")
+	                                            put("title", "topbar")
+	                                            put("scroll", "pinned")
+	// Testo chiaro su toni scuri (surface scuro -> onSurface di solito è chiaro nel tema dark)
+	                                            put("titleColor", "onSurface")
+	                                            put("actionsColor", "onSurface")
+	                                            put("divider", false)
+	                                            put("container", JSONObject().apply {
+	                                                put("style", "surface")
+	                                                put("corner", 0)
+	                                                put("borderMode", "full")
+	                                                put("borderThicknessDp", 2)
+	// opzionale: imposta un bordo visibile scuro/chiaro a seconda del tema
+	// put("borderColor", "outline")
+	                                            })
+	                                            put("actions", JSONArray())
+	                                        })
+	                                    }
+	
+	                                } else {
+	                                    working.remove("topBar")
+	                                }
+	                                onChange()
+	                            }
+	                        )
+	                        Spacer(Modifier.width(8.dp))
+	                        Text("Abilita Top Bar estetico")
+	                    }
+	                    working.optJSONObject("topBar")?.let { tb ->
+	                        TopBarInspectorPanel(tb, onChange)
+	// Editor contenitore unificato
+	                        ContainerEditorSection(tb, key = "container", title = "TopBar – Contenitore", onChange = onChange)
+	// Editor azioni (icone, bottoni, spacer)
+	                        BarItemsEditor(
+	                            owner = tb,
+	                            arrayKey = "actions",
+	                            title = "TopBar – Azioni",
+	                            onChange = onChange
+	                        )
+	                    }
+	
+	// Bottom bar estetica (preview in alto)
+	                    Divider(); Text("Bottom Bar (estetica)", style = MaterialTheme.typography.titleMedium)
+	                    var bottomEnabled by remember { mutableStateOf(working.optJSONObject("bottomBar") != null) }
+	                    Row(verticalAlignment = Alignment.CenterVertically) {
+	                        Switch(
+	                            checked = bottomEnabled,
+	                            onCheckedChange = {
+	                                bottomEnabled = it
+	                                if (it) {
+	                                    if (!working.has("bottomBar")) {
+	                                        working.put("bottomBar", JSONObject().apply {
+	                                            put("container", JSONObject().apply {
+	                                                put("style","surface")
+	                                                put("borderMode","none")
+	                                                put("corner", 0)
+	                                            })
+	                                            put("items", JSONArray())
+	                                        })
+	                                    }
+	                                } else {
+	                                    working.remove("bottomBar")
+	                                }
+	                                onChange()
+	                            }
+	                        )
+	                        Spacer(Modifier.width(8.dp))
+	                        Text("Abilita stile custom per Bottom Bar")
+	                    }
+	                    working.optJSONObject("bottomBar")?.let { bb ->
+	                        ContainerEditorSection(bb, key = "container", title = "BottomBar – Contenitore", onChange = onChange)
+	                        BarItemsEditor(owner = bb, arrayKey = "items", title = "BottomBar – Items", onChange = onChange)
+	                    }
+	
+	// VARI – Scroll on/off, FAB (il resto del root)
+	                    Divider(); RootInspectorPanel(working, onChange)
+	
+	                    Spacer(Modifier.height(8.dp))
+	                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+	                        TextButton(onClick = {
+	                            onRootLivePreview(null)
+	                            showRootInspector = false
+	                        }) { Text("Annulla") }
+	                        Spacer(Modifier.weight(1f))
+	                        Button(onClick = {
+	// Commit nel layout originale
+	                            val keys = listOf("page","topBar","topTitle","topActions","bottomBar","bottomButtons","fab","scroll")
+	                            keys.forEach { k -> layout.put(k, working.opt(k)) }
+	                            onRootLivePreview(null)
+	                            showRootInspector = false
+	                        }) { Text("OK") }
+	                    }
+	                }
+	            }
+	        }
+		)
     }
 }
 
