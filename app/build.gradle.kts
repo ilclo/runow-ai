@@ -52,7 +52,7 @@ dependencies {
     // Foundation (Row/Column/layout/scroll, ecc.) — QUI ci sono alignBy/alignByBaseline
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.foundation:foundation-layout:1.7.3")
-    implementation "com.github.yalantis:ucrop:2.2.8"
+    implementation("com.github.yalantis:ucrop:2.2.8")
 
     // Icone Material (Icons.Default.*)
     implementation("androidx.compose.material:material-icons-extended")
