@@ -830,258 +830,437 @@ fun SegmentedButtons(
 
 @Composable
 private fun BoxScope.SectionHeaderQuickEditBar(
-    block: JSONObject,
-    onClose: () -> Unit,
-    onLiveChange: () -> Unit
+    initial: JSONObject,
+    onConfirm: (JSONObject) -> Unit,
+    onCancel: () -> Unit
 ) {
-    // Stato tab attiva e sottomenu
-    var tab by remember { mutableStateOf("text") } // "text" | "container"
-    var showTextTools by remember { mutableStateOf(true) }
-    var showContainerTools by remember { mutableStateOf(false) }
+    // Copia di lavoro (non altera il layout finché non premi OK)
+    val working = remember { JSONObject(initial.toString()) }
+
+    // Tab attivo: "text" | "container"
+    var tab by remember { mutableStateOf("text") }
 
     // Sottomenu testo
-    var expColor by remember { mutableStateOf(false) }
-    var expSize by remember { mutableStateOf(false) }
-    var expWeight by remember { mutableStateOf(false) }
-    var expAlign by remember { mutableStateOf(false) }
-    var expFont by remember { mutableStateOf(false) }
+    var showTextEditor by remember { mutableStateOf(false) }
+    var expTextColor by remember { mutableStateOf(false) }
+    var expTextSize by remember { mutableStateOf(false) }
+    var expTextWeight by remember { mutableStateOf(false) }
+    var expTextAlign by remember { mutableStateOf(false) }
+    var expTextFont by remember { mutableStateOf(false) }
 
-    // Sottomenu container
-    var expCColor by remember { mutableStateOf(false) }
-    var expCStyle by remember { mutableStateOf(false) }
-    var expCCorner by remember { mutableStateOf(false) }
-    var showOpacitySlider by remember { mutableStateOf(false) }
+    // Sottomenu contenitore
+    var expStyle by remember { mutableStateOf(false) }
+    var showColorPanel by remember { mutableStateOf(false) } // barra superiore 3‑menu
+    var expC1 by remember { mutableStateOf(false) }
+    var expOrient by remember { mutableStateOf(false) }
+    var expC2 by remember { mutableStateOf(false) }
+    var expCorner by remember { mutableStateOf(false) }
+    var expBorderThick by remember { mutableStateOf(false) }
+    var expBorderColor by remember { mutableStateOf(false) }
+    var showWidthPanel by remember { mutableStateOf(false) } // slider flottante
+
+    // Back = Annulla
+    BackHandler(enabled = true) { onCancel() }
 
     fun ensureContainer(): JSONObject {
-        val c = block.optJSONObject("container")
+        val c = working.optJSONObject("container")
         if (c != null) return c
         val created = JSONObject().apply {
             put("style", "surface"); put("corner", 12); put("borderMode", "none")
         }
-        block.put("container", created)
+        working.put("container", created)
         return created
     }
 
-    fun commit() = onLiveChange()
+    // ====== BARRA COLORE (sopra) – appare solo se richiesto ======
+    AnimatedVisibility(visible = showColorPanel) {
+        val cont = ensureContainer()
+        val current1 = cont.optString("gradient1", cont.optString("customColor",""))
+        val current2 = cont.optString("gradient2","")
+        val currentOrient = cont.optString("gradientOrientation","horizontal")
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 120.dp, start = 12.dp, end = 12.dp) // sopra la barra principale
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            tonalElevation = 8.dp,
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Colore 1 (dropdown)
+                Box {
+                    TextButton(onClick = { expC1 = true }) {
+                        Icon(Icons.Filled.Palette, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (current1.isBlank()) "(color1)" else current1.take(10))
+                    }
+                    DropdownMenu(expanded = expC1, onDismissRequest = { expC1 = false }) {
+                        DropdownMenuItem(text = { Text("(default)") }, onClick = {
+                            cont.remove("customColor"); cont.remove("gradient1"); expC1 = false
+                        })
+                        NAMED_SWATCHES.forEach { (name, argb) ->
+                            val hex = "#%06X".format(argb and 0xFFFFFF)
+                            DropdownMenuItem(
+                                leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
+                                text = { Text(name) },
+                                onClick = {
+                                    cont.put("customColor", hex) // compat
+                                    cont.put("gradient1", hex)
+                                    expC1 = false
+                                }
+                            )
+                        }
+                    }
+                }
 
-    // Barra principale (T / Container) ancorata in basso, sopra bottom bar e tastiera
+                // Orientamento gradiente
+                Box {
+                    TextButton(onClick = { expOrient = true }) {
+                        Icon(
+                            if (currentOrient == "vertical") Icons.Filled.SwapVert else Icons.Filled.SwapHoriz,
+                            null
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (currentOrient == "vertical") "vertical" else "horizontal")
+                    }
+                    DropdownMenu(expanded = expOrient, onDismissRequest = { expOrient = false }) {
+                        DropdownMenuItem(text = { Text("horizontal") }, onClick = {
+                            cont.put("gradientOrientation","horizontal"); expOrient = false
+                        })
+                        DropdownMenuItem(text = { Text("vertical") }, onClick = {
+                            cont.put("gradientOrientation","vertical"); expOrient = false
+                        })
+                    }
+                }
+
+                // Colore 2 (dropdown)
+                Box {
+                    TextButton(onClick = { expC2 = true }) {
+                        Icon(Icons.Filled.Palette, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (current2.isBlank()) "(color2)" else current2.take(10))
+                    }
+                    DropdownMenu(expanded = expC2, onDismissRequest = { expC2 = false }) {
+                        DropdownMenuItem(text = { Text("(nessuno)") }, onClick = {
+                            cont.remove("gradient2"); expC2 = false
+                        })
+                        NAMED_SWATCHES.forEach { (name, argb) ->
+                            val hex = "#%06X".format(argb and 0xFFFFFF)
+                            DropdownMenuItem(
+                                leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
+                                text = { Text(name) },
+                                onClick = {
+                                    cont.put("gradient2", hex)
+                                    expC2 = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ====== SLIDER WIDTH (flottante) – appare solo se richiesto ======
+    AnimatedVisibility(visible = showWidthPanel) {
+        val cont = ensureContainer()
+        val isFixed = cont.optString("widthMode","wrap") == "fixed_dp"
+        var width by remember { mutableStateOf(cont.optDouble("widthDp", 160.0).toFloat()) }
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 120.dp, start = 12.dp, end = 12.dp) // sopra la barra principale
+                .fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            tonalElevation = 8.dp,
+            shadowElevation = 8.dp
+        ) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !isFixed,
+                        onClick = {
+                            cont.put("widthMode","wrap")
+                            showWidthPanel = false
+                        },
+                        label = { Text("wrap") }
+                    )
+                    FilterChip(
+                        selected = isFixed,
+                        onClick = {
+                            cont.put("widthMode","fixed_dp")
+                            // lascia aperto per lo slider
+                        },
+                        label = { Text("fixed dp") }
+                    )
+                }
+                if (cont.optString("widthMode","wrap") == "fixed_dp") {
+                    Spacer(Modifier.height(6.dp))
+                    Slider(
+                        value = width,
+                        onValueChange = {
+                            width = it
+                            cont.put("widthDp", it.toDouble())
+                        },
+                        valueRange = 80f..600f
+                    )
+                    Text("${width.toInt()} dp", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+
+    // ====== EDITOR TESTO (TextField) – ancorato sopra alla tastiera ======
+    AnimatedVisibility(visible = showTextEditor) {
+        var text by remember { mutableStateOf(working.optString("title","")) }
+        Surface(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 12.dp)
+                .imePadding(),  // si appoggia alla parte alta della tastiera
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+            tonalElevation = 8.dp,
+            shadowElevation = 8.dp
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Titolo SectionHeader", style = MaterialTheme.typography.labelLarge)
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it; },
+                    singleLine = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { showTextEditor = false }) { Text("Chiudi") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = {
+                        working.put("title", text)
+                        showTextEditor = false
+                    }) { Text("OK") }
+                }
+            }
+        }
+    }
+
+    // ====== BARRA PRINCIPALE (in basso): Tab e Strumenti + OK/Annulla ======
     Column(
-        Modifier
+        modifier = Modifier
             .align(Alignment.BottomCenter)
             .padding(horizontal = 12.dp, vertical = 10.dp)
-            .imePadding() // si sposta sopra la tastiera
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)) // sopra alla system nav
+            .imePadding()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
     ) {
-        // Mini‑bar strumenti (dinamica) — appare sopra alla barra principale
-        AnimatedVisibility(visible = showTextTools || showContainerTools) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
-                tonalElevation = 6.dp,
-                shadowElevation = 6.dp
+        // 1) STRISCIA STRUMENTI sotto‑tab (dinamica)
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp
+        ) {
+            // Tools: un’unica riga con icone che aprono dropdown/pannelli
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (tab == "text" && showTextTools) {
-                        // Colore testo
-                        Box {
-                            IconButton(onClick = { expColor = true }) { Icon(Icons.Filled.Palette, null) }
-                            DropdownMenu(expanded = expColor, onDismissRequest = { expColor = false }) {
-                                DropdownMenuItem(text = { Text("(default)") }, onClick = {
-                                    block.remove("textColor"); expColor = false; commit()
+                if (tab == "text") {
+                    // Testo: editor, font, weight, colore, size, align
+                    IconButton(onClick = { showTextEditor = true }) { Icon(Icons.Filled.Edit, null) }
+                    // font family
+                    Box {
+                        IconButton(onClick = { expTextFont = true }) { Icon(Icons.Filled.Title, null) }
+                        DropdownMenu(expanded = expTextFont, onDismissRequest = { expTextFont = false }) {
+                            // poche opzioni per sicurezza; amplia se hai FONT_FAMILY_OPTIONS
+                            listOf("(default)","inter","poppins","rubik","manrope","mulish","urbanist","serif","mono").forEach { f ->
+                                DropdownMenuItem(text = { Text(f) }, onClick = {
+                                    if (f == "(default)") working.remove("fontFamily") else working.put("fontFamily", f)
+                                    expTextFont = false
                                 })
-                                NAMED_SWATCHES.forEach { (name, argb) ->
-                                    val hex = "#%06X".format(argb and 0xFFFFFF)
-                                    DropdownMenuItem(
-                                        leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
-                                        text = { Text(name) },
-                                        onClick = { block.put("textColor", hex); expColor = false; commit() }
-                                    )
-                                }
-                            }
-                        }
-                        // Dimensione
-                        Box {
-                            IconButton(onClick = { expSize = true }) { Icon(Icons.Filled.FormatSize, null) }
-                            DropdownMenu(expanded = expSize, onDismissRequest = { expSize = false }) {
-                                listOf("(default)","14","16","18","20","22","24","28","32","36").forEach { s ->
-                                    DropdownMenuItem(text = { Text(s) }, onClick = {
-                                        if (s == "(default)") block.remove("textSizeSp")
-                                        else block.put("textSizeSp", s.toDouble())
-                                        expSize = false; commit()
-                                    })
-                                }
-                            }
-                        }
-                        // Peso
-                        Box {
-                            IconButton(onClick = { expWeight = true }) { Icon(Icons.Filled.FormatBold, null) }
-                            DropdownMenu(expanded = expWeight, onDismissRequest = { expWeight = false }) {
-                                listOf("(default)","w300","w400","w500","w600","w700").forEach { w ->
-                                    DropdownMenuItem(text = { Text(w) }, onClick = {
-                                        if (w == "(default)") block.remove("fontWeight") else block.put("fontWeight", w)
-                                        expWeight = false; commit()
-                                    })
-                                }
-                            }
-                        }
-                        // Allineamento
-                        Box {
-                            IconButton(onClick = { expAlign = true }) { Icon(Icons.Filled.FormatAlignCenter, null) }
-                            DropdownMenu(expanded = expAlign, onDismissRequest = { expAlign = false }) {
-                                listOf("start","center","end").forEach { a ->
-                                    DropdownMenuItem(text = { Text(a) }, onClick = {
-                                        block.writeAlign(a); expAlign = false; commit()
-                                    })
-                                }
-                            }
-                        }
-                        // Font family
-                        Box {
-                            IconButton(onClick = { expFont = true }) { Icon(Icons.Filled.Title, null) }
-                            DropdownMenu(expanded = expFont, onDismissRequest = { expFont = false }) {
-                                (listOf("(default)") + FONT_FAMILY_OPTIONS).distinct().forEach { f ->
-                                    DropdownMenuItem(text = { Text(f) }, onClick = {
-                                        if (f == "(default)") block.remove("fontFamily") else block.put("fontFamily", f)
-                                        expFont = false; commit()
-                                    })
-                                }
                             }
                         }
                     }
+                    // weight
+                    Box {
+                        IconButton(onClick = { expTextWeight = true }) { Icon(Icons.Filled.FormatBold, null) }
+                        DropdownMenu(expanded = expTextWeight, onDismissRequest = { expTextWeight = false }) {
+                            listOf("(default)","w300","w400","w500","w600","w700").forEach { w ->
+                                DropdownMenuItem(text = { Text(w) }, onClick = {
+                                    if (w == "(default)") working.remove("fontWeight") else working.put("fontWeight", w)
+                                    expTextWeight = false
+                                })
+                            }
+                        }
+                    }
+                    // colore
+                    Box {
+                        IconButton(onClick = { expTextColor = true }) { Icon(Icons.Filled.Palette, null) }
+                        DropdownMenu(expanded = expTextColor, onDismissRequest = { expTextColor = false }) {
+                            DropdownMenuItem(text = { Text("(default)") }, onClick = {
+                                working.remove("textColor"); expTextColor = false
+                            })
+                            NAMED_SWATCHES.forEach { (name, argb) ->
+                                val hex = "#%06X".format(argb and 0xFFFFFF)
+                                DropdownMenuItem(
+                                    leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
+                                    text = { Text(name) },
+                                    onClick = { working.put("textColor", hex); expTextColor = false }
+                                )
+                            }
+                        }
+                    }
+                    // dimensione
+                    Box {
+                        IconButton(onClick = { expTextSize = true }) { Icon(Icons.Filled.FormatSize, null) }
+                        DropdownMenu(expanded = expTextSize, onDismissRequest = { expTextSize = false }) {
+                            listOf("(default)","14","16","18","20","22","24","28","32","36").forEach { s ->
+                                DropdownMenuItem(text = { Text(s) }, onClick = {
+                                    if (s == "(default)") working.remove("textSizeSp")
+                                    else working.put("textSizeSp", s.toDouble())
+                                    expTextSize = false
+                                })
+                            }
+                        }
+                    }
+                    // allineamento
+                    Box {
+                        IconButton(onClick = { expTextAlign = true }) { Icon(Icons.Filled.FormatAlignCenter, null) }
+                        DropdownMenu(expanded = expTextAlign, onDismissRequest = { expTextAlign = false }) {
+                            listOf("start","center","end").forEach { a ->
+                                DropdownMenuItem(text = { Text(a) }, onClick = {
+                                    working.put("align", a); expTextAlign = false
+                                })
+                            }
+                        }
+                    }
+                } else {
+                    val cont = ensureContainer()
+                    // stile (include topbottom)
+                    Box {
+                        IconButton(onClick = { expStyle = true }) { Icon(Icons.Filled.Tune, null) }
+                        DropdownMenu(expanded = expStyle, onDismissRequest = { expStyle = false }) {
+                            listOf("surface","full","outlined","topbottom","tonal","primary","text").forEach { s ->
+                                DropdownMenuItem(text = { Text(s) }, onClick = {
+                                    cont.put("style", s); expStyle = false
+                                })
+                            }
+                        }
+                    }
+                    // colore (apre barra superiore 3‑menu)
+                    IconButton(onClick = {
+                        showColorPanel = !showColorPanel
+                        // chiudi eventuali altri pannelli
+                        showWidthPanel = false
+                    }) { Icon(Icons.Filled.Palette, null) }
 
-                    if (tab == "container" && showContainerTools) {
-                        val cont = remember { ensureContainer() }
-                        // Colore contenitore
-                        Box {
-                            IconButton(onClick = { expCColor = true }) { Icon(Icons.Filled.Palette, null) }
-                            DropdownMenu(expanded = expCColor, onDismissRequest = { expCColor = false }) {
-                                DropdownMenuItem(text = { Text("(default)") }, onClick = {
-                                    cont.remove("customColor"); cont.remove("gradient1")
-                                    expCColor = false; commit()
+                    // corner
+                    Box {
+                        IconButton(onClick = { expCorner = true }) { Icon(Icons.Filled.CropSquare, null) }
+                        DropdownMenu(expanded = expCorner, onDismissRequest = { expCorner = false }) {
+                            listOf("0","4","8","12","16","20","24","32").forEach { c ->
+                                DropdownMenuItem(text = { Text("corner $c dp") }, onClick = {
+                                    cont.put("corner", c.toDouble()); expCorner = false
                                 })
-                                NAMED_SWATCHES.forEach { (name, argb) ->
-                                    val hex = "#%06X".format(argb and 0xFFFFFF)
-                                    DropdownMenuItem(
-                                        leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
-                                        text = { Text(name) },
-                                        onClick = {
-                                            cont.put("customColor", hex)
-                                            cont.put("gradient1", hex) // compat
-                                            expCColor = false; commit()
-                                        }
-                                    )
-                                }
                             }
                         }
-                        // Stile (surface/full/outlined/tonal/primary/text)
-                        Box {
-                            IconButton(onClick = { expCStyle = true }) { Icon(Icons.Filled.Tune, null) }
-                            DropdownMenu(expanded = expCStyle, onDismissRequest = { expCStyle = false }) {
-                                listOf("surface","full","outlined","tonal","primary","text").forEach { s ->
-                                    DropdownMenuItem(text = { Text(s) }, onClick = {
-                                        cont.put("style", s); expCStyle = false; commit()
-                                    })
-                                }
-                            }
-                        }
-                        // Angoli (corner)
-                        Box {
-                            IconButton(onClick = { expCCorner = true }) { Icon(Icons.Filled.CropSquare, null) }
-                            DropdownMenu(expanded = expCCorner, onDismissRequest = { expCCorner = false }) {
-                                listOf("0","4","8","12","16","20","24","32").forEach { c ->
-                                    DropdownMenuItem(text = { Text("corner $c dp") }, onClick = {
-                                        cont.put("corner", c.toDouble()); expCCorner = false; commit()
-                                    })
-                                }
-                            }
-                        }
-                        // Opacità: slider flottante
-                        IconButton(onClick = { showOpacitySlider = !showOpacitySlider }) { Icon(Icons.Filled.Opacity, null) }
                     }
+                    // spessore bordo
+                    Box {
+                        IconButton(onClick = { expBorderThick = true }) { Icon(Icons.Filled.BorderAll, null) }
+                        DropdownMenu(expanded = expBorderThick, onDismissRequest = { expBorderThick = false }) {
+                            listOf("0","1","2","3","4","6","8").forEach { th ->
+                                DropdownMenuItem(text = { Text("$th dp") }, onClick = {
+                                    if (th == "0") cont.remove("borderThicknessDp")
+                                    else cont.put("borderThicknessDp", th.toDouble())
+                                    expBorderThick = false
+                                })
+                            }
+                        }
+                    }
+                    // colore bordo
+                    Box {
+                        IconButton(onClick = { expBorderColor = true }) { Icon(Icons.Filled.BorderColor, null) }
+                        DropdownMenu(expanded = expBorderColor, onDismissRequest = { expBorderColor = false }) {
+                            DropdownMenuItem(text = { Text("(default)") }, onClick = {
+                                cont.remove("borderColor"); expBorderColor = false
+                            })
+                            NAMED_SWATCHES.forEach { (name, argb) ->
+                                val hex = "#%06X".format(argb and 0xFFFFFF)
+                                DropdownMenuItem(
+                                    leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
+                                    text = { Text(name) },
+                                    onClick = { cont.put("borderColor", hex); expBorderColor = false }
+                                )
+                            }
+                        }
+                    }
+                    // width/wrap + slider flottante
+                    IconButton(onClick = {
+                        showWidthPanel = !showWidthPanel
+                        // chiudi eventuali altre barre superiori
+                        showColorPanel = false
+                    }) { Icon(Icons.Filled.Straighten, null) }
                 }
             }
         }
 
         Spacer(Modifier.height(8.dp))
 
-        // Barra principale (T / Container)
+        // 2) RIGA TAB + OK/Annulla – tab scrollabili dietro i bottoni
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
             tonalElevation = 8.dp,
             shadowElevation = 8.dp
         ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.fillMaxWidth()) {
+                // row scrollabile dei tab (a sinistra)
+                Row(
+                    Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(start = 8.dp, end = 140.dp, top = 8.dp, bottom = 8.dp), // spazio destro sotto ai bottoni
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     FilterChip(
                         selected = tab == "text",
-                        onClick = {
-                            tab = "text"
-                            showTextTools = true
-                            showContainerTools = false
-                        },
-                        label = { Text("T") },
+                        onClick = { tab = "text"; showColorPanel = false; showWidthPanel = false },
+                        label = { Text("Testo") },
                         leadingIcon = { Icon(Icons.Filled.Title, null) }
                     )
                     FilterChip(
                         selected = tab == "container",
-                        onClick = {
-                            tab = "container"
-                            showContainerTools = true
-                            showTextTools = false
-                        },
+                        onClick = { tab = "container"; /* pannelli chiusi di default */ },
                         label = { Text("Contenitore") },
                         leadingIcon = { Icon(Icons.Filled.Widgets, null) }
                     )
                 }
-                TextButton(onClick = onClose) { Text("Chiudi") }
-            }
-        }
 
-        // Slider flottante per opacità del contenitore (bgAlpha), sopra la barra
-        AnimatedVisibility(visible = showOpacitySlider) {
-            val cont = ensureContainer()
-            var alpha by remember {
-                mutableStateOf(cont.optDouble("bgAlpha", 0.88).toFloat().coerceIn(0f, 1f))
-            }
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                tonalElevation = 6.dp,
-                shadowElevation = 6.dp,
-                modifier = Modifier
-                    .padding(top = 8.dp)
-            ) {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Text("Opacità contenitore", style = MaterialTheme.typography.labelLarge)
-                    Slider(
-                        value = alpha,
-                        onValueChange = {
-                            alpha = it
-                            cont.put("bgAlpha", it.toDouble())
-                            commit()
-                        },
-                        valueRange = 0f..1f,
-                        steps = 18 // ~0.05
-                    )
-                    Text("${(alpha * 100).toInt()}%")
+                // bottoni fissi a destra
+                Row(
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 8.dp, top = 4.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { onCancel() }) { Text("Annulla") }
+                    Button(onClick = { onConfirm(working) }) { Text("OK") }
                 }
             }
         }
     }
 }
+
 
 // ---------------------------------------------------------------------
 // ColorRow  — due overload: a) Color, b) hex stringhe
@@ -2721,174 +2900,173 @@ private fun BoxScope.DesignerOverlay(
             Row(
                 Modifier.padding(10.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Palette:", style = MaterialTheme.typography.labelLarge)
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newRow(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("Row") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
-
-                FilledTonalButton(onClick = {
-                    val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
-                    setSelectedPath(iconPath); onLayoutChange()
-                }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
-
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
-            }
-        }
-
-// ===== SELEZIONE + SALVATAGGIO =====
-        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
-            Column(
-                Modifier
-                    .padding(10.dp)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Selezione:", style = MaterialTheme.typography.labelLarge)
-
-                    OutlinedButton(onClick = {
-                        selectedPath?.let {
-                            val newPath = moveAndReturnNewPath(layout, it, -1)
-                            setSelectedPath(newPath); onLayoutChange()
-                        }
-                    }) { Icon(Icons.Filled.KeyboardArrowUp, null); Spacer(Modifier.width(4.dp)); Text("Su") }
-
-                    OutlinedButton(onClick = {
-                        selectedPath?.let {
-                            val newPath = moveAndReturnNewPath(layout, it, +1)
-                            setSelectedPath(newPath); onLayoutChange()
-                        }
-                    }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giù") }
-
-                    OutlinedButton(onClick = {
-                        selectedPath?.let { duplicate(layout, it); onLayoutChange() }
-                    }) { Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica") }
-
-                    TextButton(
-                        onClick = {
-                            selectedPath?.let { remove(layout, it); setSelectedPath(null); onLayoutChange() }
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
-
-                    Button(
-                        onClick = {
-                            val t = selectedBlock?.optString("type").orEmpty()
-                            if (t == "SectionHeader") {
-                                showQuickEditFor = "SectionHeader"   // apri la Quick Edit Bar
-                            } else {
-                                showInspector = true                 // altrimenti apri l’ispettore classico
-                            }
-                        },
-                        enabled = selectedBlock != null
-                    ) {
-                        Icon(Icons.Filled.Settings, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Proprietà…")
-                    }
-
-
-                    OutlinedButton(onClick = { showRootInspector = true }) {
-                        Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Layout…")
-                    }
+                verticalAlignment = Alignment.CenterVertically) 
+                if (showQuickEditFor == null) {
+                    {Text("Palette:", style = MaterialTheme.typography.labelLarge)
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newRow(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("Row") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
+    
+                    FilledTonalButton(onClick = {
+                        val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
+                        setSelectedPath(iconPath); onLayoutChange()
+                    }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
+    
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
                 }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+            }
+    
+    // ===== SELEZIONE + SALVATAGGIO =====
+            Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
+                Column(
+                    Modifier
+                        .padding(10.dp)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(onClick = onSaveDraft) { Text("Salva bozza") }
-                    Spacer(Modifier.width(8.dp))
-                    Button(onClick = onPublish) { Text("Pubblica") }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = onReset) { Text("Reset") }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Selezione:", style = MaterialTheme.typography.labelLarge)
+    
+                        OutlinedButton(onClick = {
+                            selectedPath?.let {
+                                val newPath = moveAndReturnNewPath(layout, it, -1)
+                                setSelectedPath(newPath); onLayoutChange()
+                            }
+                        }) { Icon(Icons.Filled.KeyboardArrowUp, null); Spacer(Modifier.width(4.dp)); Text("Su") }
+    
+                        OutlinedButton(onClick = {
+                            selectedPath?.let {
+                                val newPath = moveAndReturnNewPath(layout, it, +1)
+                                setSelectedPath(newPath); onLayoutChange()
+                            }
+                        }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giù") }
+    
+                        OutlinedButton(onClick = {
+                            selectedPath?.let { duplicate(layout, it); onLayoutChange() }
+                        }) { Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica") }
+    
+                        TextButton(
+                            onClick = {
+                                selectedPath?.let { remove(layout, it); setSelectedPath(null); onLayoutChange() }
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
+    
+                        if (showQuickEditFor == "SectionHeader" && selectedBlock != null && selectedPath != null) {
+                            SectionHeaderQuickEditBar(
+                                initial = JSONObject(selectedBlock.toString()),  // working copy
+                                onConfirm = { edited ->
+                                    replaceAtPath(layout, selectedPath, edited)
+                                    onLayoutChange()
+                                    showQuickEditFor = null
+                                },
+                                onCancel = {
+                                    // scarta modifiche e ripristina le barre
+                                    showQuickEditFor = null
+                                }
+                            )
+                        }
+    
+                        OutlinedButton(onClick = { showRootInspector = true }) {
+                            Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Layout…")
+                        }
+                    }
+    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(onClick = onSaveDraft) { Text("Salva bozza") }
+                        Spacer(Modifier.width(8.dp))
+                        Button(onClick = onPublish) { Text("Pubblica") }
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(onClick = onReset) { Text("Reset") }
+                    }
                 }
             }
         }
