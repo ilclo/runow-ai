@@ -3238,8 +3238,10 @@ private fun BoxScope.DesignerOverlay(
                     .fillMaxSize()
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
             ) {
-                val previewTopPad = topPadding + 8.dp
-                val hasBottomPreview = /* com’era prima */
+			val hasBottomPreview =
+			    working.optJSONObject("bottomBar") != null ||
+			    ((working.optJSONArray("bottomButtons")?.length() ?: 0) > 0)
+
 
                     if (hasBottomPreview) {
                         Surface(
@@ -5039,6 +5041,9 @@ private fun AlertInspectorPanel(working: JSONObject, onChange: () -> Unit) {
 @Composable
 private fun ImageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     Text("Image – Proprietà", style = MaterialTheme.typography.titleMedium)
+	val img = working.optJSONObject("image") ?: JSONObject().also {
+	    working.put("image", it)
+	}
 
 	ImagePickerRow(
 	    label = "source",
