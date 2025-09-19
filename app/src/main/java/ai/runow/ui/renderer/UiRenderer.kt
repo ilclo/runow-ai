@@ -6104,3 +6104,67 @@ fun renderCore8Page(jsonPage: JSONArray) {
     )
 }
 
+fun core8ToLegacy(b: Core8Block): JSONObject = when (b.type) {
+    "SectionHeader" -> JSONObject().apply {
+        put("type", "SectionHeader")
+        put("title", b.title)
+        put("subtitle", b.subtitle)
+        put("align", b.align)
+        put("textSizeSp", b.textSizeSp)
+        put("fontWeight", b.fontWeight)
+        put("textColor", b.textColor)
+        b.container?.let { put("container", mapContainer(it)) }
+    }
+    "Row" -> JSONObject().apply {
+        put("type", "Row")
+        put("gapDp", b.gapDp ?: 8.0)
+        put("scrollX", b.scrollX == true)
+        put("items", JSONArray(b.items.map(::core8ToLegacy)))
+    }
+    "ButtonRow" -> JSONObject().apply {
+        put("type", "ButtonRow")
+        put("align", b.align ?: "center")
+        put("buttons", JSONArray(b.buttons.map { btn ->
+            JSONObject().apply {
+                put("label", btn.label)
+                put("icon", btn.icon ?: "")
+                put("style", btn.style ?: "text")
+                put("actionId", btn.actionId ?: "")
+            }
+        }))
+        b.container?.let { put("container", mapContainer(it)) }
+    }
+    // …altri case…
+    else -> JSONObject().put("type", b.type) // pass-through
+}
+
+fun mapContainer(c: Core8Container) = JSONObject().apply {
+    put("style", c.style ?: "surface")
+    put("corner", c.corner ?: 12)
+    put("elevationDp", c.elevationDp ?: 1)
+    put("bgAlpha", c.bgAlpha ?: 1.0)
+    put("customColor", c.customColor ?: "")
+    put("borderMode", c.borderMode ?: "none")
+    put("borderThicknessDp", c.borderThicknessDp ?: 0)
+    put("borderColor", c.borderColor ?: "")
+    put("widthMode", c.widthMode ?: "wrap")
+    put("heightMode", c.heightMode ?: "wrap")
+    c.widthDp?.let { put("widthDp", it) }
+    c.heightDp?.let { put("heightDp", it) }
+    c.widthFraction?.let { put("widthFraction", it) }
+    put("hAlign", c.hAlign ?: "start")
+    put("vAlign", c.vAlign ?: "center")
+    c.gradient?.let { g ->
+        put("gradient", JSONObject().apply {
+            put("colors", JSONArray(g.colors))
+            put("direction", g.direction ?: "vertical")
+        })
+    }
+    c.image?.let { img ->
+        put("image", JSONObject().apply {
+            put("source", img.source)
+            put("contentScale", img.contentScale ?: "fill")
+            put("alpha", img.alpha ?: 1.0)
+        })
+    }
+}
