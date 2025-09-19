@@ -2982,6 +2982,8 @@ private fun TitleSubtitle(title: String, subtitle: String, titleColor: Color) {
 * OVERLAY DESIGNER (palette + azioni + inspector)
 * ========================================================= */
 
+
+
 @Composable
 private fun BoxScope.DesignerOverlay(
     screenName: String,
@@ -3012,219 +3014,111 @@ private fun BoxScope.DesignerOverlay(
             .onGloballyPositioned { onOverlayHeight(it.size.height) },
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-		// ===== PALETTE =====
-		if (showQuickEditFor == null) {
-		    Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
-		        Row(
-		            Modifier
-		                .padding(10.dp)
-		                .horizontalScroll(rememberScrollState()),
-		            horizontalArrangement = Arrangement.spacedBy(8.dp),
-		            verticalAlignment = Alignment.CenterVertically
-		        ) {
-		            Text("Palette:", style = MaterialTheme.typography.labelLarge)
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newRow(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("Row") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
-		
-		            FilledTonalButton(onClick = {
-		                val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
-		                setSelectedPath(iconPath); onLayoutChange()
-		            }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
-		
-		            FilledTonalButton(onClick = {
-		                val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
-		                setSelectedPath(path); onLayoutChange()
-		            }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
-		        }
-		    }
-		}
 
+        // ===== PALETTE =====
+        if (showQuickEditFor == null) {
+            Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
+                Row(
+                    Modifier
+                        .padding(10.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Palette:", style = MaterialTheme.typography.labelLarge)
 
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
 
-		// ===== PALETTE =====
-		if (showQuickEditFor == null) {
-			Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
-				Row(
-					Modifier
-						.padding(10.dp)
-						.horizontalScroll(rememberScrollState()),
-					horizontalArrangement = Arrangement.spacedBy(8.dp),
-					verticalAlignment = Alignment.CenterVertically
-				) {
-					Text("Palette:", style = MaterialTheme.typography.labelLarge)
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newRow(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("Row") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newRow(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("Row") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
+                    FilledTonalButton(onClick = {
+                        val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
+                        setSelectedPath(iconPath); onLayoutChange()
+                    }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
 
-					FilledTonalButton(onClick = {
-						val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
-						setSelectedPath(iconPath); onLayoutChange()
-					}) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
 
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
-
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
-
-					FilledTonalButton(onClick = {
-						val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
-						setSelectedPath(path); onLayoutChange()
-					}) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
-				}
-			}
-		}
-
-
+                    FilledTonalButton(onClick = {
+                        val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
+                        setSelectedPath(path); onLayoutChange()
+                    }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
+                }
+            }
+        }
 
 // ===== INSPECTOR BLOCCHI =====
         if (showInspector && selectedBlock != null && selectedPath != null) {
@@ -3313,208 +3207,210 @@ private fun BoxScope.DesignerOverlay(
             }
 
         }
-		
-		if (showQuickEditFor == "SectionHeader" && selectedBlock != null && selectedPath != null) {
-		    this@DesignerOverlay.SectionHeaderQuickEditBar(
-		        initial = JSONObject(selectedBlock.toString()),
-		        onConfirm = { edited ->
-		            replaceAtPath(layout, selectedPath, edited)
-		            onLayoutChange()
-		            showQuickEditFor = null
-		        },
-		        onCancel = {
-		            showQuickEditFor = null
-		        }
-		    )
-		}
+
+        if (showQuickEditFor == "SectionHeader" && selectedBlock != null && selectedPath != null) {
+            this@DesignerOverlay.SectionHeaderQuickEditBar(
+                initial = JSONObject(selectedBlock.toString()),
+                onConfirm = { edited ->
+                    replaceAtPath(layout, selectedPath, edited)
+                    onLayoutChange()
+                    showQuickEditFor = null
+                },
+                onCancel = {
+                    showQuickEditFor = null
+                }
+            )
+        }
 
 
-		if (showRootInspector) {
-		    val working = remember { JSONObject(layout.toString()) }
-		    val onChange: () -> Unit = { onRootLivePreview(JSONObject(working.toString())) }
-		
-		    BackHandler(enabled = true) {
-		        onRootLivePreview(null)
-		        showRootInspector = false
-		    }
-		
-		    // ⬇️ AGGIUNGI QUESTO BOX
-		    Box(
-		        Modifier
-		            .fillMaxSize()
-		            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
-		    ) {
-		        val previewTopPad = topPadding + 8.dp
-		        val hasBottomPreview = /* com’era prima */
-		
-		        if (hasBottomPreview) {
-		            Surface(
-		                modifier = Modifier
-		                    .align(Alignment.TopCenter)
-		                    .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
-		                    .shadow(10.dp, RoundedCornerShape(16.dp))
-		                    .fillMaxWidth(),
+        if (showRootInspector) {
+            val working = remember { JSONObject(layout.toString()) }
+            val onChange: () -> Unit = { onRootLivePreview(JSONObject(working.toString())) }
 
-	                    shape = RoundedCornerShape(16.dp),
-	                    tonalElevation = 6.dp
-	                ) {
-	                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-	                        Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelLarge)
-	                        val bb = working.optJSONObject("bottomBar")
-	                        val cont = bb?.optJSONObject("container")
-	                        val items = bb?.optJSONArray("items") ?: run {
-	// fallback legacy
-	                            val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
-	                            JSONArray().apply {
-	                                for (i in 0 until legacy.length()) {
-	                                    val it = legacy.optJSONObject(i) ?: continue
-	                                    put(JSONObject().apply {
-	                                        put("type","button")
-	                                        put("label", it.optString("label","Button"))
-	                                        put("actionId", it.optString("actionId",""))
-	                                        put("style","text")
-	                                    })
-	                                }
-	                            }
-	                        }
-	                        StyledContainer(cont ?: JSONObject(), Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
-	                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-	                                RenderBarItemsRow(items) { /* anteprima: no-op */ }
-	                            }
-	                        }
-	                    }
-	                }
-	            }
-	
-	            Surface(
-	                modifier = Modifier
-	                    .align(Alignment.BottomCenter)
-	                    .fillMaxWidth()
-	                    .fillMaxHeight(0.75f),
-	                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-	                tonalElevation = 8.dp
-	            ) {
-	                Column(
-	                    Modifier
-	                        .fillMaxSize()
-	                        .verticalScroll(rememberScrollState())
-	                        .padding(16.dp),
-	                    verticalArrangement = Arrangement.spacedBy(12.dp)
-	                ) {
-	// PAGE (sfondo) – live sullo schermo
-	                    Divider(); Text("Page (sfondo)", style = MaterialTheme.typography.titleMedium)
-	                    val page = working.optJSONObject("page") ?: JSONObject().also { working.put("page", it) }
-	                    PageInspectorPanel(page, onChange)
-	
-	// Top bar – live sullo schermo
-	                    Divider(); Text("Top Bar (estetica)", style = MaterialTheme.typography.titleMedium)
-	                    var topBarEnabled by remember { mutableStateOf(working.optJSONObject("topBar") != null) }
-	                    Row(verticalAlignment = Alignment.CenterVertically) {
-	                        Switch(
-	                            checked = topBarEnabled,
-	                            onCheckedChange = {
-	                                topBarEnabled = it
-	                                if (it) {
-	                                    if (!working.has("topBar")) {
-	                                        working.put("topBar", JSONObject().apply {
-	                                            put("variant", "small")
-	                                            put("title", "topbar")
-	                                            put("scroll", "pinned")
-	// Testo chiaro su toni scuri (surface scuro -> onSurface di solito è chiaro nel tema dark)
-	                                            put("titleColor", "onSurface")
-	                                            put("actionsColor", "onSurface")
-	                                            put("divider", false)
-	                                            put("container", JSONObject().apply {
-	                                                put("style", "surface")
-	                                                put("corner", 0)
-	                                                put("borderMode", "full")
-	                                                put("borderThicknessDp", 2)
-	// opzionale: imposta un bordo visibile scuro/chiaro a seconda del tema
-	// put("borderColor", "outline")
-	                                            })
-	                                            put("actions", JSONArray())
-	                                        })
-	                                    }
-	
-	                                } else {
-	                                    working.remove("topBar")
-	                                }
-	                                onChange()
-	                            }
-	                        )
-	                        Spacer(Modifier.width(8.dp))
-	                        Text("Abilita Top Bar estetico")
-	                    }
-	                    working.optJSONObject("topBar")?.let { tb ->
-	                        TopBarInspectorPanel(tb, onChange)
-	// Editor contenitore unificato
-	                        ContainerEditorSection(tb, key = "container", title = "TopBar – Contenitore", onChange = onChange)
-	// Editor azioni (icone, bottoni, spacer)
-	                        BarItemsEditor(
-	                            owner = tb,
-	                            arrayKey = "actions",
-	                            title = "TopBar – Azioni",
-	                            onChange = onChange
-	                        )
-	                    }
-	
-	// Bottom bar estetica (preview in alto)
-	                    Divider(); Text("Bottom Bar (estetica)", style = MaterialTheme.typography.titleMedium)
-	                    var bottomEnabled by remember { mutableStateOf(working.optJSONObject("bottomBar") != null) }
-	                    Row(verticalAlignment = Alignment.CenterVertically) {
-	                        Switch(
-	                            checked = bottomEnabled,
-	                            onCheckedChange = {
-	                                bottomEnabled = it
-	                                if (it) {
-	                                    if (!working.has("bottomBar")) {
-	                                        working.put("bottomBar", JSONObject().apply {
-	                                            put("container", JSONObject().apply {
-	                                                put("style","surface")
-	                                                put("borderMode","none")
-	                                                put("corner", 0)
-	                                            })
-	                                            put("items", JSONArray())
-	                                        })
-	                                    }
-	                                } else {
-	                                    working.remove("bottomBar")
-	                                }
-	                                onChange()
-	                            }
-	                        )
-	                        Spacer(Modifier.width(8.dp))
-	                        Text("Abilita stile custom per Bottom Bar")
-	                    }
-	                    working.optJSONObject("bottomBar")?.let { bb ->
-	                        ContainerEditorSection(bb, key = "container", title = "BottomBar – Contenitore", onChange = onChange)
-	                        BarItemsEditor(owner = bb, arrayKey = "items", title = "BottomBar – Items", onChange = onChange)
-	                    }
-	
-	// VARI – Scroll on/off, FAB (il resto del root)
-	                    Divider(); RootInspectorPanel(working, onChange)
-	
-	                    Spacer(Modifier.height(8.dp))
-	                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-	                        TextButton(onClick = {
-	                            onRootLivePreview(null)
-	                            showRootInspector = false
-	                        }) { Text("Annulla") }
-	                        Spacer(Modifier.weight(1f))
-	                        Button(onClick = {
-	// Commit nel layout originale
-	                            val keys = listOf("page","topBar","topTitle","topActions","bottomBar","bottomButtons","fab","scroll")
-	                            keys.forEach { k -> layout.put(k, working.opt(k)) }
-	                            onRootLivePreview(null)
-	                            showRootInspector = false
-	                        }) { Text("OK") }
-	                    }
-	                }
-	            }
-	        }
-		)
+            BackHandler(enabled = true) {
+                onRootLivePreview(null)
+                showRootInspector = false
+            }
+
+            // ⬇️ AGGIUNGI QUESTO BOX
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
+            ) {
+                val previewTopPad = topPadding + 8.dp
+                val hasBottomPreview = /* com’era prima */
+
+                    if (hasBottomPreview) {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
+                                .shadow(10.dp, RoundedCornerShape(16.dp))
+                                .fillMaxWidth(),
+
+                            shape = RoundedCornerShape(16.dp),
+                            tonalElevation = 6.dp
+                        ) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelLarge)
+                                val bb = working.optJSONObject("bottomBar")
+                                val cont = bb?.optJSONObject("container")
+                                val items = bb?.optJSONArray("items") ?: run {
+                                    // fallback legacy
+                                    val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
+                                    JSONArray().apply {
+                                        for (i in 0 until legacy.length()) {
+                                            val it = legacy.optJSONObject(i) ?: continue
+                                            put(JSONObject().apply {
+                                                put("type","button")
+                                                put("label", it.optString("label","Button"))
+                                                put("actionId", it.optString("actionId",""))
+                                                put("style","text")
+                                            })
+                                        }
+                                    }
+                                }
+                                StyledContainer(cont ?: JSONObject(), Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        RenderBarItemsRow(items) { /* anteprima: no-op */ }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.75f),
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                    tonalElevation = 8.dp
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // PAGE (sfondo) – live sullo schermo
+                        Divider(); Text("Page (sfondo)", style = MaterialTheme.typography.titleMedium)
+                        val page = working.optJSONObject("page") ?: JSONObject().also { working.put("page", it) }
+                        PageInspectorPanel(page, onChange)
+
+                        // Top bar – live sullo schermo
+                        Divider(); Text("Top Bar (estetica)", style = MaterialTheme.typography.titleMedium)
+                        var topBarEnabled by remember { mutableStateOf(working.optJSONObject("topBar") != null) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(
+                                checked = topBarEnabled,
+                                onCheckedChange = {
+                                    topBarEnabled = it
+                                    if (it) {
+                                        if (!working.has("topBar")) {
+                                            working.put("topBar", JSONObject().apply {
+                                                put("variant", "small")
+                                                put("title", "topbar")
+                                                put("scroll", "pinned")
+                                                // Testo chiaro su toni scuri (surface scuro -> onSurface di solito è chiaro nel tema dark)
+                                                put("titleColor", "onSurface")
+                                                put("actionsColor", "onSurface")
+                                                put("divider", false)
+                                                put("container", JSONObject().apply {
+                                                    put("style", "surface")
+                                                    put("corner", 0)
+                                                    put("borderMode", "full")
+                                                    put("borderThicknessDp", 2)
+                                                    // opzionale: imposta un bordo visibile scuro/chiaro a seconda del tema
+                                                    // put("borderColor", "outline")
+                                                })
+                                                put("actions", JSONArray())
+                                            })
+                                        }
+
+                                    } else {
+                                        working.remove("topBar")
+                                    }
+                                    onChange()
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Abilita Top Bar estetico")
+                        }
+                        working.optJSONObject("topBar")?.let { tb ->
+                            TopBarInspectorPanel(tb, onChange)
+                            // Editor contenitore unificato
+                            ContainerEditorSection(tb, key = "container", title = "TopBar – Contenitore", onChange = onChange)
+                            // Editor azioni (icone, bottoni, spacer)
+                            BarItemsEditor(
+                                owner = tb,
+                                arrayKey = "actions",
+                                title = "TopBar – Azioni",
+                                onChange = onChange
+                            )
+                        }
+
+                        // Bottom bar estetica (preview in alto)
+                        Divider(); Text("Bottom Bar (estetica)", style = MaterialTheme.typography.titleMedium)
+                        var bottomEnabled by remember { mutableStateOf(working.optJSONObject("bottomBar") != null) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(
+                                checked = bottomEnabled,
+                                onCheckedChange = {
+                                    bottomEnabled = it
+                                    if (it) {
+                                        if (!working.has("bottomBar")) {
+                                            working.put("bottomBar", JSONObject().apply {
+                                                put("container", JSONObject().apply {
+                                                    put("style","surface")
+                                                    put("borderMode","none")
+                                                    put("corner", 0)
+                                                })
+                                                put("items", JSONArray())
+                                            })
+                                        }
+                                    } else {
+                                        working.remove("bottomBar")
+                                    }
+                                    onChange()
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Abilita stile custom per Bottom Bar")
+                        }
+                        working.optJSONObject("bottomBar")?.let { bb ->
+                            ContainerEditorSection(bb, key = "container", title = "BottomBar – Contenitore", onChange = onChange)
+                            BarItemsEditor(owner = bb, arrayKey = "items", title = "BottomBar – Items", onChange = onChange)
+                        }
+
+                        // VARI – Scroll on/off, FAB (il resto del root)
+                        Divider(); RootInspectorPanel(working, onChange)
+
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                onRootLivePreview(null)
+                                showRootInspector = false
+                            }) { Text("Annulla") }
+                            Spacer(Modifier.weight(1f))
+                            Button(onClick = {
+                                // Commit nel layout originale
+                                val keys = listOf("page","topBar","topTitle","topActions","bottomBar","bottomButtons","fab","scroll")
+                                keys.forEach { k -> layout.put(k, working.opt(k)) }
+                                onRootLivePreview(null)
+                                showRootInspector = false
+                            }) { Text("OK") }
+                        }
+                    }
+                }
+            }
+        }
+    
     }
 }
+
 
 
 /* =========================================================
