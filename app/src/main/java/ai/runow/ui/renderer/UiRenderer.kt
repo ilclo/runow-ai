@@ -3315,18 +3315,19 @@ private fun BoxScope.DesignerOverlay(
         }
 		
 		if (showQuickEditFor == "SectionHeader" && selectedBlock != null && selectedPath != null) {
-			SectionHeaderQuickEditBar(
-				initial = JSONObject(selectedBlock.toString()),
-				onConfirm = { edited ->
-					replaceAtPath(layout, selectedPath, edited)
-					onLayoutChange()
-					showQuickEditFor = null
-				},
-				onCancel = {
-					showQuickEditFor = null
-				}
-			)
+		    SectionHeaderQuickEditBar(
+		        initial = JSONObject(selectedBlock.toString()),
+		        onConfirm = { edited ->
+		            replaceAtPath(layout, selectedPath, edited)
+		            onLayoutChange()
+		            showQuickEditFor = null
+		        },
+		        onCancel = {
+		            showQuickEditFor = null
+		        }
+		    )
 		}
+
 
 
 // ===== ROOT LAYOUT INSPECTOR =====
