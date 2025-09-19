@@ -3232,55 +3232,57 @@ private fun BoxScope.DesignerOverlay(
                 showRootInspector = false
             }
 
-            // ⬇️ AGGIUNGI QUESTO BOX
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
-            ) {
-			val hasBottomPreview =
-			    working.optJSONObject("bottomBar") != null ||
-			    ((working.optJSONArray("bottomButtons")?.length() ?: 0) > 0)
-
-
-                    if (hasBottomPreview) {
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
-                                .shadow(10.dp, RoundedCornerShape(16.dp))
-                                .fillMaxWidth(),
-
-                            shape = RoundedCornerShape(16.dp),
-                            tonalElevation = 6.dp
-                        ) {
-                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelLarge)
-                                val bb = working.optJSONObject("bottomBar")
-                                val cont = bb?.optJSONObject("container")
-                                val items = bb?.optJSONArray("items") ?: run {
-                                    // fallback legacy
-                                    val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
-                                    JSONArray().apply {
-                                        for (i in 0 until legacy.length()) {
-                                            val it = legacy.optJSONObject(i) ?: continue
-                                            put(JSONObject().apply {
-                                                put("type","button")
-                                                put("label", it.optString("label","Button"))
-                                                put("actionId", it.optString("actionId",""))
-                                                put("style","text")
-                                            })
-                                        }
-                                    }
-                                }
-                                StyledContainer(cont ?: JSONObject(), Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        RenderBarItemsRow(items) { /* anteprima: no-op */ }
-                                    }
-                                }
-                            }
-                        }
-                    }
+			Box(
+			    Modifier
+			        .fillMaxSize()
+			        .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
+			) {
+			    val previewTopPad = topPadding + 8.dp
+			    val hasBottomPreview =
+			        working.optJSONObject("bottomBar") != null ||
+			        ((working.optJSONArray("bottomButtons")?.length() ?: 0) > 0)
+			
+			    if (hasBottomPreview) {
+			        Surface(
+			            modifier = Modifier
+			                .align(Alignment.TopCenter)
+			                .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
+			                .shadow(10.dp, RoundedCornerShape(16.dp))
+			                .fillMaxWidth(),
+			            shape = RoundedCornerShape(16.dp),
+			            tonalElevation = 6.dp
+			        ) {
+			            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+			                Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelLarge)
+			                val bb = working.optJSONObject("bottomBar")
+			                val cont = bb?.optJSONObject("container")
+			                val items = bb?.optJSONArray("items") ?: run {
+			                    // fallback legacy
+			                    val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
+			                    JSONArray().apply {
+			                        for (i in 0 until legacy.length()) {
+			                            val it = legacy.optJSONObject(i) ?: continue
+			                            put(JSONObject().apply {
+			                                put("type","button")
+			                                put("label", it.optString("label","Button"))
+			                                put("actionId", it.optString("actionId",""))
+			                                put("style","text")
+			                            })
+			                        }
+			                    }
+			                }
+			                StyledContainer(cont ?: JSONObject(), Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
+			                    Row(
+			                        Modifier.fillMaxWidth(),
+			                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+			                        verticalAlignment = Alignment.CenterVertically
+			                    ) {
+			                        RenderBarItemsRow(items) { /* anteprima: no-op */ }
+			                    }
+			                }
+			            }
+			        }
+			    }
 
                 Surface(
                     modifier = Modifier
@@ -5038,23 +5040,20 @@ private fun AlertInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     }, label = { Text("actionId (opz.)") })
 }
 
+
 @Composable
 private fun ImageInspectorPanel(working: JSONObject, onChange: () -> Unit) {
     Text("Image – Proprietà", style = MaterialTheme.typography.titleMedium)
-	val img = working.optJSONObject("image") ?: JSONObject().also {
-	    working.put("image", it)
-	}
 
-	ImagePickerRow(
-	    label = "source",
-	    current = img.optString("source",""),
-	    onChange = { src -> img.put("source", src); onChange() },
-	    onClear = { img.put("source",""); onChange() },
-	    enableCrop = true,        // ⬅️ attiva crop
-	    cropAspectX = 16f,        // opzionale, imposta un rapporto (16:9 in questo esempio)
-	    cropAspectY = 9f
-	)
-
+    ImagePickerRow(
+        label = "source",
+        current = working.optString("source",""),
+        onChange = { src -> working.put("source", src); onChange() },
+        onClear  = { working.put("source",""); onChange() },
+        enableCrop = true,
+        cropAspectX = 16f,
+        cropAspectY = 9f
+    )
 
     val height = remember { mutableStateOf(working.optDouble("heightDp", 160.0).toString()) }
     StepperField("height (dp)", height, 4.0) { v ->
@@ -5358,7 +5357,7 @@ private fun StepperField(
 }
 
 /* ---- Image Picker row (riusabile) ---- */
-
+@Composable
 private fun ImagePickerRow(
     label: String,
     current: String,
