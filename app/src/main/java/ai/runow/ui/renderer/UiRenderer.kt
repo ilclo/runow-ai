@@ -93,6 +93,264 @@ import androidx.compose.ui.unit.IntSize
 enum class AppMode { Real, Designer, Resize }
 val LocalAppMode = compositionLocalOf { AppMode.Real }
 
+
+@Composable
+private fun BoxScope.SectionHeaderQuickEditBar(
+    block: JSONObject,
+    onClose: () -> Unit,
+    onLiveChange: () -> Unit
+) {
+    // Stato tab attiva e sottomenu
+    var tab by remember { mutableStateOf("text") } // "text" | "container"
+    var showTextTools by remember { mutableStateOf(true) }
+    var showContainerTools by remember { mutableStateOf(false) }
+
+    // Sottomenu testo
+    var expColor by remember { mutableStateOf(false) }
+    var expSize by remember { mutableStateOf(false) }
+    var expWeight by remember { mutableStateOf(false) }
+    var expAlign by remember { mutableStateOf(false) }
+    var expFont by remember { mutableStateOf(false) }
+
+    // Sottomenu container
+    var expCColor by remember { mutableStateOf(false) }
+    var expCStyle by remember { mutableStateOf(false) }
+    var expCCorner by remember { mutableStateOf(false) }
+    var showOpacitySlider by remember { mutableStateOf(false) }
+
+    fun ensureContainer(): JSONObject {
+        val c = block.optJSONObject("container")
+        if (c != null) return c
+        val created = JSONObject().apply {
+            put("style", "surface"); put("corner", 12); put("borderMode", "none")
+        }
+        block.put("container", created)
+        return created
+    }
+
+    fun commit() = onLiveChange()
+
+    // Barra principale (T / Container) ancorata in basso, sopra bottom bar e tastiera
+    Column(
+        Modifier
+            .align(Alignment.BottomCenter)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .imePadding() // si sposta sopra la tastiera
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)) // sopra alla system nav
+    ) {
+        // Mini‑bar strumenti (dinamica) — appare sopra alla barra principale
+        AnimatedVisibility(visible = showTextTools || showContainerTools) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+                tonalElevation = 6.dp,
+                shadowElevation = 6.dp
+            ) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (tab == "text" && showTextTools) {
+                        // Colore testo
+                        Box {
+                            IconButton(onClick = { expColor = true }) { Icon(Icons.Filled.Palette, null) }
+                            DropdownMenu(expanded = expColor, onDismissRequest = { expColor = false }) {
+                                DropdownMenuItem(text = { Text("(default)") }, onClick = {
+                                    block.remove("textColor"); expColor = false; commit()
+                                })
+                                NAMED_SWATCHES.forEach { (name, argb) ->
+                                    val hex = "#%06X".format(argb and 0xFFFFFF)
+                                    DropdownMenuItem(
+                                        leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
+                                        text = { Text(name) },
+                                        onClick = { block.put("textColor", hex); expColor = false; commit() }
+                                    )
+                                }
+                            }
+                        }
+                        // Dimensione
+                        Box {
+                            IconButton(onClick = { expSize = true }) { Icon(Icons.Filled.FormatSize, null) }
+                            DropdownMenu(expanded = expSize, onDismissRequest = { expSize = false }) {
+                                listOf("(default)","14","16","18","20","22","24","28","32","36").forEach { s ->
+                                    DropdownMenuItem(text = { Text(s) }, onClick = {
+                                        if (s == "(default)") block.remove("textSizeSp")
+                                        else block.put("textSizeSp", s.toDouble())
+                                        expSize = false; commit()
+                                    })
+                                }
+                            }
+                        }
+                        // Peso
+                        Box {
+                            IconButton(onClick = { expWeight = true }) { Icon(Icons.Filled.FormatBold, null) }
+                            DropdownMenu(expanded = expWeight, onDismissRequest = { expWeight = false }) {
+                                listOf("(default)","w300","w400","w500","w600","w700").forEach { w ->
+                                    DropdownMenuItem(text = { Text(w) }, onClick = {
+                                        if (w == "(default)") block.remove("fontWeight") else block.put("fontWeight", w)
+                                        expWeight = false; commit()
+                                    })
+                                }
+                            }
+                        }
+                        // Allineamento
+                        Box {
+                            IconButton(onClick = { expAlign = true }) { Icon(Icons.Filled.FormatAlignCenter, null) }
+                            DropdownMenu(expanded = expAlign, onDismissRequest = { expAlign = false }) {
+                                listOf("start","center","end").forEach { a ->
+                                    DropdownMenuItem(text = { Text(a) }, onClick = {
+                                        block.writeAlign(a); expAlign = false; commit()
+                                    })
+                                }
+                            }
+                        }
+                        // Font family
+                        Box {
+                            IconButton(onClick = { expFont = true }) { Icon(Icons.Filled.Title, null) }
+                            DropdownMenu(expanded = expFont, onDismissRequest = { expFont = false }) {
+                                (listOf("(default)") + FONT_FAMILY_OPTIONS).distinct().forEach { f ->
+                                    DropdownMenuItem(text = { Text(f) }, onClick = {
+                                        if (f == "(default)") block.remove("fontFamily") else block.put("fontFamily", f)
+                                        expFont = false; commit()
+                                    })
+                                }
+                            }
+                        }
+                    }
+
+                    if (tab == "container" && showContainerTools) {
+                        val cont = remember { ensureContainer() }
+                        // Colore contenitore
+                        Box {
+                            IconButton(onClick = { expCColor = true }) { Icon(Icons.Filled.Palette, null) }
+                            DropdownMenu(expanded = expCColor, onDismissRequest = { expCColor = false }) {
+                                DropdownMenuItem(text = { Text("(default)") }, onClick = {
+                                    cont.remove("customColor"); cont.remove("gradient1")
+                                    expCColor = false; commit()
+                                })
+                                NAMED_SWATCHES.forEach { (name, argb) ->
+                                    val hex = "#%06X".format(argb and 0xFFFFFF)
+                                    DropdownMenuItem(
+                                        leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
+                                        text = { Text(name) },
+                                        onClick = {
+                                            cont.put("customColor", hex)
+                                            cont.put("gradient1", hex) // compat
+                                            expCColor = false; commit()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        // Stile (surface/full/outlined/tonal/primary/text)
+                        Box {
+                            IconButton(onClick = { expCStyle = true }) { Icon(Icons.Filled.Tune, null) }
+                            DropdownMenu(expanded = expCStyle, onDismissRequest = { expCStyle = false }) {
+                                listOf("surface","full","outlined","tonal","primary","text").forEach { s ->
+                                    DropdownMenuItem(text = { Text(s) }, onClick = {
+                                        cont.put("style", s); expCStyle = false; commit()
+                                    })
+                                }
+                            }
+                        }
+                        // Angoli (corner)
+                        Box {
+                            IconButton(onClick = { expCCorner = true }) { Icon(Icons.Filled.CropSquare, null) }
+                            DropdownMenu(expanded = expCCorner, onDismissRequest = { expCCorner = false }) {
+                                listOf("0","4","8","12","16","20","24","32").forEach { c ->
+                                    DropdownMenuItem(text = { Text("corner $c dp") }, onClick = {
+                                        cont.put("corner", c.toDouble()); expCCorner = false; commit()
+                                    })
+                                }
+                            }
+                        }
+                        // Opacità: slider flottante
+                        IconButton(onClick = { showOpacitySlider = !showOpacitySlider }) { Icon(Icons.Filled.Opacity, null) }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Barra principale (T / Container)
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            tonalElevation = 8.dp,
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilterChip(
+                        selected = tab == "text",
+                        onClick = {
+                            tab = "text"
+                            showTextTools = true
+                            showContainerTools = false
+                        },
+                        label = { Text("T") },
+                        leadingIcon = { Icon(Icons.Filled.Title, null) }
+                    )
+                    FilterChip(
+                        selected = tab == "container",
+                        onClick = {
+                            tab = "container"
+                            showContainerTools = true
+                            showTextTools = false
+                        },
+                        label = { Text("Contenitore") },
+                        leadingIcon = { Icon(Icons.Filled.Widgets, null) }
+                    )
+                }
+                TextButton(onClick = onClose) { Text("Chiudi") }
+            }
+        }
+
+        // Slider flottante per opacità del contenitore (bgAlpha), sopra la barra
+        AnimatedVisibility(visible = showOpacitySlider) {
+            val cont = ensureContainer()
+            var alpha by remember {
+                mutableStateOf(cont.optDouble("bgAlpha", 0.88).toFloat().coerceIn(0f, 1f))
+            }
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                tonalElevation = 6.dp,
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+            ) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text("Opacità contenitore", style = MaterialTheme.typography.labelLarge)
+                    Slider(
+                        value = alpha,
+                        onValueChange = {
+                            alpha = it
+                            cont.put("bgAlpha", it.toDouble())
+                            commit()
+                        },
+                        valueRange = 0f..1f,
+                        steps = 18 // ~0.05
+                    )
+                    Text("${(alpha * 100).toInt()}%")
+                }
+            }
+        }
+    }
+}
+
+
+
 @Composable
 private fun BoxScope.ResizeHandleX(
     align: Alignment,                  // Alignment.CenterStart (sx) o CenterEnd (dx)
@@ -1547,16 +1805,6 @@ fun UiScreen(
     // Menù raccolti dal layout + selezione corrente
     val menus = remember(layout, tick) { collectMenus(layout!!) }
     var selectedPath by remember(screenName) { mutableStateOf<String?>(null) }
-    // --- Stato overlay e dispatch "wrappato" ---
-    var openSidePanelId by remember { mutableStateOf<String?>(null) }
-    var openCenterMenuId by remember { mutableStateOf<String?>(null) }
-    val dispatchWrapped = remember(dispatch) {
-        wrapDispatchForOverlays(
-            openPanelSetter = { openSidePanelId = it },
-            openMenuSetter  = { openCenterMenuId = it },
-            appDispatch     = dispatch
-        )
-    }
 
     // Stato barra designer in basso (per lasciare spazio ai contenuti)
     var overlayHeightPx by remember { mutableStateOf(0) }
@@ -1577,18 +1825,6 @@ fun UiScreen(
     val effectiveLayout = remember(layout, previewRoot) {
         if (previewRoot != null) mergeForPreview(layout!!, previewRoot!!) else layout!!
     }
-    // --- Overlay state (menu centrale e side panels) ---
-    var openSidePanelId by remember(screenName, tick) { mutableStateOf<String?>(null) }
-    var openMenuId      by remember(screenName, tick) { mutableStateOf<String?>(null) }
-
-    // Wrappa il dispatch per intercettare azioni "open_menu:..." e "sidepanel:open:..."
-    val dispatchOverlays = remember(screenName, tick) {
-        wrapDispatchForOverlays(
-            openPanelSetter = { openSidePanelId = it },
-            openMenuSetter  = { openMenuId      = it },
-            appDispatch     = dispatch
-        )
-    }
 
     Box(Modifier.fillMaxSize()) {
         // ====== SFONDO PAGINA (colore/gradient/immagine) ======
@@ -1596,30 +1832,13 @@ fun UiScreen(
 
         ScreenScaffoldWithPinnedTopBar(
             layout = effectiveLayout,
-            dispatch = dispatchWrapped,   // << usa il dispatch wrappato
+            dispatch = dispatch,
             uiState = uiState,
             designerMode = designMode,
             menus = menus,
             selectedPathSetter = { selectedPath = it },
             extraPaddingBottom = if (designMode) overlayHeightDp + 32.dp else 16.dp,
             scaffoldPadding = scaffoldPadding
-                    // ====== OVERLAY LATERALI (side panels) ======
-                    RenderSidePanelsOverlay(
-                    layout        = effectiveLayout,
-            openPanelId   = openSidePanelId,
-            onClose       = { openSidePanelId = null },
-            dispatch      = dispatchWrapped,
-            menus         = menus,
-            dimBehind     = true
-        )
-
-        // ====== OVERLAY CENTRALE (menu modale trasparente) ======
-        RenderCenterMenuOverlay(
-            layout      = effectiveLayout,
-            openMenuId  = openCenterMenuId,
-            onClose     = { openCenterMenuId = null },
-            menus       = menus,
-            dispatch    = dispatchWrapped
         )
 
         if (designMode) {
@@ -2489,6 +2708,7 @@ private fun BoxScope.DesignerOverlay(
 ) {
     var showInspector by remember { mutableStateOf(false) }
     var showRootInspector by remember { mutableStateOf(false) }
+	var showQuickEditFor by remember { mutableStateOf<String?>(null) } // "SectionHeader" oppure null
     val selectedBlock = selectedPath?.let { jsonAtPath(layout, it) as? JSONObject }
 
     Column(
@@ -2528,10 +2748,18 @@ private fun BoxScope.DesignerOverlay(
                     setSelectedPath(path); onLayoutChange()
                 }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
 
-                FilledTonalButton(onClick = {
-                    val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
-                    setSelectedPath(path); onLayoutChange()
-                }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
+				Button(
+					onClick = {
+						if (selectedBlock?.optString("type") == "SectionHeader") {
+							showQuickEditFor = "SectionHeader"
+						} else {
+							showInspector = true
+						}
+					},
+					enabled = selectedBlock != null
+				) {
+					Icon(Icons.Filled.Settings, null); Spacer(Modifier.width(6.dp)); Text("Proprietà…")
+				}
 
                 FilledTonalButton(onClick = {
                     val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
@@ -2749,79 +2977,94 @@ private fun BoxScope.DesignerOverlay(
                 }
             }
         }
+		
     }
-
-    // ===== ROOT LAYOUT INSPECTOR (pannello centrato, traslucido) =====
+	
+	if (showQuickEditFor == "SectionHeader" && selectedBlock != null) {
+		SectionHeaderQuickEditBar(
+			block = selectedBlock,
+			onClose = { showQuickEditFor = null },
+			onLiveChange = onLiveChange
+		)
+	}
+	
+// ===== ROOT LAYOUT INSPECTOR =====
     if (showRootInspector) {
         val working = remember { JSONObject(layout.toString()) }
-    
+        var dummyTick by remember { mutableStateOf(0) }
+
         val onChange: () -> Unit = {
-            onRootLivePreview(JSONObject(working.toString()))
+            onRootLivePreview(JSONObject(working.toString())) // nuova istanza => recomposition garantita
         }
-    
+
         BackHandler(enabled = true) {
-            onRootLivePreview(null)
+            onRootLivePreview(null) // chiudi preview
             showRootInspector = false
         }
-    
-        // Scrim leggero per intercettare i tap fuori dal pannello e chiudere
-        Box(
-            Modifier
-                .fillMaxSize()
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) {
-                    onRootLivePreview(null)
-                    showRootInspector = false
+
+// ANTEPRIMA in alto della BottomBar (proiettata)
+        val previewTopPad = topPadding + 8.dp
+        val hasBottomPreview = working.optJSONObject("bottomBar")?.optJSONArray("items")?.length() ?: 0 > 0 ||
+                working.optJSONArray("bottomButtons")?.length() ?: 0 > 0
+        if (hasBottomPreview) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
+                    .shadow(10.dp, RoundedCornerShape(16.dp))
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                tonalElevation = 6.dp
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelLarge)
+                    val bb = working.optJSONObject("bottomBar")
+                    val cont = bb?.optJSONObject("container")
+                    val items = bb?.optJSONArray("items") ?: run {
+// fallback legacy
+                        val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
+                        JSONArray().apply {
+                            for (i in 0 until legacy.length()) {
+                                val it = legacy.optJSONObject(i) ?: continue
+                                put(JSONObject().apply {
+                                    put("type","button")
+                                    put("label", it.optString("label","Button"))
+                                    put("actionId", it.optString("actionId",""))
+                                    put("style","text")
+                                })
+                            }
+                        }
+                    }
+                    StyledContainer(cont ?: JSONObject(), Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RenderBarItemsRow(items) { /* anteprima: no-op */ }
+                        }
+                    }
                 }
-        )
-    
-        // Pannello centrato e traslucido; lascia spazio a top/bottom bar
-        val surfaceAlpha = 0.82f
-        val panelShape = RoundedCornerShape(16.dp)
-    
+            }
+        }
+
         Surface(
             modifier = Modifier
-                .align(Alignment.Center)
-                // Notch e lati sicuri
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-                // Spazio sopra per la TopBar reale e sotto un margine
-                .padding(top = topPadding + 8.dp, bottom = 12.dp, start = 12.dp, end = 12.dp)
-                // Larghezza ampia ma non a pieno schermo
-                .fillMaxWidth(0.92f)
-                // Altezza adattiva con un limite massimo
-                .fillMaxHeight(0.82f),
-            shape = panelShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = surfaceAlpha),
-            contentColor = bestOnColor(MaterialTheme.colorScheme.surface),
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.75f),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            tonalElevation = 8.dp
         ) {
             Column(
                 Modifier
+                    .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Header del pannello
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Layout (root)", style = MaterialTheme.typography.titleMedium)
-                    IconButton(onClick = { onRootLivePreview(null); showRootInspector = false }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Chiudi")
-                    }
-                }
-    
-                // PAGE (sfondo)
+// PAGE (sfondo) – live sullo schermo
                 Divider(); Text("Page (sfondo)", style = MaterialTheme.typography.titleMedium)
                 val page = working.optJSONObject("page") ?: JSONObject().also { working.put("page", it) }
                 PageInspectorPanel(page, onChange)
-    
-                // TOP BAR estetica
+
+// Top bar – live sullo schermo
                 Divider(); Text("Top Bar (estetica)", style = MaterialTheme.typography.titleMedium)
                 var topBarEnabled by remember { mutableStateOf(working.optJSONObject("topBar") != null) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2835,6 +3078,7 @@ private fun BoxScope.DesignerOverlay(
                                         put("variant", "small")
                                         put("title", "topbar")
                                         put("scroll", "pinned")
+// Testo chiaro su toni scuri (surface scuro -> onSurface di solito è chiaro nel tema dark)
                                         put("titleColor", "onSurface")
                                         put("actionsColor", "onSurface")
                                         put("divider", false)
@@ -2843,10 +3087,13 @@ private fun BoxScope.DesignerOverlay(
                                             put("corner", 0)
                                             put("borderMode", "full")
                                             put("borderThicknessDp", 2)
+// opzionale: imposta un bordo visibile scuro/chiaro a seconda del tema
+// put("borderColor", "outline")
                                         })
                                         put("actions", JSONArray())
                                     })
                                 }
+
                             } else {
                                 working.remove("topBar")
                             }
@@ -2858,11 +3105,18 @@ private fun BoxScope.DesignerOverlay(
                 }
                 working.optJSONObject("topBar")?.let { tb ->
                     TopBarInspectorPanel(tb, onChange)
+// Editor contenitore unificato
                     ContainerEditorSection(tb, key = "container", title = "TopBar – Contenitore", onChange = onChange)
-                    BarItemsEditor(owner = tb, arrayKey = "actions", title = "TopBar – Azioni", onChange = onChange)
+// Editor azioni (icone, bottoni, spacer)
+                    BarItemsEditor(
+                        owner = tb,
+                        arrayKey = "actions",
+                        title = "TopBar – Azioni",
+                        onChange = onChange
+                    )
                 }
-    
-                // BOTTOM BAR estetica
+
+// Bottom bar estetica (preview in alto)
                 Divider(); Text("Bottom Bar (estetica)", style = MaterialTheme.typography.titleMedium)
                 var bottomEnabled by remember { mutableStateOf(working.optJSONObject("bottomBar") != null) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2894,15 +3148,19 @@ private fun BoxScope.DesignerOverlay(
                     ContainerEditorSection(bb, key = "container", title = "BottomBar – Contenitore", onChange = onChange)
                     BarItemsEditor(owner = bb, arrayKey = "items", title = "BottomBar – Items", onChange = onChange)
                 }
-    
-                // Opzioni root varie (scroll/FAB ecc.)
+
+// VARI – Scroll on/off, FAB (il resto del root)
                 Divider(); RootInspectorPanel(working, onChange)
-    
+
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { onRootLivePreview(null); showRootInspector = false }) { Text("Annulla") }
+                    TextButton(onClick = {
+                        onRootLivePreview(null)
+                        showRootInspector = false
+                    }) { Text("Annulla") }
                     Spacer(Modifier.weight(1f))
                     Button(onClick = {
+// Commit nel layout originale
                         val keys = listOf("page","topBar","topTitle","topActions","bottomBar","bottomButtons","fab","scroll")
                         keys.forEach { k -> layout.put(k, working.opt(k)) }
                         onRootLivePreview(null)
@@ -2913,7 +3171,6 @@ private fun BoxScope.DesignerOverlay(
         }
     }
 }
-
 
 /* =========================================================
 * OVERLAY INGRANAGGIO PER CONTENITORI
