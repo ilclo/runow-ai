@@ -2,7 +2,8 @@
 
 package ai.runow.ui.renderer
 
-
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -834,431 +835,547 @@ private fun BoxScope.SectionHeaderQuickEditBar(
     onConfirm: (JSONObject) -> Unit,
     onCancel: () -> Unit
 ) {
-    // Copia di lavoro (non altera il layout finché non premi OK)
     val working = remember { JSONObject(initial.toString()) }
 
-    // Tab attivo: "text" | "container"
-    var tab by remember { mutableStateOf("text") }
+    // Stato principale
+    var tab by remember { mutableStateOf("text") } // "text" | "container"
+    var showTextTools by remember { mutableStateOf(true) }
+    var showContainerTools by remember { mutableStateOf(false) }
 
-    // Sottomenu testo
-    var showTextEditor by remember { mutableStateOf(false) }
+    // Sottomenu/Testo
+    var showKeyboardEditor by remember { mutableStateOf(true) }
     var expTextColor by remember { mutableStateOf(false) }
     var expTextSize by remember { mutableStateOf(false) }
     var expTextWeight by remember { mutableStateOf(false) }
     var expTextAlign by remember { mutableStateOf(false) }
     var expTextFont by remember { mutableStateOf(false) }
 
-    // Sottomenu contenitore
+    // Sottomenu/Contenitore
     var expStyle by remember { mutableStateOf(false) }
-    var showColorPanel by remember { mutableStateOf(false) } // barra superiore 3‑menu
-    var expC1 by remember { mutableStateOf(false) }
-    var expOrient by remember { mutableStateOf(false) }
-    var expC2 by remember { mutableStateOf(false) }
     var expCorner by remember { mutableStateOf(false) }
-    var expBorderThick by remember { mutableStateOf(false) }
+    var expBorderThickness by remember { mutableStateOf(false) }
     var expBorderColor by remember { mutableStateOf(false) }
-    var showWidthPanel by remember { mutableStateOf(false) } // slider flottante
+    var showWidthSlider by remember { mutableStateOf(false) }
 
-    // Back = Annulla
+    // Barre "sopra" al main (colori, immagine/adattamento, ecc.)
+    var showColorBar by remember { mutableStateOf(false) }
+    var showImageFitBar by remember { mutableStateOf(false) }
+
+    // Image picker
+    val context = LocalContext.current
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            val cont = ensureContainer(working)
+            cont.put("bgImageUri", it.toString())
+            // Valore di default adattamento
+            cont.put("imageFit", cont.optString("imageFit", "fit"))
+        }
+    }
+
+    // Back = annulla
     BackHandler(enabled = true) { onCancel() }
 
-    fun ensureContainer(): JSONObject {
-        val c = working.optJSONObject("container")
-        if (c != null) return c
-        val created = JSONObject().apply {
-            put("style", "surface"); put("corner", 12); put("borderMode", "none")
-        }
-        working.put("container", created)
-        return created
+    fun commit() {
+        // live preview opzionale: qui non emettiamo callback per non mutare il layout esterno fino a OK
+        // Se vuoi anteprima "live", puoi chiamare onConfirm(working), ma cambierebbe la semantica di Annulla
     }
 
-    // ====== BARRA COLORE (sopra) – appare solo se richiesto ======
-    AnimatedVisibility(visible = showColorPanel) {
-        val cont = ensureContainer()
-        val current1 = cont.optString("gradient1", cont.optString("customColor",""))
-        val current2 = cont.optString("gradient2","")
-        val currentOrient = cont.optString("gradientOrientation","horizontal")
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 120.dp, start = 12.dp, end = 12.dp) // sopra la barra principale
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-            tonalElevation = 8.dp,
-            shadowElevation = 8.dp
-        ) {
-            Row(
-                Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Colore 1 (dropdown)
-                Box {
-                    TextButton(onClick = { expC1 = true }) {
-                        Icon(Icons.Filled.Palette, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (current1.isBlank()) "(color1)" else current1.take(10))
-                    }
-                    DropdownMenu(expanded = expC1, onDismissRequest = { expC1 = false }) {
-                        DropdownMenuItem(text = { Text("(default)") }, onClick = {
-                            cont.remove("customColor"); cont.remove("gradient1"); expC1 = false
-                        })
-                        NAMED_SWATCHES.forEach { (name, argb) ->
-                            val hex = "#%06X".format(argb and 0xFFFFFF)
-                            DropdownMenuItem(
-                                leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
-                                text = { Text(name) },
-                                onClick = {
-                                    cont.put("customColor", hex) // compat
-                                    cont.put("gradient1", hex)
-                                    expC1 = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Orientamento gradiente
-                Box {
-                    TextButton(onClick = { expOrient = true }) {
-                        Icon(
-                            if (currentOrient == "vertical") Icons.Filled.SwapVert else Icons.Filled.SwapHoriz,
-                            null
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (currentOrient == "vertical") "vertical" else "horizontal")
-                    }
-                    DropdownMenu(expanded = expOrient, onDismissRequest = { expOrient = false }) {
-                        DropdownMenuItem(text = { Text("horizontal") }, onClick = {
-                            cont.put("gradientOrientation","horizontal"); expOrient = false
-                        })
-                        DropdownMenuItem(text = { Text("vertical") }, onClick = {
-                            cont.put("gradientOrientation","vertical"); expOrient = false
-                        })
-                    }
-                }
-
-                // Colore 2 (dropdown)
-                Box {
-                    TextButton(onClick = { expC2 = true }) {
-                        Icon(Icons.Filled.Palette, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (current2.isBlank()) "(color2)" else current2.take(10))
-                    }
-                    DropdownMenu(expanded = expC2, onDismissRequest = { expC2 = false }) {
-                        DropdownMenuItem(text = { Text("(nessuno)") }, onClick = {
-                            cont.remove("gradient2"); expC2 = false
-                        })
-                        NAMED_SWATCHES.forEach { (name, argb) ->
-                            val hex = "#%06X".format(argb and 0xFFFFFF)
-                            DropdownMenuItem(
-                                leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
-                                text = { Text(name) },
-                                onClick = {
-                                    cont.put("gradient2", hex)
-                                    expC2 = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // ====== SLIDER WIDTH (flottante) – appare solo se richiesto ======
-    AnimatedVisibility(visible = showWidthPanel) {
-        val cont = ensureContainer()
-        val isFixed = cont.optString("widthMode","wrap") == "fixed_dp"
-        var width by remember { mutableStateOf(cont.optDouble("widthDp", 160.0).toFloat()) }
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 120.dp, start = 12.dp, end = 12.dp) // sopra la barra principale
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-            tonalElevation = 8.dp,
-            shadowElevation = 8.dp
-        ) {
-            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = !isFixed,
-                        onClick = {
-                            cont.put("widthMode","wrap")
-                            showWidthPanel = false
-                        },
-                        label = { Text("wrap") }
-                    )
-                    FilterChip(
-                        selected = isFixed,
-                        onClick = {
-                            cont.put("widthMode","fixed_dp")
-                            // lascia aperto per lo slider
-                        },
-                        label = { Text("fixed dp") }
-                    )
-                }
-                if (cont.optString("widthMode","wrap") == "fixed_dp") {
-                    Spacer(Modifier.height(6.dp))
-                    Slider(
-                        value = width,
-                        onValueChange = {
-                            width = it
-                            cont.put("widthDp", it.toDouble())
-                        },
-                        valueRange = 80f..600f
-                    )
-                    Text("${width.toInt()} dp", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-    }
-
-    // ====== EDITOR TESTO (TextField) – ancorato sopra alla tastiera ======
-    AnimatedVisibility(visible = showTextEditor) {
-        var text by remember { mutableStateOf(working.optString("title","")) }
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 12.dp)
-                .imePadding(),  // si appoggia alla parte alta della tastiera
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-            tonalElevation = 8.dp,
-            shadowElevation = 8.dp
-        ) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Titolo SectionHeader", style = MaterialTheme.typography.labelLarge)
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it; },
-                    singleLine = false,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = { showTextEditor = false }) { Text("Chiudi") }
-                    Spacer(Modifier.width(8.dp))
-                    Button(onClick = {
-                        working.put("title", text)
-                        showTextEditor = false
-                    }) { Text("OK") }
-                }
-            }
-        }
-    }
-
-    // ====== BARRA PRINCIPALE (in basso): Tab e Strumenti + OK/Annulla ======
+    // --- Mini barre "sospese" SOPRA la barra principale ---
     Column(
-        modifier = Modifier
+        Modifier
             .align(Alignment.BottomCenter)
             .padding(horizontal = 12.dp, vertical = 10.dp)
             .imePadding()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
     ) {
-        // 1) STRISCIA STRUMENTI sotto‑tab (dinamica)
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-            tonalElevation = 6.dp,
-            shadowElevation = 6.dp
-        ) {
-            // Tools: un’unica riga con icone che aprono dropdown/pannelli
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+        // 1) Barra "Colori contenitore" (sopra le altre)
+        AnimatedVisibility(visible = showColorBar) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                tonalElevation = 6.dp,
+                shadowElevation = 6.dp,
+                modifier = Modifier.padding(bottom = 8.dp)
             ) {
-                if (tab == "text") {
-                    // Testo: editor, font, weight, colore, size, align
-                    IconButton(onClick = { showTextEditor = true }) { Icon(Icons.Filled.Edit, null) }
-                    // font family
-                    Box {
-                        IconButton(onClick = { expTextFont = true }) { Icon(Icons.Filled.Title, null) }
-                        DropdownMenu(expanded = expTextFont, onDismissRequest = { expTextFont = false }) {
-                            // poche opzioni per sicurezza; amplia se hai FONT_FAMILY_OPTIONS
-                            listOf("(default)","inter","poppins","rubik","manrope","mulish","urbanist","serif","mono").forEach { f ->
-                                DropdownMenuItem(text = { Text(f) }, onClick = {
-                                    if (f == "(default)") working.remove("fontFamily") else working.put("fontFamily", f)
-                                    expTextFont = false
-                                })
-                            }
-                        }
-                    }
-                    // weight
-                    Box {
-                        IconButton(onClick = { expTextWeight = true }) { Icon(Icons.Filled.FormatBold, null) }
-                        DropdownMenu(expanded = expTextWeight, onDismissRequest = { expTextWeight = false }) {
-                            listOf("(default)","w300","w400","w500","w600","w700").forEach { w ->
-                                DropdownMenuItem(text = { Text(w) }, onClick = {
-                                    if (w == "(default)") working.remove("fontWeight") else working.put("fontWeight", w)
-                                    expTextWeight = false
-                                })
-                            }
-                        }
-                    }
-                    // colore
-                    Box {
-                        IconButton(onClick = { expTextColor = true }) { Icon(Icons.Filled.Palette, null) }
-                        DropdownMenu(expanded = expTextColor, onDismissRequest = { expTextColor = false }) {
-                            DropdownMenuItem(text = { Text("(default)") }, onClick = {
-                                working.remove("textColor"); expTextColor = false
-                            })
-                            NAMED_SWATCHES.forEach { (name, argb) ->
-                                val hex = "#%06X".format(argb and 0xFFFFFF)
-                                DropdownMenuItem(
-                                    leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
-                                    text = { Text(name) },
-                                    onClick = { working.put("textColor", hex); expTextColor = false }
-                                )
-                            }
-                        }
-                    }
-                    // dimensione
-                    Box {
-                        IconButton(onClick = { expTextSize = true }) { Icon(Icons.Filled.FormatSize, null) }
-                        DropdownMenu(expanded = expTextSize, onDismissRequest = { expTextSize = false }) {
-                            listOf("(default)","14","16","18","20","22","24","28","32","36").forEach { s ->
-                                DropdownMenuItem(text = { Text(s) }, onClick = {
-                                    if (s == "(default)") working.remove("textSizeSp")
-                                    else working.put("textSizeSp", s.toDouble())
-                                    expTextSize = false
-                                })
-                            }
-                        }
-                    }
-                    // allineamento
-                    Box {
-                        IconButton(onClick = { expTextAlign = true }) { Icon(Icons.Filled.FormatAlignCenter, null) }
-                        DropdownMenu(expanded = expTextAlign, onDismissRequest = { expTextAlign = false }) {
-                            listOf("start","center","end").forEach { a ->
-                                DropdownMenuItem(text = { Text(a) }, onClick = {
-                                    working.put("align", a); expTextAlign = false
-                                })
-                            }
-                        }
-                    }
-                } else {
-                    val cont = ensureContainer()
-                    // stile (include topbottom)
-                    Box {
-                        IconButton(onClick = { expStyle = true }) { Icon(Icons.Filled.Tune, null) }
-                        DropdownMenu(expanded = expStyle, onDismissRequest = { expStyle = false }) {
-                            listOf("surface","full","outlined","topbottom","tonal","primary","text").forEach { s ->
-                                DropdownMenuItem(text = { Text(s) }, onClick = {
-                                    cont.put("style", s); expStyle = false
-                                })
-                            }
-                        }
-                    }
-                    // colore (apre barra superiore 3‑menu)
-                    IconButton(onClick = {
-                        showColorPanel = !showColorPanel
-                        // chiudi eventuali altri pannelli
-                        showWidthPanel = false
-                    }) { Icon(Icons.Filled.Palette, null) }
+                ContainerColorGradientBar(
+                    container = ensureContainer(working),
+                    onChange = ::commit,
+                    onClose = { showColorBar = false }
+                )
+            }
+        }
 
-                    // corner
-                    Box {
-                        IconButton(onClick = { expCorner = true }) { Icon(Icons.Filled.CropSquare, null) }
-                        DropdownMenu(expanded = expCorner, onDismissRequest = { expCorner = false }) {
-                            listOf("0","4","8","12","16","20","24","32").forEach { c ->
-                                DropdownMenuItem(text = { Text("corner $c dp") }, onClick = {
-                                    cont.put("corner", c.toDouble()); expCorner = false
-                                })
-                            }
-                        }
+        // 2) Barra "Adattamento immagine" (sopra la mini-bar strumenti)
+        AnimatedVisibility(visible = showImageFitBar) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                tonalElevation = 6.dp,
+                shadowElevation = 6.dp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                ImageFitBar(
+                    container = ensureContainer(working),
+                    onChange = ::commit,
+                    onClose = { showImageFitBar = false }
+                )
+            }
+        }
+
+        // 3) Mini‑bar strumenti dinamica (T o Contenitore)
+        AnimatedVisibility(visible = showTextTools || showContainerTools) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                tonalElevation = 6.dp,
+                shadowElevation = 6.dp
+            ) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (tab == "text" && showTextTools) {
+                        TextToolsMiniBar(
+                            block = working,
+                            showKeyboardEditor = showKeyboardEditor,
+                            expTextColor = expTextColor,
+                            expTextSize = expTextSize,
+                            expTextWeight = expTextWeight,
+                            expTextAlign = expTextAlign,
+                            expTextFont = expTextFont,
+                            onToggle = { what ->
+                                when (what) {
+                                    "color" -> expTextColor = true
+                                    "size" -> expTextSize = true
+                                    "weight" -> expTextWeight = true
+                                    "align" -> expTextAlign = true
+                                    "font" -> expTextFont = true
+                                }
+                            },
+                            onDismiss = {
+                                expTextColor = false; expTextSize = false
+                                expTextWeight = false; expTextAlign = false; expTextFont = false
+                            },
+                            onChange = ::commit
+                        )
                     }
-                    // spessore bordo
-                    Box {
-                        IconButton(onClick = { expBorderThick = true }) { Icon(Icons.Filled.BorderAll, null) }
-                        DropdownMenu(expanded = expBorderThick, onDismissRequest = { expBorderThick = false }) {
-                            listOf("0","1","2","3","4","6","8").forEach { th ->
-                                DropdownMenuItem(text = { Text("$th dp") }, onClick = {
-                                    if (th == "0") cont.remove("borderThicknessDp")
-                                    else cont.put("borderThicknessDp", th.toDouble())
-                                    expBorderThick = false
-                                })
-                            }
-                        }
+
+                    if (tab == "container" && showContainerTools) {
+                        ContainerToolsMiniBar(
+                            container = ensureContainer(working),
+                            onPickImage = { pickImage.launch("image/*") },
+                            onOpenColorBar = { showColorBar = true },
+                            onOpenImageFitBar = { showImageFitBar = true },
+                            onOpenCorner = { expCorner = true },
+                            onOpenStyle = { expStyle = true },
+                            onOpenBorderThickness = { expBorderThickness = true },
+                            onOpenBorderColor = { expBorderColor = true },
+                            onOpenWidthSlider = { showWidthSlider = true },
+                            onChange = ::commit
+                        )
                     }
-                    // colore bordo
-                    Box {
-                        IconButton(onClick = { expBorderColor = true }) { Icon(Icons.Filled.BorderColor, null) }
-                        DropdownMenu(expanded = expBorderColor, onDismissRequest = { expBorderColor = false }) {
-                            DropdownMenuItem(text = { Text("(default)") }, onClick = {
-                                cont.remove("borderColor"); expBorderColor = false
-                            })
-                            NAMED_SWATCHES.forEach { (name, argb) ->
-                                val hex = "#%06X".format(argb and 0xFFFFFF)
-                                DropdownMenuItem(
-                                    leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
-                                    text = { Text(name) },
-                                    onClick = { cont.put("borderColor", hex); expBorderColor = false }
-                                )
-                            }
-                        }
-                    }
-                    // width/wrap + slider flottante
-                    IconButton(onClick = {
-                        showWidthPanel = !showWidthPanel
-                        // chiudi eventuali altre barre superiori
-                        showColorPanel = false
-                    }) { Icon(Icons.Filled.Straighten, null) }
                 }
             }
         }
 
         Spacer(Modifier.height(8.dp))
 
-        // 2) RIGA TAB + OK/Annulla – tab scrollabili dietro i bottoni
+        // 4) Barra principale: chips scrollabili dietro OK/Annulla fissi
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
             tonalElevation = 8.dp,
             shadowElevation = 8.dp
         ) {
-            Box(Modifier.fillMaxWidth()) {
-                // row scrollabile dei tab (a sinistra)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Parte scrollabile a sinistra
                 Row(
                     Modifier
-                        .horizontalScroll(rememberScrollState())
-                        .padding(start = 8.dp, end = 140.dp, top = 8.dp, bottom = 8.dp), // spazio destro sotto ai bottoni
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilterChip(
                         selected = tab == "text",
-                        onClick = { tab = "text"; showColorPanel = false; showWidthPanel = false },
-                        label = { Text("Testo") },
+                        onClick = {
+                            tab = "text"
+                            showTextTools = true
+                            showContainerTools = false
+                        },
+                        label = { Text("T") },
                         leadingIcon = { Icon(Icons.Filled.Title, null) }
                     )
                     FilterChip(
                         selected = tab == "container",
-                        onClick = { tab = "container"; /* pannelli chiusi di default */ },
+                        onClick = {
+                            tab = "container"
+                            showContainerTools = true
+                            showTextTools = false
+                        },
                         label = { Text("Contenitore") },
                         leadingIcon = { Icon(Icons.Filled.Widgets, null) }
                     )
                 }
-
-                // bottoni fissi a destra
-                Row(
-                    Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 8.dp, top = 4.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = { onCancel() }) { Text("Annulla") }
+                // Parte fissa a destra: Annulla / OK
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onCancel) { Text("Annulla") }
                     Button(onClick = { onConfirm(working) }) { Text("OK") }
                 }
             }
         }
+
+        // 5) Editor testo (inline) — sta SOPRA la tastiera
+        if (tab == "text" && showKeyboardEditor) {
+            Spacer(Modifier.height(8.dp))
+            val text = remember { mutableStateOf(working.optString("title", "")) }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                tonalElevation = 4.dp
+            ) {
+                OutlinedTextField(
+                    value = text.value,
+                    onValueChange = {
+                        text.value = it
+                        working.put("title", it)
+                        commit()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    singleLine = true,
+                    label = { Text("Testo intestazione") },
+                    trailingIcon = {
+                        IconButton(onClick = { showKeyboardEditor = false }) {
+                            Icon(Icons.Filled.Close, contentDescription = null)
+                        }
+                    }
+                )
+            }
+        }
+
+        // 6) Slider flottante per larghezza (fix-dp) del contenitore
+        AnimatedVisibility(visible = showWidthSlider) {
+            val cont = ensureContainer(working)
+            var width by remember { mutableStateOf(cont.optDouble("widthDp", 0.0).toFloat()) }
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                tonalElevation = 6.dp,
+                shadowElevation = 6.dp,
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Larghezza", style = MaterialTheme.typography.labelLarge)
+                        AssistChip(
+                            onClick = {
+                                // wrap -> rimuovi widthDp
+                                cont.remove("widthDp")
+                                showWidthSlider = false
+                                commit()
+                            },
+                            label = { Text("wrap") }
+                        )
+                    }
+                    Slider(
+                        value = width,
+                        onValueChange = {
+                            width = it
+                            cont.put("widthDp", it.toDouble())
+                            commit()
+                        },
+                        valueRange = 100f..600f,
+                        steps = 10
+                    )
+                    Text("${width.toInt()} dp")
+                }
+            }
+        }
+
+        // Menu dialog/dismiss per Container (style, corner, border)
+        DropdownMenu(expanded = expStyle, onDismissRequest = { expStyle = false }) {
+            listOf("surface","full","outlined","tonal","primary","text","topbottom").forEach { s ->
+                DropdownMenuItem(text = { Text(s) }, onClick = {
+                    ensureContainer(working).put("style", s); expStyle = false; commit()
+                })
+            }
+        }
+        DropdownMenu(expanded = expCorner, onDismissRequest = { expCorner = false }) {
+            listOf("0","4","8","12","16","20","24","32").forEach { c ->
+                DropdownMenuItem(text = { Text("corner $c dp") }, onClick = {
+                    ensureContainer(working).put("corner", c.toDouble()); expCorner = false; commit()
+                })
+            }
+        }
+        DropdownMenu(expanded = expBorderThickness, onDismissRequest = { expBorderThickness = false }) {
+            listOf("0","1","2","3","4","6","8").forEach { t ->
+                DropdownMenuItem(text = { Text("$t dp") }, onClick = {
+                    ensureContainer(working).put("borderThicknessDp", t.toDouble()); expBorderThickness = false; commit()
+                })
+            }
+        }
+        DropdownMenu(expanded = expBorderColor, onDismissRequest = { expBorderColor = false }) {
+            DropdownMenuItem(text = { Text("(default)") }, onClick = {
+                val cont = ensureContainer(working)
+                cont.remove("borderColor"); expBorderColor = false; commit()
+            })
+            NAMED_SWATCHES.forEach { (name, argb) ->
+                val hex = "#%06X".format(argb and 0xFFFFFF)
+                DropdownMenuItem(
+                    leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
+                    text = { Text(name) },
+                    onClick = {
+                        val cont = ensureContainer(working)
+                        cont.put("borderColor", hex); expBorderColor = false; commit()
+                    }
+                )
+            }
+        }
     }
+}
+
+// -- Mini-bar TESTO riusabile --
+@Composable
+private fun TextToolsMiniBar(
+    block: JSONObject,
+    showKeyboardEditor: Boolean,
+    expTextColor: Boolean,
+    expTextSize: Boolean,
+    expTextWeight: Boolean,
+    expTextAlign: Boolean,
+    expTextFont: Boolean,
+    onToggle: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onChange: () -> Unit
+) {
+    // Colore testo
+    Box {
+        IconButton(onClick = { onToggle("color") }) { Icon(Icons.Filled.Palette, null) }
+        DropdownMenu(expanded = expTextColor, onDismissRequest = onDismiss) {
+            DropdownMenuItem(text = { Text("(default)") }, onClick = {
+                block.remove("textColor"); onDismiss(); onChange()
+            })
+            NAMED_SWATCHES.forEach { (name, argb) ->
+                val hex = "#%06X".format(argb and 0xFFFFFF)
+                DropdownMenuItem(
+                    leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
+                    text = { Text(name) },
+                    onClick = {
+                        block.put("textColor", hex); onDismiss(); onChange()
+                    }
+                )
+            }
+        }
+    }
+    // Dimensione
+    Box {
+        IconButton(onClick = { onToggle("size") }) { Icon(Icons.Filled.FormatSize, null) }
+        DropdownMenu(expanded = expTextSize, onDismissRequest = onDismiss) {
+            listOf("(default)","14","16","18","20","22","24","28","32","36").forEach { s ->
+                DropdownMenuItem(text = { Text(s) }, onClick = {
+                    if (s == "(default)") block.remove("textSizeSp") else block.put("textSizeSp", s.toDouble())
+                    onDismiss(); onChange()
+                })
+            }
+        }
+    }
+    // Peso
+    Box {
+        IconButton(onClick = { onToggle("weight") }) { Icon(Icons.Filled.FormatBold, null) }
+        DropdownMenu(expanded = expTextWeight, onDismissRequest = onDismiss) {
+            listOf("(default)","w300","w400","w500","w600","w700").forEach { w ->
+                DropdownMenuItem(text = { Text(w) }, onClick = {
+                    if (w == "(default)") block.remove("fontWeight") else block.put("fontWeight", w)
+                    onDismiss(); onChange()
+                })
+            }
+        }
+    }
+    // Allineamento
+    Box {
+        IconButton(onClick = { onToggle("align") }) { Icon(Icons.Filled.FormatAlignCenter, null) }
+        DropdownMenu(expanded = expTextAlign, onDismissRequest = onDismiss) {
+            listOf("start","center","end").forEach { a ->
+                DropdownMenuItem(text = { Text(a) }, onClick = {
+                    block.writeAlign(a); onDismiss(); onChange()
+                })
+            }
+        }
+    }
+    // Font family
+    Box {
+        IconButton(onClick = { onToggle("font") }) { Icon(Icons.Filled.Title, null) }
+        DropdownMenu(expanded = expTextFont, onDismissRequest = onDismiss) {
+            (listOf("(default)") + FONT_FAMILY_OPTIONS).distinct().forEach { f ->
+                DropdownMenuItem(text = { Text(f) }, onClick = {
+                    if (f == "(default)") block.remove("fontFamily") else block.put("fontFamily", f)
+                    onDismiss(); onChange()
+                })
+            }
+        }
+    }
+}
+
+// -- Mini-bar CONTENITORE riusabile --
+@Composable
+private fun ContainerToolsMiniBar(
+    container: JSONObject,
+    onPickImage: () -> Unit,
+    onOpenColorBar: () -> Unit,
+    onOpenImageFitBar: () -> Unit,
+    onOpenCorner: () -> Unit,
+    onOpenStyle: () -> Unit,
+    onOpenBorderThickness: () -> Unit,
+    onOpenBorderColor: () -> Unit,
+    onOpenWidthSlider: () -> Unit,
+    onChange: () -> Unit
+) {
+    // Colori/Gradiente
+    IconButton(onClick = onOpenColorBar) { Icon(Icons.Filled.Palette, null) }
+    // Stile (surface/full/outlined/tonal/primary/text/topbottom)
+    IconButton(onClick = onOpenStyle) { Icon(Icons.Filled.Tune, null) }
+    // Corner
+    IconButton(onClick = onOpenCorner) { Icon(Icons.Filled.CropSquare, null) }
+    // Spessore bordo
+    IconButton(onClick = onOpenBorderThickness) { Icon(Icons.Filled.BorderStyle, null) }
+    // Colore bordo
+    IconButton(onClick = onOpenBorderColor) { Icon(Icons.Filled.BorderColor, null) }
+    // Width/Wrap (slider)
+    IconButton(onClick = onOpenWidthSlider) { Icon(Icons.Filled.Straighten, null) }
+    // Immagine di sfondo: pick + adattamento
+    IconButton(onClick = onPickImage) { Icon(Icons.Filled.Image, null) }
+    IconButton(onClick = onOpenImageFitBar) { Icon(Icons.Filled.AspectRatio, null) }
+}
+
+// -- Barra Colori/Gradiente (3 zone: Colore1 / Orientamento / Colore2) --
+@Composable
+private fun ContainerColorGradientBar(
+    container: JSONObject,
+    onChange: () -> Unit,
+    onClose: () -> Unit
+) {
+    var expColor1 by remember { mutableStateOf(false) }
+    var expColor2 by remember { mutableStateOf(false) }
+    var expOrient by remember { mutableStateOf(false) }
+
+    Row(
+        Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Colore 1
+        Box {
+            AssistChip(onClick = { expColor1 = true }, label = { Text("Colore 1") })
+            DropdownMenu(expanded = expColor1, onDismissRequest = { expColor1 = false }) {
+                DropdownMenuItem(text = { Text("(default)") }, onClick = {
+                    container.remove("gradient1"); container.remove("customColor"); expColor1 = false; onChange()
+                })
+                NAMED_SWATCHES.forEach { (name, argb) ->
+                    val hex = "#%06X".format(argb and 0xFFFFFF)
+                    DropdownMenuItem(
+                        leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
+                        text = { Text(name) },
+                        onClick = {
+                            container.put("gradient1", hex)
+                            container.put("customColor", hex)
+                            expColor1 = false
+                            onChange()
+                        }
+                    )
+                }
+            }
+        }
+
+        // Orientamento gradiente
+        Box {
+            AssistChip(onClick = { expOrient = true }, label = { Text("Gradiente") })
+            DropdownMenu(expanded = expOrient, onDismissRequest = { expOrient = false }) {
+                listOf("(nessuno)","verticale","orizzontale").forEach { o ->
+                    DropdownMenuItem(text = { Text(o) }, onClick = {
+                        when (o) {
+                            "(nessuno)" -> container.remove("gradientOrientation")
+                            "verticale" -> container.put("gradientOrientation", "vertical")
+                            "orizzontale" -> container.put("gradientOrientation", "horizontal")
+                        }
+                        expOrient = false; onChange()
+                    })
+                }
+            }
+        }
+
+        // Colore 2
+        Box {
+            AssistChip(onClick = { expColor2 = true }, label = { Text("Colore 2") })
+            DropdownMenu(expanded = expColor2, onDismissRequest = { expColor2 = false }) {
+                DropdownMenuItem(text = { Text("(default)") }, onClick = {
+                    container.remove("gradient2"); expColor2 = false; onChange()
+                })
+                NAMED_SWATCHES.forEach { (name, argb) ->
+                    val hex = "#%06X".format(argb and 0xFFFFFF)
+                    DropdownMenuItem(
+                        leadingIcon = { Box(Modifier.size(16.dp).background(Color(argb), RoundedCornerShape(3.dp))) },
+                        text = { Text(name) },
+                        onClick = {
+                            container.put("gradient2", hex)
+                            expColor2 = false; onChange()
+                        }
+                    )
+                }
+            }
+        }
+
+        IconButton(onClick = onClose) { Icon(Icons.Filled.Close, null) }
+    }
+}
+
+// -- Barra Adattamento Immagine (fit/crop/fill/center/start/end) --
+@Composable
+private fun ImageFitBar(
+    container: JSONObject,
+    onChange: () -> Unit,
+    onClose: () -> Unit
+) {
+    val options = listOf("fit","crop","fillBounds","center","start","end")
+    Row(
+        Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEach { opt ->
+                AssistChip(
+                    onClick = { container.put("imageFit", opt); onChange() },
+                    label = { Text(opt) }
+                )
+            }
+        }
+        IconButton(onClick = onClose) { Icon(Icons.Filled.Close, null) }
+    }
+}
+
+// -- Utility locale: garantisce il container --
+private fun ensureContainer(block: JSONObject): JSONObject {
+    val c = block.optJSONObject("container")
+    if (c != null) return c
+    val created = JSONObject().apply {
+        put("style", "surface")
+        put("corner", 12)
+        put("borderMode", "none")
+        put("bgAlpha", 0.88)
+    }
+    block.put("container", created)
+    return created
 }
 
 
@@ -2895,9 +3012,8 @@ private fun BoxScope.DesignerOverlay(
             .onGloballyPositioned { onOverlayHeight(it.size.height) },
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-// ===== PALETTE =====
-        if (showQuickEditFor == null) {
-            Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
+        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
+            if (showQuickEditFor == null) {
                 Row(
                     Modifier
                         .padding(10.dp)
@@ -2906,92 +3022,92 @@ private fun BoxScope.DesignerOverlay(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Palette:", style = MaterialTheme.typography.labelLarge)
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newRow(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("Row") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
-        
+
                     FilledTonalButton(onClick = {
                         val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
                         setSelectedPath(iconPath); onLayoutChange()
                     }) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
                         setSelectedPath(path); onLayoutChange()
                     }) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
-        
+
                     FilledTonalButton(onClick = {
                         val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
                         setSelectedPath(path); onLayoutChange()
@@ -2999,130 +3115,279 @@ private fun BoxScope.DesignerOverlay(
                 }
             }
         }
-        // ===== SELEZIONE + SALVATAGGIO =====
-    if (showQuickEditFor == null) {
-        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
-            Column(
-                Modifier
-                    .padding(10.dp)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Selezione:", style = MaterialTheme.typography.labelLarge)
-    
-                    OutlinedButton(onClick = {
-                        selectedPath?.let {
-                            val newPath = moveAndReturnNewPath(layout, it, -1)
-                            setSelectedPath(newPath); onLayoutChange()
-                        }
-                    }) { Icon(Icons.Filled.KeyboardArrowUp, null); Spacer(Modifier.width(4.dp)); Text("Su") }
-    
-                    OutlinedButton(onClick = {
-                        selectedPath?.let {
-                            val newPath = moveAndReturnNewPath(layout, it, +1)
-                            setSelectedPath(newPath); onLayoutChange()
-                        }
-                    }) { Icon(Icons.Filled.KeyboardArrowDown, null); Spacer(Modifier.width(4.dp)); Text("Giù") }
-    
-                    OutlinedButton(onClick = {
-                        selectedPath?.let { duplicate(layout, it); onLayoutChange() }
-                    }) { Icon(Icons.Filled.ContentCopy, null); Spacer(Modifier.width(4.dp)); Text("Duplica") }
-    
-                    TextButton(
-                        onClick = {
-                            selectedPath?.let { remove(layout, it); setSelectedPath(null); onLayoutChange() }
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("Elimina") }
-    
-                    Button(
-                        onClick = {
-                            if (selectedBlock?.optString("type") == "SectionHeader") {
-                                showQuickEditFor = "SectionHeader"
-                            } else {
-                                showInspector = true
-                            }
-                        },
-                        enabled = selectedBlock != null
-                    ) {
-                        Icon(Icons.Filled.Settings, null); Spacer(Modifier.width(6.dp)); Text("Proprietà…")
-                    }
-    
-                    OutlinedButton(onClick = { showRootInspector = true }) {
-                        Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Layout…")
-                    }
-                }
-    
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedButton(onClick = onSaveDraft) { Text("Salva bozza") }
-                    Spacer(Modifier.width(8.dp))
-                    Button(onClick = onPublish) { Text("Pubblica") }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = onReset) { Text("Reset") }
-                }
-            }
-        }
-    }
+
+
+		// ===== PALETTE =====
+		if (showQuickEditFor == null) {
+			Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
+				Row(
+					Modifier
+						.padding(10.dp)
+						.horizontalScroll(rememberScrollState()),
+					horizontalArrangement = Arrangement.spacedBy(8.dp),
+					verticalAlignment = Alignment.CenterVertically
+				) {
+					Text("Palette:", style = MaterialTheme.typography.labelLarge)
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newProgress(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.Flag, null); Spacer(Modifier.width(6.dp)); Text("Progress") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newRow(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("Row") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newAlert(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.Warning, null); Spacer(Modifier.width(6.dp)); Text("Alert") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newImage(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.Image, null); Spacer(Modifier.width(6.dp)); Text("Image") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newSectionHeader(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("SectionHeader") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newButtonRow(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.LibraryAdd, null); Spacer(Modifier.width(6.dp)); Text("ButtonRow") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newList(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.List, null); Spacer(Modifier.width(6.dp)); Text("List") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newSpacer(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.SpaceBar, null); Spacer(Modifier.width(6.dp)); Text("Spacer") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, JSONObject().put("type", "Divider"), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.HorizontalRule, null); Spacer(Modifier.width(6.dp)); Text("Divider") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newDividerV(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("DividerV") }
+
+					FilledTonalButton(onClick = {
+						val iconPath = insertIconMenuReturnIconPath(layout, selectedPath)
+						setSelectedPath(iconPath); onLayoutChange()
+					}) { Icon(Icons.Filled.MoreVert, null); Spacer(Modifier.width(6.dp)); Text("Icon+Menu") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newCard(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.Widgets, null); Spacer(Modifier.width(6.dp)); Text("Card") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newFab(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Fab") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newChipRow(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.Palette, null); Spacer(Modifier.width(6.dp)); Text("ChipRow") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newSlider(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.Tune, null); Spacer(Modifier.width(6.dp)); Text("Slider") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newToggle(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.ToggleOn, null); Spacer(Modifier.width(6.dp)); Text("Toggle") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newTabs(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.Tab, null); Spacer(Modifier.width(6.dp)); Text("Tabs") }
+
+					FilledTonalButton(onClick = {
+						val path = insertBlockAndReturnPath(layout, selectedPath, newMetricsGrid(), "after")
+						setSelectedPath(path); onLayoutChange()
+					}) { Icon(Icons.Filled.GridOn, null); Spacer(Modifier.width(6.dp)); Text("MetricsGrid") }
+				}
+			}
+		}
+
 
 
 // ===== INSPECTOR BLOCCHI =====
-    if (showInspector && selectedBlock != null && selectedPath != null) {
-        val working = remember(selectedPath) { JSONObject(selectedBlock.toString()) }
-        var previewTick by remember { mutableStateOf(0) }
-        val bumpPreview: () -> Unit = { previewTick++ }
+        if (showInspector && selectedBlock != null && selectedPath != null) {
+            val working = remember(selectedPath) { JSONObject(selectedBlock.toString()) }
+            var previewTick by remember { mutableStateOf(0) }
+            val bumpPreview: () -> Unit = { previewTick++ }
 
-        BackHandler(enabled = true) { showInspector = false }
+            BackHandler(enabled = true) { showInspector = false }
 
-        Box(
-            Modifier
-                .fillMaxSize()
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
-        ) {
-// ANTEPRIMA
-            val previewTopPad = topPadding + 8.dp
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
-                    .shadow(10.dp, RoundedCornerShape(16.dp))
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 6.dp
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { }
             ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("Anteprima", style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.height(8.dp))
-                    key(previewTick) {
-                        RenderBlock(
-                            block = working,
-                            dispatch = { },
-                            uiState = mutableMapOf(),
-                            designerMode = false,
-                            path = selectedPath,
-                            menus = emptyMap(),
-                            onSelect = {}
-                        )
+// ANTEPRIMA
+                val previewTopPad = topPadding + 8.dp
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
+                        .shadow(10.dp, RoundedCornerShape(16.dp))
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    tonalElevation = 6.dp
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Anteprima", style = MaterialTheme.typography.labelLarge)
+                        Spacer(Modifier.height(8.dp))
+                        key(previewTick) {
+                            RenderBlock(
+                                block = working,
+                                dispatch = { },
+                                uiState = mutableMapOf(),
+                                designerMode = false,
+                                path = selectedPath,
+                                menus = emptyMap(),
+                                onSelect = {}
+                            )
+                        }
+                    }
+                }
+
+// PANNELLO BASSO
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.6f),
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                    tonalElevation = 8.dp
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        when (working.optString("type")) {
+                            "Card"          -> CardInspectorPanel(working, onChange = bumpPreview)
+                            "ButtonRow"     -> { ButtonRowInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
+                            "SectionHeader" -> { SectionHeaderInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
+                            "Progress"      -> ProgressInspectorPanel(working, onChange = bumpPreview)
+                            "Alert"         -> AlertInspectorPanel(working, onChange = bumpPreview)
+                            "Image"         -> ImageInspectorPanel(working, onChange = bumpPreview)
+                            "ChipRow"       -> ChipRowInspectorPanel(working, onChange = bumpPreview)
+                            "Slider"        -> SliderInspectorPanel(working, onChange = bumpPreview)
+                            "Toggle"        -> ToggleInspectorPanel(working, onChange = bumpPreview)
+                            "Tabs"          -> TabsInspectorPanel(working, onChange = bumpPreview)
+                            "MetricsGrid"   -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
+                            "List"          -> { ListInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
+                            else            -> Text("Inspector non ancora implementato per ${working.optString("type")}")
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { showInspector = false }) { Text("Annulla") }
+                            Spacer(Modifier.weight(1f))
+                            Button(onClick = {
+                                replaceAtPath(layout, selectedPath, working)
+                                showInspector = false
+                                onLayoutChange()
+                            }) { Text("OK") }
+                        }
                     }
                 }
             }
 
-// PANNELLO BASSO
+        }
+		
+		if (showQuickEditFor == "SectionHeader" && selectedBlock != null && selectedPath != null) {
+			SectionHeaderQuickEditBar(
+				initial = JSONObject(selectedBlock.toString()),
+				onConfirm = { edited ->
+					replaceAtPath(layout, selectedPath, edited)
+					onLayoutChange()
+					showQuickEditFor = null
+				},
+				onCancel = {
+					showQuickEditFor = null
+				}
+			)
+		}
+
+
+// ===== ROOT LAYOUT INSPECTOR =====
+        if (showRootInspector) {
+            val working = remember { JSONObject(layout.toString()) }
+            var dummyTick by remember { mutableStateOf(0) }
+
+            val onChange: () -> Unit = {
+                onRootLivePreview(JSONObject(working.toString())) // nuova istanza => recomposition garantita
+            }
+
+            BackHandler(enabled = true) {
+                onRootLivePreview(null) // chiudi preview
+                showRootInspector = false
+            }
+
+// ANTEPRIMA in alto della BottomBar (proiettata)
+            val previewTopPad = topPadding + 8.dp
+            val hasBottomPreview = working.optJSONObject("bottomBar")?.optJSONArray("items")?.length() ?: 0 > 0 ||
+                    working.optJSONArray("bottomButtons")?.length() ?: 0 > 0
+            if (hasBottomPreview) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
+                        .shadow(10.dp, RoundedCornerShape(16.dp))
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    tonalElevation = 6.dp
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelLarge)
+                        val bb = working.optJSONObject("bottomBar")
+                        val cont = bb?.optJSONObject("container")
+                        val items = bb?.optJSONArray("items") ?: run {
+// fallback legacy
+                            val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
+                            JSONArray().apply {
+                                for (i in 0 until legacy.length()) {
+                                    val it = legacy.optJSONObject(i) ?: continue
+                                    put(JSONObject().apply {
+                                        put("type","button")
+                                        put("label", it.optString("label","Button"))
+                                        put("actionId", it.optString("actionId",""))
+                                        put("style","text")
+                                    })
+                                }
+                            }
+                        }
+                        StyledContainer(cont ?: JSONObject(), Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                RenderBarItemsRow(items) { /* anteprima: no-op */ }
+                            }
+                        }
+                    }
+                }
+            }
+
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .fillMaxHeight(0.6f),
+                    .fillMaxHeight(0.75f),
                 shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
                 tonalElevation = 8.dp
             ) {
@@ -3133,224 +3398,120 @@ private fun BoxScope.DesignerOverlay(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    when (working.optString("type")) {
-                        "Card"          -> CardInspectorPanel(working, onChange = bumpPreview)
-                        "ButtonRow"     -> { ButtonRowInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
-                        "SectionHeader" -> { SectionHeaderInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
-                        "Progress"      -> ProgressInspectorPanel(working, onChange = bumpPreview)
-                        "Alert"         -> AlertInspectorPanel(working, onChange = bumpPreview)
-                        "Image"         -> ImageInspectorPanel(working, onChange = bumpPreview)
-                        "ChipRow"       -> ChipRowInspectorPanel(working, onChange = bumpPreview)
-                        "Slider"        -> SliderInspectorPanel(working, onChange = bumpPreview)
-                        "Toggle"        -> ToggleInspectorPanel(working, onChange = bumpPreview)
-                        "Tabs"          -> TabsInspectorPanel(working, onChange = bumpPreview)
-                        "MetricsGrid"   -> MetricsGridInspectorPanel(working, onChange = bumpPreview)
-                        "List"          -> { ListInspectorPanel(working, onChange = bumpPreview); ContainerEditorSection(working, onChange = bumpPreview) }
-                        else            -> Text("Inspector non ancora implementato per ${working.optString("type")}")
+// PAGE (sfondo) – live sullo schermo
+                    Divider(); Text("Page (sfondo)", style = MaterialTheme.typography.titleMedium)
+                    val page = working.optJSONObject("page") ?: JSONObject().also { working.put("page", it) }
+                    PageInspectorPanel(page, onChange)
+
+// Top bar – live sullo schermo
+                    Divider(); Text("Top Bar (estetica)", style = MaterialTheme.typography.titleMedium)
+                    var topBarEnabled by remember { mutableStateOf(working.optJSONObject("topBar") != null) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = topBarEnabled,
+                            onCheckedChange = {
+                                topBarEnabled = it
+                                if (it) {
+                                    if (!working.has("topBar")) {
+                                        working.put("topBar", JSONObject().apply {
+                                            put("variant", "small")
+                                            put("title", "topbar")
+                                            put("scroll", "pinned")
+// Testo chiaro su toni scuri (surface scuro -> onSurface di solito è chiaro nel tema dark)
+                                            put("titleColor", "onSurface")
+                                            put("actionsColor", "onSurface")
+                                            put("divider", false)
+                                            put("container", JSONObject().apply {
+                                                put("style", "surface")
+                                                put("corner", 0)
+                                                put("borderMode", "full")
+                                                put("borderThicknessDp", 2)
+// opzionale: imposta un bordo visibile scuro/chiaro a seconda del tema
+// put("borderColor", "outline")
+                                            })
+                                            put("actions", JSONArray())
+                                        })
+                                    }
+
+                                } else {
+                                    working.remove("topBar")
+                                }
+                                onChange()
+                            }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Abilita Top Bar estetico")
                     }
+                    working.optJSONObject("topBar")?.let { tb ->
+                        TopBarInspectorPanel(tb, onChange)
+// Editor contenitore unificato
+                        ContainerEditorSection(tb, key = "container", title = "TopBar – Contenitore", onChange = onChange)
+// Editor azioni (icone, bottoni, spacer)
+                        BarItemsEditor(
+                            owner = tb,
+                            arrayKey = "actions",
+                            title = "TopBar – Azioni",
+                            onChange = onChange
+                        )
+                    }
+
+// Bottom bar estetica (preview in alto)
+                    Divider(); Text("Bottom Bar (estetica)", style = MaterialTheme.typography.titleMedium)
+                    var bottomEnabled by remember { mutableStateOf(working.optJSONObject("bottomBar") != null) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = bottomEnabled,
+                            onCheckedChange = {
+                                bottomEnabled = it
+                                if (it) {
+                                    if (!working.has("bottomBar")) {
+                                        working.put("bottomBar", JSONObject().apply {
+                                            put("container", JSONObject().apply {
+                                                put("style","surface")
+                                                put("borderMode","none")
+                                                put("corner", 0)
+                                            })
+                                            put("items", JSONArray())
+                                        })
+                                    }
+                                } else {
+                                    working.remove("bottomBar")
+                                }
+                                onChange()
+                            }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Abilita stile custom per Bottom Bar")
+                    }
+                    working.optJSONObject("bottomBar")?.let { bb ->
+                        ContainerEditorSection(bb, key = "container", title = "BottomBar – Contenitore", onChange = onChange)
+                        BarItemsEditor(owner = bb, arrayKey = "items", title = "BottomBar – Items", onChange = onChange)
+                    }
+
+// VARI – Scroll on/off, FAB (il resto del root)
+                    Divider(); RootInspectorPanel(working, onChange)
+
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { showInspector = false }) { Text("Annulla") }
+                        TextButton(onClick = {
+                            onRootLivePreview(null)
+                            showRootInspector = false
+                        }) { Text("Annulla") }
                         Spacer(Modifier.weight(1f))
                         Button(onClick = {
-                            replaceAtPath(layout, selectedPath, working)
-                            showInspector = false
-                            onLayoutChange()
+// Commit nel layout originale
+                            val keys = listOf("page","topBar","topTitle","topActions","bottomBar","bottomButtons","fab","scroll")
+                            keys.forEach { k -> layout.put(k, working.opt(k)) }
+                            onRootLivePreview(null)
+                            showRootInspector = false
                         }) { Text("OK") }
                     }
                 }
             }
         }
-
-    }
-    if (showQuickEditFor == "SectionHeader" && selectedBlock != null) {
-        SectionHeaderQuickEditBar(
-            onClose = { showQuickEditFor = null }
-        )
-    }
-// ===== ROOT LAYOUT INSPECTOR =====
-    if (showRootInspector) {
-        val working = remember { JSONObject(layout.toString()) }
-        var dummyTick by remember { mutableStateOf(0) }
-
-        val onChange: () -> Unit = {
-            onRootLivePreview(JSONObject(working.toString())) // nuova istanza => recomposition garantita
-        }
-
-        BackHandler(enabled = true) {
-            onRootLivePreview(null) // chiudi preview
-            showRootInspector = false
-        }
-
-// ANTEPRIMA in alto della BottomBar (proiettata)
-        val previewTopPad = topPadding + 8.dp
-        val hasBottomPreview = working.optJSONObject("bottomBar")?.optJSONArray("items")?.length() ?: 0 > 0 ||
-                working.optJSONArray("bottomButtons")?.length() ?: 0 > 0
-        if (hasBottomPreview) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(start = 12.dp, end = 12.dp, top = previewTopPad)
-                    .shadow(10.dp, RoundedCornerShape(16.dp))
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                tonalElevation = 6.dp
-            ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Anteprima Bottom Bar", style = MaterialTheme.typography.labelLarge)
-                    val bb = working.optJSONObject("bottomBar")
-                    val cont = bb?.optJSONObject("container")
-                    val items = bb?.optJSONArray("items") ?: run {
-// fallback legacy
-                        val legacy = working.optJSONArray("bottomButtons") ?: JSONArray()
-                        JSONArray().apply {
-                            for (i in 0 until legacy.length()) {
-                                val it = legacy.optJSONObject(i) ?: continue
-                                put(JSONObject().apply {
-                                    put("type","button")
-                                    put("label", it.optString("label","Button"))
-                                    put("actionId", it.optString("actionId",""))
-                                    put("style","text")
-                                })
-                            }
-                        }
-                    }
-                    StyledContainer(cont ?: JSONObject(), Modifier.fillMaxWidth(), contentPadding = PaddingValues(8.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            RenderBarItemsRow(items) { /* anteprima: no-op */ }
-                        }
-                    }
-                }
-            }
-        }
-
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.75f),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-            tonalElevation = 8.dp
-        ) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-// PAGE (sfondo) – live sullo schermo
-                Divider(); Text("Page (sfondo)", style = MaterialTheme.typography.titleMedium)
-                val page = working.optJSONObject("page") ?: JSONObject().also { working.put("page", it) }
-                PageInspectorPanel(page, onChange)
-
-// Top bar – live sullo schermo
-                Divider(); Text("Top Bar (estetica)", style = MaterialTheme.typography.titleMedium)
-                var topBarEnabled by remember { mutableStateOf(working.optJSONObject("topBar") != null) }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = topBarEnabled,
-                        onCheckedChange = {
-                            topBarEnabled = it
-                            if (it) {
-                                if (!working.has("topBar")) {
-                                    working.put("topBar", JSONObject().apply {
-                                        put("variant", "small")
-                                        put("title", "topbar")
-                                        put("scroll", "pinned")
-// Testo chiaro su toni scuri (surface scuro -> onSurface di solito è chiaro nel tema dark)
-                                        put("titleColor", "onSurface")
-                                        put("actionsColor", "onSurface")
-                                        put("divider", false)
-                                        put("container", JSONObject().apply {
-                                            put("style", "surface")
-                                            put("corner", 0)
-                                            put("borderMode", "full")
-                                            put("borderThicknessDp", 2)
-// opzionale: imposta un bordo visibile scuro/chiaro a seconda del tema
-// put("borderColor", "outline")
-                                        })
-                                        put("actions", JSONArray())
-                                    })
-                                }
-
-                            } else {
-                                working.remove("topBar")
-                            }
-                            onChange()
-                        }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Abilita Top Bar estetico")
-                }
-                working.optJSONObject("topBar")?.let { tb ->
-                    TopBarInspectorPanel(tb, onChange)
-// Editor contenitore unificato
-                    ContainerEditorSection(tb, key = "container", title = "TopBar – Contenitore", onChange = onChange)
-// Editor azioni (icone, bottoni, spacer)
-                    BarItemsEditor(
-                        owner = tb,
-                        arrayKey = "actions",
-                        title = "TopBar – Azioni",
-                        onChange = onChange
-                    )
-                }
-
-// Bottom bar estetica (preview in alto)
-                Divider(); Text("Bottom Bar (estetica)", style = MaterialTheme.typography.titleMedium)
-                var bottomEnabled by remember { mutableStateOf(working.optJSONObject("bottomBar") != null) }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = bottomEnabled,
-                        onCheckedChange = {
-                            bottomEnabled = it
-                            if (it) {
-                                if (!working.has("bottomBar")) {
-                                    working.put("bottomBar", JSONObject().apply {
-                                        put("container", JSONObject().apply {
-                                            put("style","surface")
-                                            put("borderMode","none")
-                                            put("corner", 0)
-                                        })
-                                        put("items", JSONArray())
-                                    })
-                                }
-                            } else {
-                                working.remove("bottomBar")
-                            }
-                            onChange()
-                        }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Abilita stile custom per Bottom Bar")
-                }
-                working.optJSONObject("bottomBar")?.let { bb ->
-                    ContainerEditorSection(bb, key = "container", title = "BottomBar – Contenitore", onChange = onChange)
-                    BarItemsEditor(owner = bb, arrayKey = "items", title = "BottomBar – Items", onChange = onChange)
-                }
-
-// VARI – Scroll on/off, FAB (il resto del root)
-                Divider(); RootInspectorPanel(working, onChange)
-
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = {
-                        onRootLivePreview(null)
-                        showRootInspector = false
-                    }) { Text("Annulla") }
-                    Spacer(Modifier.weight(1f))
-                    Button(onClick = {
-// Commit nel layout originale
-                        val keys = listOf("page","topBar","topTitle","topActions","bottomBar","bottomButtons","fab","scroll")
-                        keys.forEach { k -> layout.put(k, working.opt(k)) }
-                        onRootLivePreview(null)
-                        showRootInspector = false
-                    }) { Text("OK") }
-                }
-            }
-        }
     }
 }
+
 
 /* =========================================================
 * OVERLAY INGRANAGGIO PER CONTENITORI
