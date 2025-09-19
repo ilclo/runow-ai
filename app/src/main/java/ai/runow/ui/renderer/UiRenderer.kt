@@ -6007,3 +6007,99 @@ private fun newRow() = JSONObject(
   ]}"""
 )
 private fun newSpacerH() = JSONObject("""{"type":"SpacerH","mode":"expand","widthDp":16}""")
+
+
+// =====================
+// Entry-point Core8
+// =====================
+@Composable
+fun RenderCore8Page(
+    jsonPage: JSONArray,
+    dispatch: (String) -> Unit = {},
+    uiState: MutableMap<String, Any> = remember { mutableMapOf() },
+    designerMode: Boolean = false,
+    scaffoldPadding: PaddingValues = PaddingValues(0.dp),
+    dimBehindOverlays: Boolean = true
+) {
+    // 1) Converte Core8 -> legacy JSON (layout completo)
+    val legacyLayout = remember(jsonPage) {
+        try {
+            Core8Adapter.pageToLegacy(jsonPage)
+        } catch (t: Throwable) {
+            // Fallback ingegnoso: prova a rendere comunque la pagina come lista di blocchi
+            JSONObject().apply {
+                put("page", JSONObject())              // sfondo default
+                put("blocks", jsonPage)                // i blocchi così come arrivano
+                // topBar/bottomBar/fab opzionali, lasciali vuoti nel fallback
+            }
+        }
+    }
+
+    // 2) Colleziona menù dichiarati nel layout (stesso metodo usato dal renderer)
+    val menus = remember(legacyLayout) { collectMenus(legacyLayout) }
+
+    // 3) Stato overlay (side panel / center menu)
+    var openPanelId by remember { mutableStateOf<String?>(null) }
+    var openMenuId  by remember { mutableStateOf<String?>(null) }
+
+    // 4) Dispatch “wrappato” per gestire open/close overlay mantenendo compat la tua app-dispatch
+    val wrappedDispatch = remember(dispatch) {
+        wrapDispatchForOverlays(
+            openPanelSetter = { openPanelId = it },
+            openMenuSetter  = { openMenuId  = it },
+            appDispatch     = dispatch
+        )
+    }
+
+    // 5) Rendering identico alla tua pipeline attuale
+    var selectedPath by remember { mutableStateOf<String?>(null) }
+
+    Box(Modifier.fillMaxSize()) {
+        // Sfondo pagina
+        RenderPageBackground(legacyLayout.optJSONObject("page"))
+
+        // Scaffold + top bar + contenuto
+        ScreenScaffoldWithPinnedTopBar(
+            layout              = legacyLayout,
+            dispatch            = wrappedDispatch,
+            uiState             = uiState,
+            designerMode        = designerMode,
+            menus               = menus,
+            selectedPathSetter  = { selectedPath = it },
+            extraPaddingBottom  = 16.dp,
+            scaffoldPadding     = scaffoldPadding
+        )
+
+        // Overlay opzionali (side panels / center menu)
+        RenderSidePanelsOverlay(
+            layout    = legacyLayout,
+            openPanelId = openPanelId,
+            onClose   = { openPanelId = null },
+            dispatch  = wrappedDispatch,
+            menus     = menus,
+            dimBehind = dimBehindOverlays
+        )
+
+        RenderCenterMenuOverlay(
+            layout     = legacyLayout,
+            openMenuId = openMenuId,
+            onClose    = { openMenuId = null },
+            menus      = menus,
+            dispatch   = wrappedDispatch
+        )
+    }
+}
+
+/**
+ * Overload "in stile richiesta"—nome minuscolo e firma minima.
+ * Per provare i preset al volo puoi chiamare direttamente questo.
+ */
+@Composable
+fun renderCore8Page(jsonPage: JSONArray) {
+    RenderCore8Page(
+        jsonPage = jsonPage,
+        dispatch = {},                    // no-op di default
+        uiState  = remember { mutableMapOf() }
+    )
+}
+
