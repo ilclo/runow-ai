@@ -90,6 +90,47 @@ import androidx.compose.ui.unit.IntSize
 import android.app.Activity
 import java.io.File
 import com.yalantis.ucrop.UCrop
+// ===== Core‑8: entry‑point di rendering =====================================
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun RenderCore8Page(
+    page: JSONArray,
+    dispatch: (String) -> Unit,
+    uiState: MutableMap<String, Any> = mutableMapOf(),
+    designerMode: Boolean = false,
+    scaffoldPadding: PaddingValues = PaddingValues(0.dp)
+) {
+    // Adatto la pagina Core‑8 nel layout legacy atteso dal renderer esistente
+    val legacy = remember(page.toString()) { Core8Adapter.pageToLegacy(page) }
+
+    // Il tuo renderer principale: menù raccolti e scaffold root
+    val menus = collectMenus(legacy)
+    RenderRootScaffold(
+        layout = legacy,
+        dispatch = dispatch,
+        uiState = uiState,
+        designerMode = designerMode,
+        menus = menus,
+        selectedPathSetter = { /* no‑op per demo */ },
+        extraPaddingBottom = 16.dp,
+        scaffoldPadding = scaffoldPadding
+    )
+}
+
+@Composable
+fun Core8DemoScreen() {
+    RenderCore8Page(
+        page = Core8Presets.demoPage(),
+        dispatch = { actionId -> /* handle azioni */ },
+        designerMode = false
+    )
+}
+
 
 enum class AppMode { Real, Designer, Resize }
 val LocalAppMode = compositionLocalOf { AppMode.Real }
@@ -6090,18 +6131,6 @@ fun RenderCore8Page(
     }
 }
 
-/**
- * Overload "in stile richiesta"—nome minuscolo e firma minima.
- * Per provare i preset al volo puoi chiamare direttamente questo.
- */
-@Composable
-fun renderCore8Page(jsonPage: JSONArray) {
-    RenderCore8Page(
-        jsonPage = jsonPage,
-        dispatch = {},                    // no-op di default
-        uiState  = remember { mutableMapOf() }
-    )
-}
 
 fun core8ToLegacy(b: Core8Block): JSONObject = when (b.type) {
     "SectionHeader" -> JSONObject().apply {
