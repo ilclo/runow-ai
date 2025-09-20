@@ -2,6 +2,7 @@
 
 package ai.runow.ui.renderer
 
+import ai.runow.ui.renderer.adapter.Core8Adapter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -97,39 +98,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.unit.dp
 
-@Composable
-fun RenderCore8Page(
-    page: JSONArray,
-    dispatch: (String) -> Unit,
-    uiState: MutableMap<String, Any> = mutableMapOf(),
-    designerMode: Boolean = false,
-    scaffoldPadding: PaddingValues = PaddingValues(0.dp)
-) {
-    // Adatto la pagina Core‑8 nel layout legacy atteso dal renderer esistente
-    val legacy = remember(page.toString()) { Core8Adapter.pageToLegacy(page) }
 
-    // Il tuo renderer principale: menù raccolti e scaffold root
-    val menus = collectMenus(legacy)
-    RenderRootScaffold(
-        layout = legacy,
-        dispatch = dispatch,
-        uiState = uiState,
-        designerMode = designerMode,
-        menus = menus,
-        selectedPathSetter = { /* no‑op per demo */ },
-        extraPaddingBottom = 16.dp,
-        scaffoldPadding = scaffoldPadding
-    )
-}
-
-@Composable
-fun Core8DemoScreen() {
-    RenderCore8Page(
-        page = Core8Presets.demoPage(),
-        dispatch = { actionId -> /* handle azioni */ },
-        designerMode = false
-    )
-}
 
 
 enum class AppMode { Real, Designer, Resize }
@@ -6050,149 +6019,39 @@ private fun newRow() = JSONObject(
 private fun newSpacerH() = JSONObject("""{"type":"SpacerH","mode":"expand","widthDp":16}""")
 
 
-// =====================
-// Entry-point Core8
-// =====================
+// ===== Core‑8 entry point → usa l'adapter e renderizza col renderer legacy =====
+
 @Composable
 fun RenderCore8Page(
     jsonPage: JSONArray,
-    dispatch: (String) -> Unit = {},
-    uiState: MutableMap<String, Any> = remember { mutableMapOf() },
-    designerMode: Boolean = false,
-    scaffoldPadding: PaddingValues = PaddingValues(0.dp),
-    dimBehindOverlays: Boolean = true
+    dispatch: (String) -> Unit,
+    uiState: MutableMap<String, Any>,
+    scaffoldPadding: PaddingValues = PaddingValues(0.dp)
 ) {
-    // 1) Converte Core8 -> legacy JSON (layout completo)
-    val legacyLayout = remember(jsonPage) {
-        try {
-            Core8Adapter.pageToLegacy(jsonPage)
-        } catch (t: Throwable) {
-            // Fallback ingegnoso: prova a rendere comunque la pagina come lista di blocchi
-            JSONObject().apply {
-                put("page", JSONObject())              // sfondo default
-                put("blocks", jsonPage)                // i blocchi così come arrivano
-                // topBar/bottomBar/fab opzionali, lasciali vuoti nel fallback
-            }
-        }
-    }
+    // Converte Core‑8 (JSONArray di blocchi) in il "layout" legacy atteso dal renderer
+    val legacyLayout = remember(jsonPage) { Core8Adapter.pageToLegacy(jsonPage) }
 
-    // 2) Colleziona menù dichiarati nel layout (stesso metodo usato dal renderer)
-    val menus = remember(legacyLayout) { collectMenus(legacyLayout) }
-
-    // 3) Stato overlay (side panel / center menu)
-    var openPanelId by remember { mutableStateOf<String?>(null) }
-    var openMenuId  by remember { mutableStateOf<String?>(null) }
-
-    // 4) Dispatch “wrappato” per gestire open/close overlay mantenendo compat la tua app-dispatch
-    val wrappedDispatch = remember(dispatch) {
-        wrapDispatchForOverlays(
-            openPanelSetter = { openPanelId = it },
-            openMenuSetter  = { openMenuId  = it },
-            appDispatch     = dispatch
-        )
-    }
-
-    // 5) Rendering identico alla tua pipeline attuale
-    var selectedPath by remember { mutableStateOf<String?>(null) }
-
-    Box(Modifier.fillMaxSize()) {
-        // Sfondo pagina
-        RenderPageBackground(legacyLayout.optJSONObject("page"))
-
-        // Scaffold + top bar + contenuto
-        ScreenScaffoldWithPinnedTopBar(
-            layout              = legacyLayout,
-            dispatch            = wrappedDispatch,
-            uiState             = uiState,
-            designerMode        = designerMode,
-            menus               = menus,
-            selectedPathSetter  = { selectedPath = it },
-            extraPaddingBottom  = 16.dp,
-            scaffoldPadding     = scaffoldPadding
-        )
-
-        // Overlay opzionali (side panels / center menu)
-        RenderSidePanelsOverlay(
-            layout    = legacyLayout,
-            openPanelId = openPanelId,
-            onClose   = { openPanelId = null },
-            dispatch  = wrappedDispatch,
-            menus     = menus,
-            dimBehind = dimBehindOverlays
-        )
-
-        RenderCenterMenuOverlay(
-            layout     = legacyLayout,
-            openMenuId = openMenuId,
-            onClose    = { openMenuId = null },
-            menus      = menus,
-            dispatch   = wrappedDispatch
-        )
-    }
+    // Render con il tuo scaffold / renderer esistente
+    ScreenScaffoldWithPinnedTopBar(
+        layout = legacyLayout,
+        dispatch = dispatch,
+        uiState = uiState,
+        designerMode = false,
+        menus = emptyMap(),
+        selectedPathSetter = { /* no-op */ },
+        extraPaddingBottom = 0.dp,
+        scaffoldPadding = scaffoldPadding
+    )
 }
 
-
-fun core8ToLegacy(b: Core8Block): JSONObject = when (b.type) {
-    "SectionHeader" -> JSONObject().apply {
-        put("type", "SectionHeader")
-        put("title", b.title)
-        put("subtitle", b.subtitle)
-        put("align", b.align)
-        put("textSizeSp", b.textSizeSp)
-        put("fontWeight", b.fontWeight)
-        put("textColor", b.textColor)
-        b.container?.let { put("container", mapContainer(it)) }
-    }
-    "Row" -> JSONObject().apply {
-        put("type", "Row")
-        put("gapDp", b.gapDp ?: 8.0)
-        put("scrollX", b.scrollX == true)
-        put("items", JSONArray(b.items.map(::core8ToLegacy)))
-    }
-    "ButtonRow" -> JSONObject().apply {
-        put("type", "ButtonRow")
-        put("align", b.align ?: "center")
-        put("buttons", JSONArray(b.buttons.map { btn ->
-            JSONObject().apply {
-                put("label", btn.label)
-                put("icon", btn.icon ?: "")
-                put("style", btn.style ?: "text")
-                put("actionId", btn.actionId ?: "")
-            }
-        }))
-        b.container?.let { put("container", mapContainer(it)) }
-    }
-    // …altri case…
-    else -> JSONObject().put("type", b.type) // pass-through
+@Composable
+fun DemoCore8Screen(dispatch: (String) -> Unit, uiState: MutableMap<String, Any>) {
+    val page = remember { ai.runow.ui.renderer.adapter.Core8Presets.demoPage() }
+    RenderCore8Page(
+        jsonPage = page,
+        dispatch = dispatch,
+        uiState = uiState,
+        scaffoldPadding = PaddingValues(0.dp)
+    )
 }
 
-fun mapContainer(c: Core8Container) = JSONObject().apply {
-    put("style", c.style ?: "surface")
-    put("corner", c.corner ?: 12)
-    put("elevationDp", c.elevationDp ?: 1)
-    put("bgAlpha", c.bgAlpha ?: 1.0)
-    put("customColor", c.customColor ?: "")
-    put("borderMode", c.borderMode ?: "none")
-    put("borderThicknessDp", c.borderThicknessDp ?: 0)
-    put("borderColor", c.borderColor ?: "")
-    put("widthMode", c.widthMode ?: "wrap")
-    put("heightMode", c.heightMode ?: "wrap")
-    c.widthDp?.let { put("widthDp", it) }
-    c.heightDp?.let { put("heightDp", it) }
-    c.widthFraction?.let { put("widthFraction", it) }
-    put("hAlign", c.hAlign ?: "start")
-    put("vAlign", c.vAlign ?: "center")
-    c.gradient?.let { g ->
-        put("gradient", JSONObject().apply {
-            put("colors", JSONArray(g.colors))
-            put("direction", g.direction ?: "vertical")
-        })
-    }
-    c.image?.let { img ->
-        put("image", JSONObject().apply {
-            put("source", img.source)
-            put("contentScale", img.contentScale ?: "fill")
-            put("alpha", img.alpha ?: 1.0)
-        })
-    }
-}
