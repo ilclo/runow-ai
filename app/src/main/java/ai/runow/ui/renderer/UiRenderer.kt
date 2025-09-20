@@ -2,6 +2,9 @@
 
 package ai.runow.ui.renderer
 
+import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.*   // include anche PaddingValues
+import androidx.activity.result.contract.ActivityResultContracts // UNA sola volta
 import ai.runow.ui.renderer.adapter.Core8Adapter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.gestures.detectDragGestures
